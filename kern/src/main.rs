@@ -15,25 +15,27 @@ pub mod mutex;
 pub mod shell;
 
 use console::kprintln;
-use pi::timer;
+use pi::{timer, gpio};
 use core::time::Duration;
 
 
 // FIXME: You need to add dependencies here to
 // test your drivers (Phase 2). Add them as needed.
-const GPIO_BASE: usize = 0x3F000000 + 0x200000;
-
-const GPIO_FSEL1: *mut u32 = (GPIO_BASE + 0x04) as *mut u32;
-const GPIO_SET0: *mut u32 = (GPIO_BASE + 0x1C) as *mut u32;
-const GPIO_CLR0: *mut u32 = (GPIO_BASE + 0x28) as *mut u32;
+// const GPIO_BASE: usize = 0x3F000000 + 0x200000;
+//
+// const GPIO_FSEL1: *mut u32 = (GPIO_BASE + 0x04) as *mut u32;
+// const GPIO_SET0: *mut u32 = (GPIO_BASE + 0x1C) as *mut u32;
+// const GPIO_CLR0: *mut u32 = (GPIO_BASE + 0x28) as *mut u32;
 
 #[no_mangle]
-unsafe fn kmain() -> ! {
-    GPIO_FSEL1.write_volatile((GPIO_FSEL1.read_volatile() & !(0b111 << 18)) | (0b001 << 18));
+fn kmain() -> ! {
+    let mut gpio16 = gpio::Gpio::new(16).into_output();
+
+    // Set GPIO Pin 16 as output.
     loop {
-        GPIO_SET0.write_volatile((GPIO_CLR0.read_volatile() & !(0b1 << 16)) | (0b1 << 16));
-        timer::spin_sleep(Duration::from_millis(100));
-        GPIO_CLR0.write_volatile((GPIO_CLR0.read_volatile() & !(0b1 << 16)) | (0b1 << 16));
+        gpio16.set();
         timer::spin_sleep(Duration::from_millis(900));
+        gpio16.clear();
+        timer::spin_sleep(Duration::from_millis(100));
     }
 }
