@@ -117,13 +117,11 @@ impl<'a, T: Clone + 'a> StackVec<'a, T> {
     /// If this vector is not empty, removes the last element from this vector
     /// by cloning it and returns it. Otherwise returns `None`.
     pub fn pop(&mut self) -> Option<T> {
-        pub fn pop(&mut self) -> Option<T> {
-            if self.is_empty() {
-                None
-            } else {
-                self.len -= 1;
-                Some(self.storage[self.len].clone())
-            }
+        if self.is_empty() {
+            None
+        } else {
+            self.len -= 1;
+            Some(self.storage[self.len].clone())
         }
     }
 }
