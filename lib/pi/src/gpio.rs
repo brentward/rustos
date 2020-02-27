@@ -103,15 +103,14 @@ impl Gpio<Uninitialized> {
     /// Enables the alternative function `function` for `self`. Consumes self
     /// and returns a `Gpio` structure in the `Alt` state.
     pub fn into_alt(self, function: Function) -> Gpio<Alt> {
-        let register_index: usize = (self.pin / 10) as usize;
-        let shift: usize = (self.pin as usize - register_index * 10) * 3;
-
+        let register_index = self.pin as usize / 10;
+        let shift = (self.pin as u32 % 10) * 3;
         {
             let register = &mut self.registers.FSEL[register_index];
             let value = register.read();
-            register.write(value & !(0b111 << shift) | ((function as u32) << shift));
+            let value = (value & !(0b111 << shift)) | ((function as u32) << shift);
+            register.write(value);
         }
-
         self.transition()
     }
 
@@ -131,17 +130,15 @@ impl Gpio<Uninitialized> {
 impl Gpio<Output> {
     /// Sets (turns on) the pin.
     pub fn set(&mut self) {
-        let register_index: usize = (self.pin / 32) as usize;
-        let shift: usize = self.pin as usize - register_index * 32;
-
+        let register_index = self.pin as usize / 32;
+        let shift = self.pin as u32 - (register_index as u32 * 32);
         self.registers.SET[register_index].write(1 << shift);
     }
 
     /// Clears (turns off) the pin.
     pub fn clear(&mut self) {
-        let register_index: usize = (self.pin / 32) as usize;
-        let shift: usize = self.pin as usize - register_index * 32;
-
+        let register_index = self.pin as usize / 32;
+        let shift = self.pin as u32 - (register_index as u32 * 32);
         self.registers.CLR[register_index].write(1 << shift);
     }
 }
@@ -150,9 +147,8 @@ impl Gpio<Input> {
     /// Reads the pin's value. Returns `true` if the level is high and `false`
     /// if the level is low.
     pub fn level(&mut self) -> bool {
-        let register_index: usize = (self.pin / 32) as usize;
-        let shift: usize = self.pin as usize - register_index * 32;
-
+        let register_index = self.pin as usize / 32;
+        let shift = self.pin as u32 - (register_index as u32 * 32);
         self.registers.LEV[register_index].has_mask(1 << shift)
     }
 }

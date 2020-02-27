@@ -2,6 +2,8 @@ target/
 build/
 TAGS
 
+Cargo.lock
+
 # Jet Brains
 .idea
 
