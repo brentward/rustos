@@ -15,7 +15,7 @@ pub mod mutex;
 pub mod shell;
 
 use console::kprintln;
-use pi::{timer, gpio};
+use pi::{timer, gpio, uart};
 use core::time::Duration;
 
 
@@ -29,13 +29,9 @@ use core::time::Duration;
 
 #[no_mangle]
 fn kmain() -> ! {
-    let mut gpio16 = gpio::Gpio::new(16).into_output();
-
-    // Set GPIO Pin 16 as output.
     loop {
-        gpio16.set();
-        timer::spin_sleep(Duration::from_millis(900));
-        gpio16.clear();
-        timer::spin_sleep(Duration::from_millis(100));
+        let mut pi_uart = uart::MiniUart::new();
+        let byte_read = pi_uart.read_byte();
+        pi_uart.write_byte(byte_read);
     }
 }
