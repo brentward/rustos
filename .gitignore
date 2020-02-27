@@ -1,3 +1,9 @@
 target/
 build/
 TAGS
+
+# Jet Brains
+.idea
+
+# VS Code
+.vscode

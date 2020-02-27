@@ -29,6 +29,17 @@ fn len_and_capacity_ok() {
 }
 
 #[test]
+fn with_length() {
+    let mut storage = [0u8; 1024];
+    let stack_vec = StackVec::with_len(&mut storage, 20);
+
+    assert_eq!(stack_vec.len(), 20);
+    assert_eq!(stack_vec.capacity(), 1024);
+    assert!(!stack_vec.is_empty());
+    assert!(!stack_vec.is_full());
+}
+
+#[test]
 #[should_panic]
 fn index_oob() {
     let mut storage = [0u8; 1024];
@@ -124,6 +135,18 @@ fn pop() {
         assert_eq!(stack_vec.pop(), Some(i));
         assert_eq!(stack_vec.len(), i);
     }
+}
+
+#[test]
+fn pop_all() {
+    let mut storage = [0usize; 2];
+    let mut stack_vec = StackVec::new(&mut storage);
+    stack_vec.push(1).expect("okay");
+    stack_vec.push(2).expect("okay");
+    assert!(stack_vec.is_full());
+    assert_eq!(stack_vec.pop(), Some(2));
+    assert_eq!(stack_vec.pop(), Some(1));
+    assert!(stack_vec.is_empty());
 }
 
 #[test]
