@@ -4,6 +4,8 @@ use shim::path::{Path, PathBuf};
 use stack_vec::StackVec;
 
 use pi::atags::Atags;
+use alloc::string::String;
+use alloc::vec;
 
 // use fat32::traits::FileSystem;
 // use fat32::traits::{Dir, Entry};
@@ -60,6 +62,7 @@ const DEL: u8 = 127;
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// never returns.
 pub fn shell(prefix: &str) -> ! {
+    kprintln!("\r\nBrentWard Shell 0.0.1a");
     loop {
         kprint!("{}", prefix);
         let mut input_buf = [0u8; 512];
@@ -99,7 +102,8 @@ pub fn shell(prefix: &str) -> ! {
                     "atags" => atag(&command.args),
                     "panic" => panic!("You called panic"),
                     "unreachable" => unreachable!(),
-                    // "usemem" => use_memory(),
+                    "usemem" => use_memory(),
+                    "memstats" => memstats(),
                     path => kprintln!("unknown command: {}", path)
                 }
             } // TODO execute command
@@ -167,12 +171,17 @@ fn atag(args: &StackVec<&str>) {
     }
 }
 
-// fn use_memory() {
-//     let mut base_string = String::from("hi again");
-//     let mut string_vec = vec![base_string.clone()];
-//     for _ in 0..1024 {
-//         base_string.push_str(", and again");
-//         let new_string = base_string.clone();
-//         string_vec.push(new_string);
-//     };
-// }
+fn use_memory() {
+    let mut base_string = String::from("hi again");
+    let mut string_vec = vec![base_string.clone()];
+    for _ in 0..1024 {
+        base_string.push_str(", and again");
+        let new_string = base_string.clone();
+        string_vec.push(new_string);
+    };
+    kprintln!("{:?}", string_vec[1023]);
+}
+
+fn memstats() {
+    kprintln!{"{:?}", ALLOCATOR};
+}
