@@ -38,7 +38,7 @@ fn kmain() -> ! {
     uart.set_read_timeout(Duration::from_millis(750));
 
     loop {
-        match xmodem::Xmodem::receive(&mut uart, &mut receive_buf) {
+        match Xmodem::receive(&mut uart, &mut receive_buf) {
             Ok(_) => break,
             Err(_) => continue,
         }
