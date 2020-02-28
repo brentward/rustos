@@ -72,9 +72,9 @@ fn panic(_info: &PanicInfo) -> ! {
         None => kprintln!("Panic location cannot be determined"),
     }
     kprintln!("");
-    // match _info.message() {
-    //     Some(message) => kprintln!("{}", message),
-    //     None => kprintln!("Panic location cannot be determined"),
-    // }
+    match _info.message() {
+        Some(message) => kprintln!("{}", message),
+        None => kprintln!("Panic location cannot be determined"),
+    }
     loop {}
 }
