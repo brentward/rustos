@@ -47,11 +47,12 @@ impl LocalAlloc for Allocator {
     /// size or alignment constraints.
     unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let aligned_addr = align_up(self.current, layout.align());
+        let alloc_end = aligned_addr.saturating_add(layout.size());
 
-        if aligned_addr + layout.size() > self.end {
+        if alloc_end >= self.end {
             core::ptr::null_mut()
         } else {
-            self.current = aligned_addr + layout.size();
+            self.current = alloc_end;
             aligned_addr as *mut u8
         }
     }
