@@ -4,6 +4,8 @@ TAGS
 
 Cargo.lock
 
+*-console.log
+
 # Jet Brains
 .idea
 
