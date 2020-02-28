@@ -34,7 +34,7 @@ impl Timer {
     pub fn read(&self) -> Duration {
         let low = self.registers.CLO.read();
         let high = self.registers.CHI.read();
-        Duration::from_micros((((high as u64) << 32) | low as u64))
+        Duration::from_micros(((high as u64) << 32) | low as u64)
     }
 }
 
