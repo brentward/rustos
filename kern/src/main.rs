@@ -20,24 +20,26 @@ pub mod mutex;
 pub mod shell;
 
 use console::kprintln;
-// use pi::{timer, gpio, uart};
-// use core::time::Duration;
+use pi::timer;
+use core::time::Duration;
 // use core::fmt::Write;
 
 use allocator::Allocator;
 use fs::FileSystem;
 
 #[cfg_attr(not(test), global_allocator)]
-pub static ALLOCATOR: Allocator = Allocator::uninitialized();
-pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
+// pub static ALLOCATOR: Allocator = Allocator::uninitialized();
+// pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
-    unsafe {
-        ALLOCATOR.initialize();
-        FILESYSTEM.initialize();
-    }
+    // unsafe {
+    //     ALLOCATOR.initialize();
+    //     FILESYSTEM.initialize();
+    // }
 
+
+    timer::spin_sleep(Duration::from_secs(2));
     kprintln!("Welcome to cs3210!");
     shell::shell("> ");
 }
