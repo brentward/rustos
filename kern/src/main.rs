@@ -15,9 +15,9 @@ pub mod mutex;
 pub mod shell;
 
 use console::kprintln;
-use pi::{timer, gpio, uart};
-use core::time::Duration;
-
+// use pi::{timer, gpio, uart};
+// use core::time::Duration;
+// use core::fmt::Write;
 
 // FIXME: You need to add dependencies here to
 // test your drivers (Phase 2). Add them as needed.
@@ -30,8 +30,10 @@ use core::time::Duration;
 #[no_mangle]
 fn kmain() -> ! {
     loop {
-        let mut pi_uart = uart::MiniUart::new();
-        let byte_read = pi_uart.read_byte();
-        pi_uart.write_byte(byte_read);
+        // console::CONSOLE.lock().write_str("This is a test...").unwrap();
+        // let mut pi_uart = uart::MiniUart::new();
+        // let byte_read = pi_uart.read_byte();
+        // pi_uart.write_byte(byte_read);
+        kprintln!("does this work?");
     }
 }
