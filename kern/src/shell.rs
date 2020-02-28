@@ -1,7 +1,17 @@
+use shim::io;
+use shim::path::{Path, PathBuf};
+
 use stack_vec::StackVec;
 use core::str;
 
+use pi::atags::Atags;
+
+use fat32::traits::FileSystem;
+use fat32::traits::{Dir, Entry};
+
 use crate::console::{kprint, kprintln, CONSOLE};
+use crate::ALLOCATOR;
+use crate::FILESYSTEM;
 
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
@@ -49,7 +59,7 @@ const BACK: u8 = 8;
 const DEL: u8 = 127;
 
 /// Starts a shell using `prefix` as the prefix for each line. This function
-/// returns if the `exit` command is called.
+/// never returns.
 pub fn shell(prefix: &str) -> ! {
     let init_msg = "Press any key to continue...";
     kprint!("\r\n");

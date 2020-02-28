@@ -4,13 +4,18 @@
 #![feature(asm)]
 #![feature(global_asm)]
 #![feature(optin_builtin_traits)]
+#![feature(raw_vec_internals)]
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
 #[cfg(not(test))]
 mod init;
 
+extern crate alloc;
+
+pub mod allocator;
 pub mod console;
+pub mod fs;
 pub mod mutex;
 pub mod shell;
 
@@ -19,19 +24,20 @@ use console::kprintln;
 // use core::time::Duration;
 // use core::fmt::Write;
 
-// FIXME: You need to add dependencies here to
-// test your drivers (Phase 2). Add them as needed.
-// const GPIO_BASE: usize = 0x3F000000 + 0x200000;
-//
-// const GPIO_FSEL1: *mut u32 = (GPIO_BASE + 0x04) as *mut u32;
-// const GPIO_SET0: *mut u32 = (GPIO_BASE + 0x1C) as *mut u32;
-// const GPIO_CLR0: *mut u32 = (GPIO_BASE + 0x28) as *mut u32;
+use allocator::Allocator;
+use fs::FileSystem;
+
+#[cfg_attr(not(test), global_allocator)]
+pub static ALLOCATOR: Allocator = Allocator::uninitialized();
+pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
-    loop {
-        kprintln!("Starting shell...");
-        shell::shell("> ");
-        kprintln!("Shell quit");
+    unsafe {
+        ALLOCATOR.initialize();
+        FILESYSTEM.initialize();
     }
+
+    kprintln!("Welcome to cs3210!");
+    shell::shell("> ");
 }
