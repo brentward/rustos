@@ -37,22 +37,22 @@ impl Allocator {
         let total_mem = end - current;
         let max_block_size = 1 << (mem::size_of::<usize>() * 8 - total_mem.leading_zeros() as usize - 1);
         let bin_count = (max_block_size as u64).trailing_zeros() as usize - 2;
-        let fragmentation = 0;
-        let current = align_up(current, max_block_size);
-        let fragmentation = current - start;
-        let (max_block_size, bin_count, current) = if end - current >= max_block_size {
-            (max_block_size, bin_count, current)
-        } else {
-            let bin_count = bin_count - 1;
-            let max_block_size = Allocator::bin_size(bin_count - 1);
-            let current = align_up(start, max_block_size);
-            (max_block_size, bin_count, current)
-        };
         let mut bins = [LinkedList::new(); BLOCK_SIZE_COUNT];
-        unsafe { bins[bin_count - 1].push(current as *mut usize) };
-        let current = current + max_block_size;
+        let fragmentation = 0;
+        // let current = align_up(current, max_block_size);
+        // let fragmentation = current - start;
+        // let (max_block_size, bin_count, current) = if end - current >= max_block_size {
+        //     (max_block_size, bin_count, current)
+        // } else {
+        //     let bin_count = bin_count - 1;
+        //     let max_block_size = Allocator::bin_size(bin_count - 1);
+        //     let current = align_up(start, max_block_size);
+        //     (max_block_size, bin_count, current)
+        // };
+        // unsafe { bins[bin_count - 1].push(current as *mut usize) };
+        // let current = current + max_block_size;
 
-        let mut bin_allocator = Allocator {
+        Allocator {
             fragmentation,
             total_mem,
             max_block_size,
@@ -60,14 +60,14 @@ impl Allocator {
             current,
             end,
             bins,
-        };
-        let layout = &Layout::from_size_align(2usize, 8).unwrap();
-        match bin_allocator.populate_from_above(0, layout) {
-            Some(addr) => {
-                unsafe { bin_allocator.bins[0].push(addr) };
-                bin_allocator
-            },
-            None => panic!("Nothing was returned from populate from above"),
+        // };
+        // let layout = &Layout::from_size_align(2usize, 8).unwrap();
+        // match bin_allocator.populate_from_above(0, layout) {
+        //     Some(addr) => {
+        //         unsafe { bin_allocator.bins[0].push(addr) };
+        //         bin_allocator
+        //     },
+        //     None => panic!("Nothing was returned from populate from above"),
         }
     }
 
