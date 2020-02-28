@@ -20,7 +20,28 @@ impl Atag {
 
     /// FIXME: Returns the ATAG following `self`, if there is one.
     pub fn next(&self) -> Option<&Atag> {
-        unimplemented!()
+        // if self.tag == Atag::NONE {
+        //     None
+        // } else {
+        let current_ptr = self as *const Atag as *const u32;
+        match self.dwords {
+            0 => None,
+            size => {
+                let next_atag = unsafe {
+                    &*(current_ptr.add(self.dwords as usize) as *const Atag)
+                };
+                Some(next_atag)
+            }
+        }
+        //     if self.dwords == 0 {
+        //         None
+        //     } else {
+        //         let next_atag = unsafe {
+        //             &*(current_ptr.add(self.dwords as usize) as *const Atag)
+        //         };
+        //         Some(next_atag)
+        //     }
+        // }
     }
 }
 

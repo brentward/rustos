@@ -25,7 +25,44 @@ impl Iterator for Atags {
 
     // FIXME: Implement `Iterator` for `Atags`
     fn next(&mut self) -> Option<Atag> {
-        unimplemented!()
+        // let self_ptr = self.ptr;
+        // if self_ptr == Atag::None {
+        //     None
+        // } else {
+        //     match self_ptr.next()
+        //         Some
+        // }
+        // match self_ptr.next() {
+        //     // Some(&Atag::None) => None,
+        //     Some(next_atag)  => {
+        //         let result = Some(Atag::from(self_atag));
+        //         self.ptr = next_atag;
+        //         result
+        //
+        //         // match self_atag.next() {
+        //         //     Some(next_atag) => {
+        //         //         let result = Some(Atag::from(self_atag));
+        //         //         self.ptr = Some(next_atag);
+        //         //         result
+        //         //     },
+        //         //     None => None,
+        //         // }
+        //     }
+        //     None => None,
+        // }
+        let current = match self.ptr {
+            Some(atag) => atag,
+            None => return None,
+        };
+
+        match current.next() {
+            Some(next_atag) => {
+                let result = Some(Atag::from(current));
+                self.ptr = Some(next_atag);
+                result
+            },
+            None => None,
+        }
     }
 }
 
