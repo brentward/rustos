@@ -117,7 +117,7 @@ pub fn shell(prefix: &str) -> ! {
             Ok(command) => {
                 match command.path() {
                     "echo" => echo(&command.args),
-                    // "atags" => atag(&command.args),
+                    "atags" => atag(&command.args),
                     "panic" => panic!("You called panic"),
                     "unreachable" => unreachable!(),
                     // "usemem" => use_memory(),
@@ -139,54 +139,54 @@ fn echo(args: &StackVec<&str>) {
     kprint!("\r\n");
 }
 
-// fn atag(args: &StackVec<&str>) {
-//     let atags = atags::Atags::get();
-//     if args.len() > 1 {
-//         match args[1] {
-//             "mem" => {
-//                 for atag in atags {
-//                     match atag {
-//                         atags::Atag::Mem(_) => kprintln!("{:#?}", atag),
-//                         _ => (),
-//                     }
-//                 }
-//             }
-//             "core" => {
-//                 for atag in atags.into_iter() {
-//                     match atag {
-//                         atags::Atag::Core(_) => kprintln!("{:#?}", atag),
-//                         _ => (),
-//                     }
-//                 }
-//             }
-//             "cmd" => {
-//                 for atag in atags.into_iter() {
-//                     match atag {
-//                         atags::Atag::Cmd(_) => kprintln!("{:#?}", atag),
-//                         _ => (),
-//                     }
-//                 }
-//             }
-//             "unknown" => {
-//                 for atag in atags.into_iter() {
-//                     match atag {
-//                         atags::Atag::Unknown(_) => kprintln!("{:#?}", atag),
-//                         _ => (),
-//                     }
-//                 }
-//             }
-//             _ => {
-//                 for atag in atags.into_iter() {
-//                     kprintln!("{:#?}", atag);
-//                 }
-//             }
-//         }
-//     } else {
-//         for atag in atags.into_iter() {
-//             kprintln!("{:#?}", atag);
-//         }
-//     }
-// }
+fn atag(args: &StackVec<&str>) {
+    let atags = Atags::get();
+    if args.len() > 1 {
+        match args[1] {
+            "mem" => {
+                for atag in atags {
+                    match atag {
+                        pi::atags::Atag::Mem(_) => kprintln!("{:#?}", atag),
+                        _ => (),
+                    }
+                }
+            }
+            "core" => {
+                for atag in atags.into_iter() {
+                    match atag {
+                        pi::atags::Atag::Core(_) => kprintln!("{:#?}", atag),
+                        _ => (),
+                    }
+                }
+            }
+            "cmd" => {
+                for atag in atags.into_iter() {
+                    match atag {
+                        pi::atags::Atag::Cmd(_) => kprintln!("{:#?}", atag),
+                        _ => (),
+                    }
+                }
+            }
+            "unknown" => {
+                for atag in atags.into_iter() {
+                    match atag {
+                        pi::atags::Atag::Unknown(_) => kprintln!("{:#?}", atag),
+                        _ => (),
+                    }
+                }
+            }
+            _ => {
+                for atag in atags.into_iter() {
+                    kprintln!("{:#?}", atag);
+                }
+            }
+        }
+    } else {
+        for atag in atags.into_iter() {
+            kprintln!("{:#?}", atag);
+        }
+    }
+}
 
 // fn use_memory() {
 //     let mut base_string = String::from("hi again");
