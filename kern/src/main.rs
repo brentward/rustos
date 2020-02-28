@@ -30,10 +30,8 @@ use console::kprintln;
 #[no_mangle]
 fn kmain() -> ! {
     loop {
-        // console::CONSOLE.lock().write_str("This is a test...").unwrap();
-        // let mut pi_uart = uart::MiniUart::new();
-        // let byte_read = pi_uart.read_byte();
-        // pi_uart.write_byte(byte_read);
-        kprintln!("does this work?");
+        kprintln!("Starting shell...");
+        shell::shell("> ");
+        kprintln!("Shell quit");
     }
 }
