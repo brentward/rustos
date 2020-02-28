@@ -250,7 +250,7 @@ impl<T: io::Read + io::Write> Xmodem<T> {
                 self.expect_byte_or_cancel(packet, "Expecting packet number")?;
                 self.expect_byte_or_cancel(255 - packet, "Expect packet 1s compliment")?;
                 self.inner.read_exact(buf)?;
-                let checksum: u8 = buf.iter().fold(0, |acc, &x| acc.wrapping_add(x));
+                let checksum = get_checksum(buf);
                 if checksum ==  self.read_byte(false)? {
                     self.write_byte(ACK)?;
                     self.packet = self.packet.wrapping_add(1);
@@ -328,7 +328,7 @@ impl<T: io::Read + io::Write> Xmodem<T> {
             self.write_byte(255 - packet)?;
             self.inner.write_all(buf)?;
 
-            let checksum: u8 = buf.iter().fold(0, |acc, &x| acc.wrapping_add(x));
+            let checksum = get_checksum(buf);
             self.write_byte(checksum)?;
             self.expect_byte(ACK, "Expected ACK after sending checksum")?;
             (self.progress)(Progress::Packet(packet));
