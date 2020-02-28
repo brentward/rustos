@@ -61,7 +61,7 @@ fn main() {
     port.write_settings(&settings).expect("settings could not be applied");
     port.set_timeout(Duration::from_secs(opt.timeout)).expect("timeout could not be set");
 
-    let mut reader: Box<io::Read> = match opt.input {
+    let mut reader: Box<dyn io::Read> = match opt.input {
         Some(path) => {
             let file = File::open(&path).expect("input file could not be opened");
             let buf = BufReader::new(file);
