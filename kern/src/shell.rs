@@ -6,12 +6,12 @@ use core::str;
 
 use pi::atags::Atags;
 
-use fat32::traits::FileSystem;
-use fat32::traits::{Dir, Entry};
+// use fat32::traits::FileSystem;
+// use fat32::traits::{Dir, Entry};
 
 use crate::console::{kprint, kprintln, CONSOLE};
-use crate::ALLOCATOR;
-use crate::FILESYSTEM;
+// use crate::ALLOCATOR;
+// use crate::FILESYSTEM;
 
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
