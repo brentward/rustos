@@ -35,10 +35,10 @@ pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 #[no_mangle]
 fn kmain() -> ! {
     pi::timer::spin_sleep(Duration::from_secs(1));
-    // unsafe {
-    //     ALLOCATOR.initialize();
-    //     FILESYSTEM.initialize();
-    // }
+    unsafe {
+        ALLOCATOR.initialize();
+        // FILESYSTEM.initialize();
+    }
     kprintln!("Welcome to BrentOS");
     shell::shell("> ");
 }
