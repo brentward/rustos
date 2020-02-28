@@ -22,7 +22,7 @@ pub mod shell;
 
 use console::kprintln;
 // use pi::{timer, gpio, uart};
-// use core::time::Duration;
+use core::time::Duration;
 // use core::fmt::Write;
 
 use allocator::Allocator;
@@ -34,11 +34,11 @@ pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
+    pi::timer::spin_sleep(Duration::from_secs(1));
     // unsafe {
     //     ALLOCATOR.initialize();
     //     FILESYSTEM.initialize();
     // }
-
-    kprintln!("Welcome to cs3210!");
+    kprintln!("Welcome to BrentOS");
     shell::shell("> ");
 }

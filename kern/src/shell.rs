@@ -2,7 +2,6 @@ use shim::io;
 use shim::path::{Path, PathBuf};
 
 use stack_vec::StackVec;
-use core::str;
 
 use pi::atags::Atags;
 
@@ -61,26 +60,6 @@ const DEL: u8 = 127;
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// never returns.
 pub fn shell(prefix: &str) -> ! {
-    let init_msg = "Press any key to continue...";
-    kprint!("\r\n");
-    loop {
-        kprint!("{}", init_msg);
-        let mut console = CONSOLE.lock();
-        let byte = console.read_byte();
-        match byte {
-            byte if byte >= 32 && byte <= 127 => {
-                break;
-            },
-            _ => {
-                for _ in 0..init_msg.len() {
-                    console.write_byte(BACK);
-                }
-            }
-        }
-    }
-
-    kprintln!("\r\n\r\nWelcome to the BrentWard Shell!");
-
     loop {
         kprint!("{}", prefix);
         let mut input_buf = [0u8; 512];
@@ -110,7 +89,7 @@ pub fn shell(prefix: &str) -> ! {
             }
         }
         kprintln!("");
-        let input_str = str::from_utf8(input.as_slice())
+        let input_str = core::str::from_utf8(input.as_slice())
             .expect("input bytes failed to cast back to string");
         let mut args_buf = [""; 64];
         match Command::parse(input_str, &mut args_buf) {
