@@ -12,9 +12,6 @@ pub struct CHS {
     head: u8,
     sector: u8,
     cylinder: u8,
-    // sector_cylinder: u16,
-
-    // FIXME: Fill me in.
 }
 
 impl fmt::Debug for CHS {
@@ -31,7 +28,7 @@ impl fmt::Debug for CHS {
     }
 }
 
-// const_assert_size!(CHS, 3);
+const_assert_size!(CHS, 3);
 
 #[repr(C, packed)]
 pub struct PartitionEntry {
@@ -59,7 +56,7 @@ impl fmt::Debug for PartitionEntry {
     }
 }
 
-// const_assert_size!(PartitionEntry, 16);
+const_assert_size!(PartitionEntry, 16);
 
 /// The master boot record (MBR).
 #[repr(C, packed)]
@@ -85,7 +82,7 @@ impl fmt::Debug for MasterBootRecord {
             .finish()
     }
 }
-// const_assert_size!(MasterBootRecord, 512);
+const_assert_size!(MasterBootRecord, 512);
 
 #[derive(Debug)]
 pub enum Error {
@@ -111,7 +108,6 @@ impl MasterBootRecord {
         let mut buf = [0u8; 512];
         match device.read_sector(0, &mut buf) {
             Err(err) => return Err(Error::Io(err)),
-            Ok(bytes) if bytes > 512 => return Err(Error::BadSignature),
             _ => (),
         }
         let mbr: MasterBootRecord = unsafe { mem::transmute(buf) };
