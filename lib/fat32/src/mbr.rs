@@ -6,24 +6,36 @@ use core::mem;
 
 use crate::traits::BlockDevice;
 
+#[derive(Copy, Clone)]
+struct SectorCylinder([u8; 2]);
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CHS {
     head: u8,
-    sector: u8,
-    cylinder: u8,
+    sector_cylinder: SectorCylinder,
+    }
+
+impl CHS {
+    fn sector(&self) -> u16 {
+        let sector_cylinder: u16 =
+            ((self.sector_cylinder.0[0] as u16) << 8) & self.sector_cylinder.0[1] as u16;
+        sector_cylinder & !(0b1111111111 << 6)
+    }
+
+    fn cylinder(&self) -> u16 {
+        let sector_cylinder: u16 =
+            ((self.sector_cylinder.0[0] as u16) << 8) & self.sector_cylinder.0[1] as u16;
+        sector_cylinder >> 6
+    }
 }
 
 impl fmt::Debug for CHS {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sector_cylinder: u16 = ((self.sector as u16) << 8) & self.cylinder as u16;
-        let sector = sector_cylinder & !(0b1111111111 << 6);
-        let cylinder = sector_cylinder >> 6;
         f.debug_struct("CHS")
             .field("head", &self.head)
-            .field("sector", &sector)
-            .field("cylinder", &cylinder)
-
+            .field("sector", &self.sector())
+            .field("cylinder", &self.cylinder())
             .finish()
     }
 }
@@ -38,8 +50,6 @@ pub struct PartitionEntry {
     end_chs: CHS,
     start_sector: u32,
     total_sectors: u32,
-
-    // FIXME: Fill me in.
 }
 
 impl fmt::Debug for PartitionEntry {
@@ -51,19 +61,23 @@ impl fmt::Debug for PartitionEntry {
             .field("end CHS", &self.end_chs)
             .field("start sector", &self.start_sector)
             .field("total sector", &self.total_sectors)
-
             .finish()
     }
 }
 
 const_assert_size!(PartitionEntry, 16);
 
+struct Bootstrap([u8; 436]);
+
+#[derive(Debug)]
+struct DiskID([u8; 10]);
+
 /// The master boot record (MBR).
 #[repr(C, packed)]
 pub struct MasterBootRecord {
     // FIXME: Fill me in.
-    bootstrap: [u8; 436],
-    disk_id: [u8; 10],
+    bootstrap: Bootstrap,
+    disk_id: DiskID,
     partitions: [PartitionEntry; 4],
     magic_signature: [u8; 2],
 
@@ -78,7 +92,6 @@ impl fmt::Debug for MasterBootRecord {
             .field("partition 3", &self.partitions[2])
             .field("partition 4", &self.partitions[3])
             .field("magic signature", &self.magic_signature)
-
             .finish()
     }
 }
