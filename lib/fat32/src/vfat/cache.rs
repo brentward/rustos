@@ -4,6 +4,8 @@ use core::fmt;
 use hashbrown::HashMap;
 use shim::io;
 
+use crate::vfat::Error;
+
 use crate::traits::BlockDevice;
 
 #[derive(Debug)]
@@ -76,6 +78,47 @@ impl CachedPartition {
         Some(physical_sector)
     }
 
+    fn cache_virtual_sector(&mut self, sector: u64) -> io::Result<()> {
+        if !self.cache.contains_key(&sector) {
+            let physical_sector = match self.virtual_to_physical(sector) {
+                Some(physical_sector) => physical_sector,
+                None => return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "Virtual sector out of range"
+                )),
+            };
+            let mut data = Vec::new();
+            for sector in physical_sector..physical_sector + self.factor() {
+                self.device.read_all_sector(sector, &mut data)?;
+            }
+            match self.cache.insert(sector, CacheEntry { data, dirty: false }) {
+                Some(_) => Ok(()),
+                None => Err(io::Error::new(io::ErrorKind::Other, "Cache insert failed")),
+
+
+            // match self.cache_virtual_sector(sector) {
+            //     Some(_) => {
+            //         let physical_sector = match self.virtual_to_physical(sector) {
+            //             Some(physical_sector) => physical_sector,
+            //             None => return Err(Error::NotFound),
+            //         };
+            //         let mut data = Vec::new();
+            //         for sector in physical_sector..physical_sector + self.factor() {
+            //             match self.device.read_all_sector(sector, &mut data) {
+            //                 Some(_) => (),
+            //                 None => return Err(Error::NotFound),
+            //             }
+            //         }
+            //         self.cache.insert(sector, CacheEntry { data, dirty: false });
+            //         Some(())
+            //     }
+            //     None => return Err(Error::NotFound),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
     /// Returns a mutable reference to the cached sector `sector`. If the sector
     /// is not already cached, the sector is first read from the disk.
     ///
@@ -87,7 +130,11 @@ impl CachedPartition {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get_mut(&mut self, sector: u64) -> io::Result<&mut [u8]> {
-        unimplemented!("CachedPartition::get_mut()")
+        self.cache_virtual_sector(sector)?;
+        let cache_entry = self.cache.get_mut(&sector)
+            .expect("data is not cached that should be in cache.get_mut() call");
+        cache_entry.dirty = true;
+        Ok(cache_entry.data.as_mut_slice())
     }
 
     /// Returns a reference to the cached sector `sector`. If the sector is not
@@ -97,7 +144,10 @@ impl CachedPartition {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get(&mut self, sector: u64) -> io::Result<&[u8]> {
-        unimplemented!("CachedPartition::get()")
+        self.cache_virtual_sector(sector)?;
+        let cache_entry = self.cache.get(&sector)
+            .expect("data is not cached that should be in cache.get() call");
+        Ok(cache_entry.data.as_slice())
     }
 }
 
@@ -105,15 +155,31 @@ impl CachedPartition {
 // `write_sector` methods should only read/write from/to cached sectors.
 impl BlockDevice for CachedPartition {
     fn sector_size(&self) -> u64 {
-        unimplemented!()
+        self.partition.sector_size
     }
 
     fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> io::Result<usize> {
-        unimplemented!()
+        let data = self.get(sector)?;
+        if data.len() <= buf.len() {
+            for index in 0usize..data.len() {
+                buf[index] = data[index]
+            }
+            Ok(buf.len() as usize)
+        } else {
+            Err(io::Error::new(io::ErrorKind::Other, "sector larger than buf size"))
+        }
     }
 
     fn write_sector(&mut self, sector: u64, buf: &[u8]) -> io::Result<usize> {
-        unimplemented!()
+        if buf.len() > self.sector_size() as usize {
+            Err(io::Error::new(io::ErrorKind::Other, "buf larger than sector size"))
+        } else {
+            let mut data = self.get_mut(sector)?;
+            for index in 0usize..buf.len() {
+                data[index] = buf[index]
+            }
+            Ok(data.len() as usize)
+        }
     }
 }
 
