@@ -39,33 +39,78 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     where
         T: BlockDevice + 'static,
     {
-        unimplemented!("VFat::from()")
+        let mbr = MasterBootRecord::from(&mut device)?;
+
+        let partition_entry = mbr.get_partition(0);
+        if !partition_entry.is_vfat() {
+            return Err(Error::NotFound)
+        }
+        let start_sector = partition_entry.start_sector() as u64;
+        let ebpb = BiosParameterBlock::from(&mut device, start_sector)?;
+
+        let partition = Partition {
+            start: partition_entry.start_sector() as u64,
+            num_sectors: partition_entry.total_sectors() as u64,
+            sector_size: ebpb.sector_size()
+        };
+
+        let cached_partition = CachedPartition::new(device, partition);
+        let bytes_per_sector = ebpb.sector_size() as u16;
+        let sectors_per_cluster = ebpb.sectors_per_cluster();
+        let sectors_per_fat = ebpb.sectors_per_fat();
+        let fat_start_sector = ebpb.fat_start_sector();
+        let data_start_sector = ebpb.data_start_sector();
+        let rootdir_cluster = Cluster::from(ebpb.root_dir_cluster());
+        let vfat = VFat {
+            phantom: PhantomData,
+            device: cached_partition,
+            bytes_per_sector,
+            sectors_per_cluster,
+            sectors_per_fat,
+            fat_start_sector,
+            data_start_sector,
+            rootdir_cluster
+        };
+        Ok(VFatHandle::new(vfat))
     }
 
     // TODO: The following methods may be useful here:
     //
     //  * A method to read from an offset of a cluster into a buffer.
     //
-    //    fn read_cluster(
-    //        &mut self,
-    //        cluster: Cluster,
-    //        offset: usize,
-    //        buf: &mut [u8]
-    //    ) -> io::Result<usize>;
+    // fn read_cluster(
+    //     &mut self,
+    //     cluster: Cluster,
+    //     offset: usize,
+    //     buf: &mut [u8]
+    // ) -> io::Result<usize> {
+    //     self.device.read_sector(
+    //         cluster as u64 + offset as u64 * self.device.sector_size(),
+    //         buf
+    //     )?
+    // }
     //
     //  * A method to read all of the clusters chained from a starting cluster
     //    into a vector.
     //
-    //    fn read_chain(
-    //        &mut self,
-    //        start: Cluster,
-    //        buf: &mut Vec<u8>
-    //    ) -> io::Result<usize>;
+    // fn read_chain(
+    //     &mut self,
+    //     start: Cluster,
+    //     buf: &mut Vec<u8>
+    // ) -> io::Result<usize> {
+    //     mbr = MasterBootRecord::from(&self.device);
+    //     self.device.read_all_sector(
+    //         cluster as u64 + offset as u64 * self.device.sector_size(),
+    //         buf
+    //     )?
+    // }
     //
     //  * A method to return a reference to a `FatEntry` for a cluster where the
     //    reference points directly into a cached sector.
     //
-    //    fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry>;
+    // fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
+    //
+    // }
 }
 
 impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
