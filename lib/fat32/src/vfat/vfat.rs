@@ -78,17 +78,31 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //
     //  * A method to read from an offset of a cluster into a buffer.
     //
-    // fn read_cluster(
-    //     &mut self,
-    //     cluster: Cluster,
-    //     offset: usize,
-    //     buf: &mut [u8]
-    // ) -> io::Result<usize> {
-    //     self.device.read_sector(
-    //         cluster as u64 + offset as u64 * self.device.sector_size(),
-    //         buf
-    //     )?
-    // }
+    fn read_cluster(
+        &mut self,
+        cluster: Cluster,
+        offset: usize,
+        buf: &mut [u8]
+    ) -> io::Result<usize> {
+        // let fat_entry = self.fat_entry(cluster)?;
+        let first_sector = self.data_start_sector + cluster.value() as u64 * self.sectors_per_cluster as u64;
+        let last_sector = first_sector + self.sectors_per_cluster as u64;
+        let start_sector =  first_sector + offset as u64 / self.bytes_per_sector as u64;
+        if offset_sectors > self.sectors_per_cluster as u64 {
+            Err(io::Error::new(io::ErrorKind::Other, "offset larger than cluster"))
+        }
+        let sector_offset = offset % self.bytes_per_sector as usize;
+        let data = self.device.get(start_sector)?;
+        let mut bytes =buf.write(&data[sector_offset..])?;
+        for sector in start_sector + 1..last_sector {
+            let data = self.device.get(sector)?;
+            bytes += buf.write(data)?;
+        }
+        Ok(bytes)
+
+
+        // unimplemented!("Vfat::read_cluster")
+    }
     //
     //  * A method to read all of the clusters chained from a starting cluster
     //    into a vector.
@@ -108,9 +122,12 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //  * A method to return a reference to a `FatEntry` for a cluster where the
     //    reference points directly into a cached sector.
     //
-    // fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
-    //
-    // }
+    fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
+        let sector = cluster.value() as u64 * 4 / self.bytes_per_sector as u64;
+        let position_in_sector = cluster.value() as usize * 4 - (sector as usize * self.bytes_per_sector as usize);
+        let data = self.device.get(self.fat_start_sector + sector)?;
+        Ok(unsafe { &data[position_in_sector..position_in_sector + 4].cast()[0] })
+    }
 }
 
 impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
