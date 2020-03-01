@@ -52,6 +52,24 @@ pub struct PartitionEntry {
     total_sectors: u32,
 }
 
+impl PartitionEntry {
+    pub fn bootable(&self) -> bool {
+        self.boot_flag == 0x80
+    }
+
+    pub fn is_vfat(&self) -> bool {
+        (self.partition_type == 0xB || self.partition_type == 0xC)
+    }
+
+    pub fn start_sector(&self) -> u32 {
+        self.start_sector
+    }
+
+    pub fn total_sectors(&self) -> u32 {
+        self.total_sectors
+    }
+}
+
 impl fmt::Debug for PartitionEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("PartitionEntry")
@@ -133,5 +151,10 @@ impl MasterBootRecord {
             }
         }
         Ok(mbr)
+    }
+
+    pub fn get_partition(&self, number: usize) -> &PartitionEntry {
+        let partition = &self.partitions[number];
+        partition
     }
 }
