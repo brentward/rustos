@@ -51,11 +51,11 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let partition = Partition {
             start: partition_entry.start_sector() as u64,
             num_sectors: partition_entry.total_sectors() as u64,
-            sector_size: ebpb.sector_size()
+            sector_size: ebpb.bytes_per_sector()
         };
 
         let cached_partition = CachedPartition::new(device, partition);
-        let bytes_per_sector = ebpb.sector_size() as u16;
+        let bytes_per_sector = ebpb.bytes_per_sector() as u16;
         let sectors_per_cluster = ebpb.sectors_per_cluster();
         let sectors_per_fat = ebpb.sectors_per_fat();
         let fat_start_sector = ebpb.fat_start_sector();
@@ -87,16 +87,23 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         // let fat_entry = self.fat_entry(cluster)?;
         let first_sector = self.data_start_sector + cluster.value() as u64 * self.sectors_per_cluster as u64;
         let last_sector = first_sector + self.sectors_per_cluster as u64;
-        let start_sector =  first_sector + offset as u64 / self.bytes_per_sector as u64;
-        if offset_sectors > self.sectors_per_cluster as u64 {
-            Err(io::Error::new(io::ErrorKind::Other, "offset larger than cluster"))
-        }
+        let start_sector =  first_sector + (offset as u64 / self.bytes_per_sector as u64);
+        if start_sector - first_sector > self.sectors_per_cluster as u64 {
+            return Err(io::Error::new(io::ErrorKind::Other, "offset larger than cluster"))
+        };
         let sector_offset = offset % self.bytes_per_sector as usize;
         let data = self.device.get(start_sector)?;
-        let mut bytes =buf.write(&data[sector_offset..])?;
+        let mut bytes = 0usize;
+        for byte in data[sector_offset..].iter() {
+            buf[bytes] = *byte;
+            bytes += 1;
+        }
         for sector in start_sector + 1..last_sector {
             let data = self.device.get(sector)?;
-            bytes += buf.write(data)?;
+            for byte in data.iter() {
+                buf[bytes] = *byte;
+                bytes += 1;
+            }
         }
         Ok(bytes)
 

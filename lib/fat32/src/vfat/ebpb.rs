@@ -80,7 +80,7 @@ impl BiosParameterBlock {
         Ok(bpb)
     }
 
-    pub fn sector_size(&self) -> u64 {
+    pub fn bytes_per_sector(&self) -> u64 {
         self.bytes_per_sector.value() as u64
     }
 
