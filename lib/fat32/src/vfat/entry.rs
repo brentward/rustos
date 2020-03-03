@@ -12,9 +12,7 @@ pub enum Entry<HANDLE: VFatHandle> {
 
 // TODO: Implement any useful helper methods on `Entry`.
 
-impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE>
-    where HANDLE: Copy
-{
+impl<HANDLE: VFatHandle + Copy> traits::Entry for Entry<HANDLE> {
     type File = File<HANDLE>;
     type Dir = Dir<HANDLE>;
     type Metadata = Metadata;
