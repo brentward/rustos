@@ -1,6 +1,7 @@
 use crate::traits;
 use crate::vfat::{Dir, File, Metadata, VFatHandle};
 use core::fmt;
+use core::marker::Copy;
 
 // You can change this definition if you want
 #[derive(Debug)]
@@ -12,7 +13,7 @@ pub enum Entry<HANDLE: VFatHandle> {
 // TODO: Implement any useful helper methods on `Entry`.
 
 impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE>
-    where HANDLE: std::marker::Copy
+    where HANDLE: Copy
 {
     type File = File<HANDLE>;
     type Dir = Dir<HANDLE>;

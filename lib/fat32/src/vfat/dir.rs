@@ -1,6 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::marker::PhantomData;
+use core::marker::{PhantomData, Copy};
 
 use shim::const_assert_size;
 use shim::ffi::OsStr;
@@ -132,7 +132,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 
 
 impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE>
-    where HANDLE: std::marker::Copy
+    where HANDLE: Copy
 {
     type Entry = Entry<HANDLE>;
     type Iter = DirIterator<HANDLE>;
