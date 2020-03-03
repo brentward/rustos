@@ -5,7 +5,7 @@ use shim::io::{self, SeekFrom};
 use crate::traits;
 use crate::vfat::{Cluster, Metadata, VFatHandle};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct File<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
     // FIXME: Fill me in.
@@ -28,6 +28,30 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
     /// Seeking before the start of a file or beyond the end of the file results
     /// in an `InvalidInput` error.
     fn seek(&mut self, _pos: SeekFrom) -> io::Result<u64> {
-        unimplemented!("File::seek()")
+        panic!("File::seek()")
+    }
+}
+
+impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        panic!("File::write()")
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        panic!("File::flush()")
+    }
+}
+
+impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
+    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+        panic!("File::read()")
+    }
+}
+
+impl<HANDLE: VFatHandle> traits::File for File<HANDLE> {
+    fn sync(&mut self) -> io::Result<()> {
+        panic!("File::sync()")
+    }
+    fn size(&self) -> u64 {
+        panic!("File::size()")
     }
 }

@@ -2,8 +2,12 @@
 pub struct Cluster(u32);
 
 impl Cluster {
-    pub fn value(&self) -> u32 {
+    pub fn fat_address(&self) -> u32 {
         self.0
+    }
+
+    pub fn data_address(&self) -> u32 {
+        self.0 - 2
     }
 }
 

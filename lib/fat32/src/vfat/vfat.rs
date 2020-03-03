@@ -42,7 +42,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let mbr = MasterBootRecord::from(&mut device)?;
 
         let partition_entry = mbr.get_partition(0);
-        if !partition_entry.is_vfat() {
+        if !partition_entry.is_fat32() {
             return Err(Error::NotFound)
         }
         let start_sector = partition_entry.start_sector() as u64;
@@ -85,7 +85,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         buf: &mut [u8]
     ) -> io::Result<usize> {
         // let fat_entry = self.fat_entry(cluster)?;
-        let first_sector = self.data_start_sector + cluster.value() as u64 * self.sectors_per_cluster as u64;
+        let first_sector = self.data_start_sector + cluster.fat_address() as u64 * self.sectors_per_cluster as u64;
         let last_sector = first_sector + self.sectors_per_cluster as u64;
         let start_sector =  first_sector + (offset as u64 / self.bytes_per_sector as u64);
         if start_sector - first_sector > self.sectors_per_cluster as u64 {
@@ -106,32 +106,60 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
             }
         }
         Ok(bytes)
-
-
-        // unimplemented!("Vfat::read_cluster")
     }
     //
     //  * A method to read all of the clusters chained from a starting cluster
     //    into a vector.
     //
-    // fn read_chain(
-    //     &mut self,
-    //     start: Cluster,
-    //     buf: &mut Vec<u8>
-    // ) -> io::Result<usize> {
-    //     mbr = MasterBootRecord::from(&self.device);
-    //     self.device.read_all_sector(
-    //         cluster as u64 + offset as u64 * self.device.sector_size(),
-    //         buf
-    //     )?
-    // }
+    fn read_chain(
+        &mut self,
+        start: Cluster,
+        buf: &mut Vec<u8>
+    ) -> io::Result<usize> {
+        let mut clusters = vec![start];
+        let mut fat_entry = self.fat_entry(start)?;
+        loop {
+            let next_cluster = match fat_entry.status() {
+                Status::Data(cluster) => cluster,
+                Status::Eoc(_) => break,
+                Status::Bad => return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "cluster in chain unexpectedly marked bad"
+                )),
+                Status::Reserved => return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "cluster in chain unexpectedly marked reserved"
+                )),
+                Status::Free => return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "cluster in chain unexpectedly marked free"
+                )),
+            };
+            clusters.push(next_cluster);
+            fat_entry = self.fat_entry(next_cluster)?;
+        }
+        let mut bytes = 0usize;
+
+        for cluster in clusters.iter() {
+            let first_sector = self.data_start_sector + cluster.fat_address() as u64 * self.sectors_per_cluster as u64;
+            let last_sector = first_sector + self.sectors_per_cluster as u64;
+            for sector in first_sector..last_sector {
+                let data = self.device.get(sector)?;
+                for byte in data.iter() {
+                    buf[bytes] = *byte;
+                    bytes += 1;
+                }
+            }
+        }
+    Ok(bytes)
+    }
     //
     //  * A method to return a reference to a `FatEntry` for a cluster where the
     //    reference points directly into a cached sector.
     //
     fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
-        let sector = cluster.value() as u64 * 4 / self.bytes_per_sector as u64;
-        let position_in_sector = cluster.value() as usize * 4 - (sector as usize * self.bytes_per_sector as usize);
+        let sector = cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
+        let position_in_sector = cluster.fat_address() as usize * 4 - (sector as usize * self.bytes_per_sector as usize);
         let data = self.device.get(self.fat_start_sector + sector)?;
         Ok(unsafe { &data[position_in_sector..position_in_sector + 4].cast()[0] })
     }

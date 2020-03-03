@@ -57,7 +57,7 @@ impl PartitionEntry {
         self.boot_flag == 0x80
     }
 
-    pub fn is_vfat(&self) -> bool {
+    pub fn is_fat32(&self) -> bool {
         (self.partition_type == 0xB || self.partition_type == 0xC)
     }
 
