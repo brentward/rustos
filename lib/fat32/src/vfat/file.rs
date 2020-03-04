@@ -8,7 +8,9 @@ use crate::vfat::{Cluster, Metadata, VFatHandle};
 #[derive(Debug, Copy, Clone)]
 pub struct File<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
-    // FIXME: Fill me in.
+    pub first_cluster: Cluster,
+    pub size: u32,
+    pub metadata: Metadata
 }
 
 // FIXME: Implement `traits::File` (and its supertraits) for `File`.

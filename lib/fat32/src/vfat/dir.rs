@@ -16,6 +16,9 @@ use crate::vfat::{Cluster, Entry, File, VFatHandle};
 pub struct Dir<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
     pub first_cluster: Cluster,
+    pub name: String,
+    pub size: u32,
+    pub metadata: Metadata,
 }
 
 #[repr(C, packed)]
@@ -28,10 +31,22 @@ pub struct VFatRegularDirEntry {
     creation_time_tenth_of_second: u8,
     creation_timestamp: Timestamp,
     accessed_date: Date,
-    cluster_address_high: [u8; 2],
+    cluster_address_high: u16,
     modification_timestamp: Timestamp,
-    cluster_address_low: [u8; 2],
+    cluster_address_low: u16,
     file_size: u32,
+}
+
+impl VFatRegularDirEntry {
+    fn cluster(&self) -> u32 {
+        self.cluster_address_low as u32
+            + self.cluster_address_high as u32 * 0x10000
+
+        // self.cluster_address_low[0] as u32
+        //     + self.cluster_address_low[1] as u32 * 0x100
+        //     + self.cluster_address_high[0] as u32 * 0x10000
+        //     + self.cluster_address_high[1] as u32 * 0x1000000
+    }
 }
 
 const_assert_size!(VFatRegularDirEntry, 32);
@@ -41,13 +56,19 @@ const_assert_size!(VFatRegularDirEntry, 32);
 #[derive(Copy, Clone)]
 pub struct VFatLfnDirEntry {
     sequence_number: u8,
-    name_1: [u8; 10],
+    name_1: [u16; 5],
     attributes: u8,
     lfn_type: u8,
     dos_fn_checksum: u8,
-    name_2: [u8; 12],
-    always_zero: [u8; 2],
-    name_3: [u8; 4],
+    name_2: [u16; 6],
+    always_zero: u16,
+    name_3: [u16; 2],
+}
+
+impl VFatLfnDirEntry {
+    fn is_dir(&self) -> bool {
+        (self.attributes & 0x10 >> 4) != 0
+    }
 }
 
 const_assert_size!(VFatLfnDirEntry, 32);
@@ -100,6 +121,8 @@ pub union VFatDirEntry {
     long_filename: VFatLfnDirEntry,
 }
 
+
+
 impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// Finds the entry named `name` in `self` and returns it. Comparison is
     /// case-insensitive.
@@ -119,13 +142,56 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
 pub struct DirIterator<HANDLE: VFatHandle> {
     phantom: PhantomData<HANDLE>,
     dir_entries: Vec<VFatDirEntry>,
-    position: u32,
+    position: usize,
     vfat: HANDLE
 }
 
+// impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
+//     fn lfn(&self, lfn_vec: &mut Vec<&VFatLfnDirEntry>) -> String {
+//         lfn_vec.sort_by_key(|lfn| lfn.sequence_number);
+//         let name = Vec::with_capacity(lfn_vec.len() * 13);
+//
+//         String::from("hi")
+//     }
+// }
 impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
     type Item = Entry<HANDLE>;
     fn next(&mut self) -> Option<Self::Item> {
+        // let mut lfn_vec: Vec<&VFatLfnDirEntry> = Vec::with_capacity(20);
+        // for position in self.position..self.dir_entries.len() {
+        //     let dir_entry = &self.dir_entries[position];
+        //
+        //     let unknown_dir_entry = unsafe {dir_entry.unknown};
+        //     if unknown_dir_entry.is_end() {
+        //         self.position = self.dir_entries.len();
+        //         return None
+        //     }
+        //     if unknown_dir_entry.is_lfn() {
+        //         let lfn_dir = unsafe { dir_entry.long_filename };
+        //         lfn_vec.push(&lfn_dir);
+        //         self.position += 1;
+        //         continue
+        //     } else {
+        //         let regular_dir = unsafe { dir_entry.regular };
+        //         let lfn = if lfn_vec.len() == 0 {
+        //             None
+        //         } else {
+        //             Some(&lfn_vec)
+        //         };
+        //         if regular_dir.is_dir(){
+        //             self.position += 1;
+        //             return Some(Entry::Dir(Dir {
+        //                 vfat: self.vfat.clone(),
+        //                 first_cluster: Cluster::from(regular_dir.cluster()),
+        //                 lfn
+        //             }))
+        //         } else {
+        //             // return Some(Entry::File())
+        //         }
+        //
+        //     };
+        //
+        // }
         panic!("DirIter::next()")
     }
 }

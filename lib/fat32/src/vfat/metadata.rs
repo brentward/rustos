@@ -27,7 +27,7 @@ pub struct Timestamp {
 }
 
 /// Metadata for a directory entry.
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct Metadata {
     attributes: Attributes,
     creation_timestamp: Timestamp,
