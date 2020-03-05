@@ -166,11 +166,12 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
 }
 
 impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
-    type File = crate::traits::Dummy;
-    type Dir = crate::traits::Dummy;
-    type Entry = crate::traits::Dummy;
+    type File = crate::vfat::File<HANDLE>;
+    type Dir = crate::vfat::Dir<HANDLE>;
+    type Entry = crate::vfat::Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
+        // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
         unimplemented!("FileSystem::open()")
     }
 }
