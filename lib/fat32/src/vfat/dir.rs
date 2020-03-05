@@ -110,7 +110,7 @@ pub union VFatDirEntry {
 
 
 
-impl<HANDLE: VFatHandle> Dir<HANDLE> {
+impl<HANDLE: VFatHandle + Copy> Dir<HANDLE> {
     /// Finds the entry named `name` in `self` and returns it. Comparison is
     /// case-insensitive.
     ///
@@ -122,8 +122,16 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// If `name` contains invalid UTF-8 characters, an error of `InvalidInput`
     /// is returned.
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
-        unimplemented!("Dir::find()")
-
+        use traits::Dir;
+        let name = name.as_ref().to_str()
+            .ok_or(io::Error::new(io::ErrorKind::InvalidInput, "name is not valid UTF-8"))?;
+        self.entries()?.find(|entry| {
+            let entry_name = match entry {
+                Entry::Dir(_, name, _) => name,
+                Entry::File(_, name, _) => name,
+            };
+            entry_name.as_str().eq_ignore_ascii_case(name)
+        }).ok_or(io::Error::new(io::ErrorKind::NotFound, "name was not found"))
     }
 }
 
@@ -211,7 +219,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 );
                 self.position += 1;
                 if regular_dir.is_dir(){
-                    Some(Entry::Dir(
+                    return Some(Entry::Dir(
                         Dir {
                             vfat: self.vfat.clone(),
                             first_cluster: Cluster::from(regular_dir.cluster()),
@@ -221,19 +229,18 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                     ))
 
                 } else {
-                    Some(Entry::File(
+                    return Some(Entry::File(
                         File {
                             vfat: self.vfat.clone(),
                             first_cluster: Cluster::from(regular_dir.cluster()),
                             size: regular_dir.file_size,
+                            chain_index: 0
                         },
                         name,
                         metadata,
                     ))
                 }
-
-            };
-
+            }
         }
         None
     }
