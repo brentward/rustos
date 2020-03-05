@@ -189,9 +189,10 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 self.position = self.dir_entries.len();
                 return None
             }
+            if unknown_dir_entry.is_unused() {
+                continue
+            }
             if unknown_dir_entry.is_lfn() {
-                // let lfn_dir = unsafe { dir_entry.long_filename };
-                // let lfn_copy = lfn_dir.clone();
                 lfn_vec.push(unsafe { &dir_entry.long_filename });
                 self.position += 1;
                 continue
@@ -208,13 +209,8 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                     regular_dir.accessed_date,
                     regular_dir.modification_timestamp
                 );
+                self.position += 1;
                 if regular_dir.is_dir(){
-                    self.position += 1;
-                    // Some(Entry::Dir(Dir {
-                    //     vfat: self.vfat.clone(),
-                    //     first_cluster: Cluster::from(regular_dir.cluster()),
-                    //     metadata
-                    // }))
                     Some(Entry::Dir(
                         Dir {
                             vfat: self.vfat.clone(),
@@ -240,24 +236,22 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 
         }
         None
-        // panic!("DirIter::next()")
     }
 }
 
 
-impl<HANDLE: VFatHandle + Copy> traits::Dir for Dir<HANDLE> {
+impl<'a, HANDLE: VFatHandle + Copy> traits::Dir for Dir<HANDLE> {
     type Entry = Entry<HANDLE>;
     type Iter = DirIterator<HANDLE>;
 
     fn entries(&self) -> io::Result<Self::Iter> {
-        // let mut dir_entries = Vec::new();
-        // self.vfat.read_chain(self.first_cluster, &dir_entries)?;
-        // Ok(DirIterator {
-        //     phantom: PhantomData,
-        //     dir_entries,
-        //     position: 0,
-        //     vfat: self.vfat.clone(),
-        // })
-        unimplemented!("Dir::entries()")
+        let mut cluster_chain: Vec<u8> = Vec::new();
+        self.vfat.lock(|a| a.read_chain(self.first_cluster, &mut cluster_chain))?;
+        Ok(DirIterator {
+            phantom: PhantomData,
+            dir_entries: unsafe { cluster_chain.cast() },
+            position: 0,
+            vfat: self.vfat.clone(),
+        })
     }
 }

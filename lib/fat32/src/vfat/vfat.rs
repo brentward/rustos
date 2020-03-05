@@ -78,7 +78,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //
     //  * A method to read from an offset of a cluster into a buffer.
     //
-    fn read_cluster(
+    pub fn read_cluster(
         &mut self,
         cluster: Cluster,
         offset: usize,
@@ -111,7 +111,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //  * A method to read all of the clusters chained from a starting cluster
     //    into a vector.
     //
-    fn read_chain(
+    pub fn read_chain(
         &mut self,
         start: Cluster,
         buf: &mut Vec<u8>
