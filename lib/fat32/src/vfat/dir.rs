@@ -125,15 +125,12 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// If `name` contains invalid UTF-8 characters, an error of `InvalidInput`
     /// is returned.
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
-        use traits::Dir;
+        use traits::{Dir, Entry};
         let name = name.as_ref().to_str()
             .ok_or(io::Error::new(io::ErrorKind::InvalidInput, "name is not valid UTF-8"))?;
         self.entries()?.find(|entry| {
-            let entry_name = match entry {
-                Entry::Dir(dir) => &dir.name,
-                Entry::File(file) => &file.name,
-            };
-            entry_name.as_str().eq_ignore_ascii_case(name)
+            let entry_name = entry.name();
+            entry_name.eq_ignore_ascii_case(name)
         }).ok_or(io::Error::new(io::ErrorKind::NotFound, "name was not found"))
     }
 }
