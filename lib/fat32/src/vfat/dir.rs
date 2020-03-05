@@ -110,7 +110,7 @@ pub union VFatDirEntry {
 
 
 
-impl<HANDLE: VFatHandle + Copy> Dir<HANDLE> {
+impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// Finds the entry named `name` in `self` and returns it. Comparison is
     /// case-insensitive.
     ///
@@ -247,7 +247,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 }
 
 
-impl<'a, HANDLE: VFatHandle + Copy> traits::Dir for Dir<HANDLE> {
+impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
     type Entry = Entry<HANDLE>;
     type Iter = DirIterator<HANDLE>;
 
