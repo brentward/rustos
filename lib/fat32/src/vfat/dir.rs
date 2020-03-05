@@ -17,6 +17,9 @@ use crate::vfat::{Cluster, Entry, File, VFatHandle};
 pub struct Dir<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
     pub first_cluster: Cluster,
+    pub name: String,
+    pub metadata: Metadata,
+    pub size: u32,
 }
 
 #[repr(C, packed)]
@@ -127,8 +130,8 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
             .ok_or(io::Error::new(io::ErrorKind::InvalidInput, "name is not valid UTF-8"))?;
         self.entries()?.find(|entry| {
             let entry_name = match entry {
-                Entry::Dir(_, name, _) => name,
-                Entry::File(_, name, _) => name,
+                Entry::Dir(dir) => &dir.name,
+                Entry::File(file) => &file.name,
             };
             entry_name.as_str().eq_ignore_ascii_case(name)
         }).ok_or(io::Error::new(io::ErrorKind::NotFound, "name was not found"))
@@ -223,9 +226,10 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         Dir {
                             vfat: self.vfat.clone(),
                             first_cluster: Cluster::from(regular_dir.cluster()),
-                        },
-                        name,
-                        metadata,
+                            name,
+                            metadata,
+                            size: regular_dir.file_size,
+                        }
                     ))
 
                 } else {
@@ -233,11 +237,11 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         File {
                             vfat: self.vfat.clone(),
                             first_cluster: Cluster::from(regular_dir.cluster()),
+                            name,
+                            metadata,
                             size: regular_dir.file_size,
                             chain_index: 0
                         },
-                        name,
-                        metadata,
                     ))
                 }
             }

@@ -6,8 +6,8 @@ use core::marker::Copy;
 // You can change this definition if you want
 #[derive(Debug)]
 pub enum Entry<HANDLE: VFatHandle> {
-    File(File<HANDLE>, String, Metadata),
-    Dir(Dir<HANDLE>, String, Metadata),
+    File(File<HANDLE>),
+    Dir(Dir<HANDLE>),
 }
 
 // TODO: Implement any useful helper methods on `Entry`.
@@ -57,37 +57,37 @@ impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE> {
 
     fn name(&self) -> &str {
         match self {
-            Entry::File(_, name, _) => name.as_str(),
-            Entry::Dir(_, name, _) => name.as_str()
+            Entry::File(file) => file.name.as_str(),
+            Entry::Dir(dir) => dir.name.as_str()
         }
     }
     fn metadata(&self) -> &Self::Metadata {
         match self {
-            Entry::File(_, _, metadata) => metadata,
-            Entry::Dir(_, _, metadata) => metadata,
+            Entry::File(file) => &file.metadata,
+            Entry::Dir(dir) => &dir.metadata,
         }
     }
     fn as_file(&self) -> Option<&<Self as traits::Entry>::File> {
         match &self {
-            Entry::File(file, ..) => Some(file),
+            Entry::File(file) => Some(file),
             _ => None,
         }
     }
     fn as_dir(&self) -> Option<&<Self as traits::Entry>::Dir> {
         match &self {
-            Entry::Dir(dir, ..) => Some(dir),
+            Entry::Dir(dir) => Some(dir),
             _ => None,
         }
     }
     fn into_file(self) -> Option<<Self as traits::Entry>::File> {
         match self {
-            Entry::File(file, ..) => Some(file),
+            Entry::File(file) => Some(file),
             _ => None,
         }
     }
     fn into_dir(self) -> Option<<Self as traits::Entry>::Dir> {
         match self {
-            Entry::Dir(dir, ..) => Some(dir),
+            Entry::Dir(dir) => Some(dir),
             _ => None,
         }
     }

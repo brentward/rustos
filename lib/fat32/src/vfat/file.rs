@@ -5,10 +5,12 @@ use shim::io::{self, SeekFrom};
 use crate::traits;
 use crate::vfat::{Cluster, Metadata, VFatHandle};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct File<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
     pub first_cluster: Cluster,
+    pub name: String,
+    pub metadata: Metadata,
     pub size: u32,
     pub chain_index: usize,
 }

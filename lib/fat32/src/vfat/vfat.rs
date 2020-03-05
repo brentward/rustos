@@ -171,7 +171,31 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
     type Entry = crate::vfat::Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
+        //
+        // let mut cluster = self.lock(|vfat| vfat.rootdir_cluster);
+        // let mut found_entry = None;
+        // // let timestamp = Timestamp { date: Date(0), time: Time(0)};
+        // // let root_metadata = Metadata::new(
+        // //     Attributes(0x10),
+        // //     timestamp,
+        // //     Date(0),
+        // //     timestamp
+        // // );
+        // // let mut found_entry = Entry::Dir(
+        // //     Dir {
+        // //         vfat: self.clone(),
+        // //         first_cluster: cluster,
+        // //     },
+        // //     String::from(""),
+        // //     root_metadata);
+        // for component in path.as_ref().components() {
+        //     let current_dir = match found_entry {
+        //         Entry(dir, name, _)
+        //     }
+        //     found_entry = Some(current_dir.find(component).;
+        // }
+        // Ok(found_entry)
+        // // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
         unimplemented!("FileSystem::open()")
     }
 }
