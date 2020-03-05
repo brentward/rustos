@@ -6,6 +6,7 @@ use shim::const_assert_size;
 use shim::ffi::OsStr;
 use shim::io;
 use shim::newioerr;
+use core::char::{decode_utf16, REPLACEMENT_CHARACTER};
 
 use crate::traits;
 use crate::util::VecExt;
@@ -16,9 +17,6 @@ use crate::vfat::{Cluster, Entry, File, VFatHandle};
 pub struct Dir<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
     pub first_cluster: Cluster,
-    pub name: String,
-    pub size: u32,
-    pub metadata: Metadata,
 }
 
 #[repr(C, packed)]
@@ -47,6 +45,10 @@ impl VFatRegularDirEntry {
         //     + self.cluster_address_high[0] as u32 * 0x10000
         //     + self.cluster_address_high[1] as u32 * 0x1000000
     }
+
+    fn is_dir(&self) -> bool {
+        self.attributes.value() & 0x10 != 0
+    }
 }
 
 const_assert_size!(VFatRegularDirEntry, 32);
@@ -66,9 +68,11 @@ pub struct VFatLfnDirEntry {
 }
 
 impl VFatLfnDirEntry {
-    fn is_dir(&self) -> bool {
-        (self.attributes & 0x10 >> 4) != 0
+    fn is_deleted(&self) -> bool {
+        self.sequence_number & 0xE5 != 0
     }
+
+
 }
 
 const_assert_size!(VFatLfnDirEntry, 32);
@@ -94,23 +98,6 @@ impl VFatUnknownDirEntry {
     fn is_end(&self) -> bool {
         self.id == 0x00
     }
-
-    // fn to_lfn_dir(&self) -> Result(VFatLfnDirEntry, ()) {
-    //     if !self.is_lfn() {
-    //         Err(())
-    //     } else {
-    //         Ok(unsafe { [self].cast()[0] })
-    //     }
-    // }
-    //
-    // fn to_regular_dir(&self) -> Result(VFatRegularDirEntry, ()) {
-    //     if self.is_lfn() {
-    //         Err(())
-    //     } else {
-    //         Ok(unsafe { [self].cast()[0] })
-    //     }
-    // }
-
 }
 
 const_assert_size!(VFatUnknownDirEntry, 32);
@@ -136,6 +123,7 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// is returned.
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
         unimplemented!("Dir::find()")
+
     }
 }
 
@@ -146,53 +134,113 @@ pub struct DirIterator<HANDLE: VFatHandle> {
     vfat: HANDLE
 }
 
-// impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
-//     fn lfn(&self, lfn_vec: &mut Vec<&VFatLfnDirEntry>) -> String {
-//         lfn_vec.sort_by_key(|lfn| lfn.sequence_number);
-//         let name = Vec::with_capacity(lfn_vec.len() * 13);
-//
-//         String::from("hi")
-//     }
-// }
+impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
+    fn lfn(lfn_vec: &mut Vec<&VFatLfnDirEntry>) -> String {
+        lfn_vec.sort_by_key(|lfn| lfn.sequence_number);
+        let mut name: Vec<u16>  = Vec::with_capacity(lfn_vec.len() * 13);
+        for vec in lfn_vec.iter() {
+            name.extend_from_slice(&vec.name_1);
+            name.extend_from_slice(&vec.name_2);
+            name.extend_from_slice(&vec.name_3);
+        }
+        for index in name.len() - 13..name.len() {
+            if name[index] == 0x0000 || name[index] == 0x00FF {
+                name.resize(index, 0);
+                break
+            }
+        }
+        decode_utf16(name.iter().cloned())
+            .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
+            .collect::<String>()
+    }
+
+    fn short_name(file_name: &[u8; 8], file_ext: &[u8; 3]) -> String {
+        let mut file_name_end = file_name.len();
+        for position in 0usize..file_name_end {
+            if file_name[position] == 0x00 || file_name[position] == 0x20 {
+                file_name_end = position;
+                break
+            };
+        }
+        let mut file_ext_end = file_ext.len();
+        for position in 0usize..file_ext_end {
+            if file_ext[position] == 0x00 || file_ext[position] == 0x20 {
+                file_ext_end = position
+            };
+        }
+        let short_filename = core::str::from_utf8(&file_name[0..file_name_end])
+            .expect("file name not utf8");
+        let short_ext = core::str::from_utf8(&file_ext[0..file_ext_end])
+            .expect("file ext not utf8");
+
+        format!("{}.{}", short_filename, short_ext)
+    }
+}
+
 impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
     type Item = Entry<HANDLE>;
     fn next(&mut self) -> Option<Self::Item> {
-        // let mut lfn_vec: Vec<&VFatLfnDirEntry> = Vec::with_capacity(20);
-        // for position in self.position..self.dir_entries.len() {
-        //     let dir_entry = &self.dir_entries[position];
-        //
-        //     let unknown_dir_entry = unsafe {dir_entry.unknown};
-        //     if unknown_dir_entry.is_end() {
-        //         self.position = self.dir_entries.len();
-        //         return None
-        //     }
-        //     if unknown_dir_entry.is_lfn() {
-        //         let lfn_dir = unsafe { dir_entry.long_filename };
-        //         lfn_vec.push(&lfn_dir);
-        //         self.position += 1;
-        //         continue
-        //     } else {
-        //         let regular_dir = unsafe { dir_entry.regular };
-        //         let lfn = if lfn_vec.len() == 0 {
-        //             None
-        //         } else {
-        //             Some(&lfn_vec)
-        //         };
-        //         if regular_dir.is_dir(){
-        //             self.position += 1;
-        //             return Some(Entry::Dir(Dir {
-        //                 vfat: self.vfat.clone(),
-        //                 first_cluster: Cluster::from(regular_dir.cluster()),
-        //                 lfn
-        //             }))
-        //         } else {
-        //             // return Some(Entry::File())
-        //         }
-        //
-        //     };
-        //
-        // }
-        panic!("DirIter::next()")
+        let mut lfn_vec: Vec<&VFatLfnDirEntry> = Vec::with_capacity(20);
+        for position in self.position..self.dir_entries.len() {
+            let dir_entry = &self.dir_entries[position];
+
+            let unknown_dir_entry = unsafe {dir_entry.unknown};
+            if unknown_dir_entry.is_end() {
+                self.position = self.dir_entries.len();
+                return None
+            }
+            if unknown_dir_entry.is_lfn() {
+                // let lfn_dir = unsafe { dir_entry.long_filename };
+                // let lfn_copy = lfn_dir.clone();
+                lfn_vec.push(unsafe { &dir_entry.long_filename });
+                self.position += 1;
+                continue
+            } else {
+                let regular_dir = unsafe { dir_entry.regular };
+                let name = if lfn_vec.len() == 0 {
+                    Self::lfn(&mut lfn_vec)
+                } else {
+                    Self::short_name(&regular_dir.file_name, &regular_dir.file_ext)
+                };
+                let metadata = Metadata::new(
+                    regular_dir.attributes,
+                    regular_dir.creation_timestamp,
+                    regular_dir.accessed_date,
+                    regular_dir.modification_timestamp
+                );
+                if regular_dir.is_dir(){
+                    self.position += 1;
+                    // Some(Entry::Dir(Dir {
+                    //     vfat: self.vfat.clone(),
+                    //     first_cluster: Cluster::from(regular_dir.cluster()),
+                    //     metadata
+                    // }))
+                    Some(Entry::Dir(
+                        Dir {
+                            vfat: self.vfat.clone(),
+                            first_cluster: Cluster::from(regular_dir.cluster()),
+                        },
+                        name,
+                        metadata,
+                    ))
+
+                } else {
+                    Some(Entry::File(
+                        File {
+                            vfat: self.vfat.clone(),
+                            first_cluster: Cluster::from(regular_dir.cluster()),
+                            size: regular_dir.file_size,
+                        },
+                        name,
+                        metadata,
+                    ))
+                }
+
+            };
+
+        }
+        None
+        // panic!("DirIter::next()")
     }
 }
 
@@ -202,7 +250,14 @@ impl<HANDLE: VFatHandle + Copy> traits::Dir for Dir<HANDLE> {
     type Iter = DirIterator<HANDLE>;
 
     fn entries(&self) -> io::Result<Self::Iter> {
-        unimplemented!("Dir::entries")
+        // let mut dir_entries = Vec::new();
+        // self.vfat.read_chain(self.first_cluster, &dir_entries)?;
+        // Ok(DirIterator {
+        //     phantom: PhantomData,
+        //     dir_entries,
+        //     position: 0,
+        //     vfat: self.vfat.clone(),
+        // })
+        unimplemented!("Dir::entries()")
     }
-    // FIXME: Implement `trait::Dir` for `Dir`.
 }

@@ -10,7 +10,6 @@ pub struct File<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
     pub first_cluster: Cluster,
     pub size: u32,
-    pub metadata: Metadata
 }
 
 // FIXME: Implement `traits::File` (and its supertraits) for `File`.
