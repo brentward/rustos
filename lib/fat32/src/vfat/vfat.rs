@@ -159,7 +159,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //
     fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
         let sector = cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
-        let position_in_sector = cluster.fat_address() as usize * 4 - (sector as usize * self.bytes_per_sector as usize);
+        let position_in_sector = cluster.fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
         let data = self.device.get(self.fat_start_sector + sector)?;
         Ok(unsafe { &data[position_in_sector..position_in_sector + 4].cast()[0] })
     }

@@ -88,7 +88,7 @@ impl CachedPartition {
                 )),
             };
             let mut data = Vec::new();
-            for sector in physical_sector..=physical_sector * (self.device.sector_size() / self.partition.sector_size) {
+            for sector in physical_sector..=physical_sector * self.factor() {
                 self.device.read_all_sector(sector, &mut data)?;
             }
             self.cache.insert(sector, CacheEntry { data, dirty: false });

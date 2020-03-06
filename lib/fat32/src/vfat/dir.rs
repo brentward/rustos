@@ -219,16 +219,17 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 
             let unknown_dir_entry = unsafe {dir_entry.unknown};
             if unknown_dir_entry.is_end() {
-                self.position = self.dir_entries.len();
-                return None
+                break
+                // self.position = self.dir_entries.len();
+                // return None
             }
             if unknown_dir_entry.is_unused() {
+                self.position += 1;
                 continue
             }
             if unknown_dir_entry.is_lfn() {
-                lfn_vec.push(unsafe { &dir_entry.long_filename });
                 self.position += 1;
-                continue
+                lfn_vec.push(unsafe { &dir_entry.long_filename });
             } else {
                 let regular_dir = unsafe { dir_entry.regular };
                 let name = if lfn_vec.len() != 0 {
@@ -270,6 +271,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 }
             }
         }
+        self.position = self.dir_entries.len();
         None
     }
 }
