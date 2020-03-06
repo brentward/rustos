@@ -9,31 +9,35 @@ use crate::traits::{self, Metadata as MetadataTrait, Timestamp as TimestampTrait
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Date(u16);
 
-// impl Date {
-//     pub fn new(raw_num: u16) -> Date {
-//         Date(raw_num)
-//     }
-// }
-//
+impl Date {
+    pub fn new(raw_num: u16) -> Date {
+        Date(raw_num)
+    }
+}
+
 /// Time as represented in FAT32 on-disk structures.
 #[repr(C, packed)]
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Time(u16);
 
-// impl Time {
-//     pub fn new(raw_num: u16) -> Time {
-//         Time(raw_num)
-//     }
-// }
-//
+impl Time {
+    pub fn new(raw_num: u16) -> Time {
+        Time(raw_num)
+    }
+}
+
 /// File attributes as represented in FAT32 on-disk structures.
 #[repr(C, packed)]
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Attributes(u8);
-//
+
 impl Attributes {
     pub fn value(&self) -> u8 {
         self.0
+    }
+
+    pub fn new(raw_num: u8) -> Attributes {
+        Attributes(raw_num)
     }
 }
 
@@ -44,14 +48,14 @@ pub struct Timestamp {
     pub time: Time,
 }
 
-// impl Timestamp {
-//     pub fn new(date: Date, time: Time) -> Timestamp {
-//         Timestamp {
-//             date,
-//             time,
-//         }
-//     }
-// }
+impl Timestamp {
+    pub fn new(date: Date, time: Time) -> Timestamp {
+        Timestamp {
+            date,
+            time,
+        }
+    }
+}
 /// Metadata for a directory entry.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Metadata {

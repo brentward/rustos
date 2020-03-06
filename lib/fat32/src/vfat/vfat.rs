@@ -14,7 +14,7 @@ use crate::mbr::MasterBootRecord;
 use crate::traits::{BlockDevice, FileSystem};
 use crate::util::SliceExt;
 use crate::vfat::{BiosParameterBlock, CachedPartition, Partition};
-use crate::vfat::{Cluster, Dir, Entry, Error, FatEntry, File, Status};
+use crate::vfat::{Cluster, Dir, Entry, Error, FatEntry, File, Status, Metadata, Time, Timestamp, Date, Attributes};
 
 /// A generic trait that handles a critical section as a closure
 pub trait VFatHandle: Clone + Debug + Send + Sync {
@@ -171,31 +171,41 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
     type Entry = crate::vfat::Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        //
-        // let mut cluster = self.lock(|vfat| vfat.rootdir_cluster);
-        // let mut found_entry = None;
-        // // let timestamp = Timestamp { date: Date(0), time: Time(0)};
-        // // let root_metadata = Metadata::new(
-        // //     Attributes(0x10),
-        // //     timestamp,
-        // //     Date(0),
-        // //     timestamp
-        // // );
-        // // let mut found_entry = Entry::Dir(
-        // //     Dir {
-        // //         vfat: self.clone(),
-        // //         first_cluster: cluster,
-        // //     },
-        // //     String::from(""),
-        // //     root_metadata);
-        // for component in path.as_ref().components() {
-        //     let current_dir = match found_entry {
-        //         Entry(dir, name, _)
-        //     }
-        //     found_entry = Some(current_dir.find(component).;
-        // }
-        // Ok(found_entry)
+        if !path.as_ref().is_absolute() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not absolute"))
+        }
+
+        let mut first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
+        let timestamp = Timestamp::new(Date::new(0), Time::new(0));
+        let metadata = Metadata::new(
+            Attributes::new(0x10),
+            timestamp,
+            Date::new(0),
+            timestamp
+        );
+        let mut dir = Ok(Dir {
+            vfat: self.clone(),
+            first_cluster,
+            name: String::from(""),
+            metadata,
+            size: 0,
+        });
+
+        let mut path_array = Vec::new();
+        path_array = path.as_ref().components().collect();
+        for component in path_array[1..path_array.len() - 2].iter() {
+            dir = dir.unwrap().find(component);
+            match dir {
+                Err(e) => return Err(e),
+                _ => (),
+            }
+        }
+        dir = dir.unwrap().find(path_array[path_array.len() - 1]);
+        match dir {
+            Err(e) => Err(io::Error::new(io::ErrorKind::NotFound, "path not found")),
+            Ok(dir) => Ok(dir),
+        }
         // // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
-        unimplemented!("FileSystem::open()")
+        // unimplemented!("FileSystem::open()")
     }
 }
