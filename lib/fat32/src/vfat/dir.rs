@@ -22,18 +22,39 @@ pub struct Dir<HANDLE: VFatHandle> {
     pub size: u32,
 }
 
+// impl<HANDLE: VFatHandle> Date<HANDLE> {
+//     pub fn from(
+//         vfat: HANDLE,
+//         first_cluster: Cluster,
+//         name: String,
+//         attributes: u8,
+//         create_time: u16,
+//         create_date: u16,
+//         accessed_date: u16,
+//         modification_time: u16,
+//         nodification_date: u16,
+//         size: u32,
+//     ) -> Dir<HANDLE> {
+//
+//     }
+// }
+
+
+
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct VFatRegularDirEntry {
     file_name: [u8; 8],
     file_ext: [u8; 3],
-    attributes: Attributes,
+    attributes: u8,
     reserved_nt: u8,
     creation_time_tenth_of_second: u8,
-    creation_timestamp: Timestamp,
-    accessed_date: Date,
+    creation_time: u16,
+    creation_date: u16,
+    accessed_date: u16,
     cluster_address_high: u16,
-    modification_timestamp: Timestamp,
+    modification_time: u16,
+    modification_date: u16,
     cluster_address_low: u16,
     file_size: u32,
 }
@@ -50,7 +71,7 @@ impl VFatRegularDirEntry {
     }
 
     fn is_dir(&self) -> bool {
-        self.attributes.value() & 0x10 != 0
+        self.attributes & 0x10 != 0
     }
 }
 
@@ -173,15 +194,19 @@ impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
         let mut file_ext_end = file_ext.len();
         for position in 0usize..file_ext_end {
             if file_ext[position] == 0x00 || file_ext[position] == 0x20 {
-                file_ext_end = position
+                file_ext_end = position;
+                break
             };
         }
         let short_filename = core::str::from_utf8(&file_name[0..file_name_end])
             .expect("file name not utf8");
         let short_ext = core::str::from_utf8(&file_ext[0..file_ext_end])
             .expect("file ext not utf8");
-
-        format!("{}.{}", short_filename, short_ext)
+        if short_ext.len() > 0 {
+            format!("{}.{}", short_filename, short_ext)
+        } else {
+            format!("{}", short_filename)
+        }
     }
 }
 
@@ -206,16 +231,18 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 continue
             } else {
                 let regular_dir = unsafe { dir_entry.regular };
-                let name = if lfn_vec.len() == 0 {
+                let name = if lfn_vec.len() != 0 {
                     Self::lfn(&mut lfn_vec)
                 } else {
                     Self::short_name(&regular_dir.file_name, &regular_dir.file_ext)
                 };
                 let metadata = Metadata::new(
                     regular_dir.attributes,
-                    regular_dir.creation_timestamp,
+                    regular_dir.creation_time,
+                    regular_dir.creation_date,
                     regular_dir.accessed_date,
-                    regular_dir.modification_timestamp
+                    regular_dir.modification_time,
+                    regular_dir.modification_date,
                 );
                 self.position += 1;
                 if regular_dir.is_dir(){

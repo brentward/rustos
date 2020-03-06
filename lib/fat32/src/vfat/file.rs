@@ -15,6 +15,29 @@ pub struct File<HANDLE: VFatHandle> {
     pub chain_index: usize,
 }
 
+// impl<HANDLE: VFatHandle> File<HANDLE> {
+//     pub fn from(
+//         vfat: HANDLE,
+//         first_cluster: Cluster,
+//         name: String,
+//         attributes: u8,
+//         create_time: u16,
+//         create_date: u16,
+//         accessed_date: u16,
+//         modification_time: u16,
+//         nodification_date: u16,
+//         size: u32,
+//     ) -> File<HANDLE> {
+//         let metadata = Metadata {
+//
+//         }
+//         File {
+//             v
+//         }
+//
+//     }
+// }
+
 // FIXME: Implement `traits::File` (and its supertraits) for `File`.
 
 impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {

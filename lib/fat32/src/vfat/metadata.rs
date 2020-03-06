@@ -67,16 +67,18 @@ pub struct Metadata {
 
 impl Metadata {
     pub fn new(
-        attributes: Attributes,
-        creation_timestamp: Timestamp,
-        accessed_date: Date,
-        modification_timestamp: Timestamp,
+        attributes: u8,
+        creation_time: u16,
+        creation_date: u16,
+        accessed_date: u16,
+        modification_time: u16,
+        modification_date: u16,
     ) -> Metadata {
         Metadata {
-            attributes,
-            creation_timestamp,
-            accessed_date,
-            modification_timestamp
+            attributes: Attributes::new(attributes),
+            creation_timestamp: Timestamp::new(Date::new(creation_date), Time::new(creation_time)),
+            accessed_date: Date::new(accessed_date),
+            modification_timestamp: Timestamp::new(Date::new(modification_date), Time::new(modification_time)),
         }
     }
 }
@@ -95,7 +97,7 @@ impl TimestampTrait for Timestamp {
     fn month(&self) -> u8 {
         let month = (self.date.0 & !0b1111_1110_0001_1111) as u8 >> 5;
         match month {
-            month @ 1..=12 => month,
+            month @ 0..=12 => month,
             _ => panic!("metadata month is out of range")
         }
     }
@@ -104,7 +106,7 @@ impl TimestampTrait for Timestamp {
     fn day(&self) -> u8 {
         let day = (self.date.0 & !0b1111_1111_1110_0000) as u8;
         match day {
-            day@ 1..=31 => day,
+            day@ 0..=31 => day,
             _ => panic!("metadata day is out of range")
         }
     }
@@ -120,7 +122,7 @@ impl TimestampTrait for Timestamp {
 
     /// The minute. Always in range [0, 60).
     fn minute(&self) -> u8 {
-        let minute = ((self.time.0 & !0b1111_0000_0001_1111) >> 5) as u8;
+        let minute = ((self.time.0 & !0b1111_1000_0001_1111) >> 5) as u8;
         match minute {
             minute @ 0..=60 => minute,
             _ => panic!("metadata minute is out of range")
@@ -183,7 +185,7 @@ impl MetadataTrait for Metadata {
 
     /// The timestamp when the entry was created.
     fn created(&self) -> Self::Timestamp {
-        self.created()
+        self.creation_timestamp
     }
 
     /// The timestamp for the entry's last access.

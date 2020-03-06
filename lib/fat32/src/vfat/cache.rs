@@ -88,32 +88,11 @@ impl CachedPartition {
                 )),
             };
             let mut data = Vec::new();
-            for sector in physical_sector..physical_sector + self.factor() {
+            for sector in physical_sector..=physical_sector * (self.device.sector_size() / self.partition.sector_size) {
                 self.device.read_all_sector(sector, &mut data)?;
             }
-            match self.cache.insert(sector, CacheEntry { data, dirty: false }) {
-                Some(_) => Ok(()),
-                None => Err(io::Error::new(io::ErrorKind::Other, "Cache insert failed")),
-
-
-            // match self.cache_virtual_sector(sector) {
-            //     Some(_) => {
-            //         let physical_sector = match self.virtual_to_physical(sector) {
-            //             Some(physical_sector) => physical_sector,
-            //             None => return Err(Error::NotFound),
-            //         };
-            //         let mut data = Vec::new();
-            //         for sector in physical_sector..physical_sector + self.factor() {
-            //             match self.device.read_all_sector(sector, &mut data) {
-            //                 Some(_) => (),
-            //                 None => return Err(Error::NotFound),
-            //             }
-            //         }
-            //         self.cache.insert(sector, CacheEntry { data, dirty: false });
-            //         Some(())
-            //     }
-            //     None => return Err(Error::NotFound),
-            }
+            self.cache.insert(sector, CacheEntry { data, dirty: false });
+            Ok(())
         } else {
             Ok(())
         }

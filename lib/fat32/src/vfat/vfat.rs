@@ -85,7 +85,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         buf: &mut [u8]
     ) -> io::Result<usize> {
         // let fat_entry = self.fat_entry(cluster)?;
-        let first_sector = self.data_start_sector + cluster.fat_address() as u64 * self.sectors_per_cluster as u64;
+        let first_sector = self.data_start_sector + cluster.data_address() as u64 * self.sectors_per_cluster as u64;
         let last_sector = first_sector + self.sectors_per_cluster as u64;
         let start_sector =  first_sector + (offset as u64 / self.bytes_per_sector as u64);
         if start_sector - first_sector > self.sectors_per_cluster as u64 {
@@ -141,12 +141,12 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let mut bytes = 0usize;
 
         for cluster in clusters.iter() {
-            let first_sector = self.data_start_sector + cluster.fat_address() as u64 * self.sectors_per_cluster as u64;
+            let first_sector = self.data_start_sector + cluster.data_address() as u64 * self.sectors_per_cluster as u64;
             let last_sector = first_sector + self.sectors_per_cluster as u64;
             for sector in first_sector..last_sector {
                 let data = self.device.get(sector)?;
                 for byte in data.iter() {
-                    buf[bytes] = *byte;
+                    buf.push(*byte);
                     bytes += 1;
                 }
             }
@@ -171,41 +171,44 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
     type Entry = crate::vfat::Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        if !path.as_ref().is_absolute() {
+        use crate::vfat::{Dir, File, Entry};
+        use crate::traits::Entry as EntryTrait;
+        let path = path.as_ref();
+        if !path.is_absolute() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not absolute"))
         }
 
         let mut first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
-        let timestamp = Timestamp::new(Date::new(0), Time::new(0));
-        let metadata = Metadata::new(
-            Attributes::new(0x10),
-            timestamp,
-            Date::new(0),
-            timestamp
-        );
-        let mut dir = Ok(Dir {
+        let metadata = Metadata::new(0x10,0, 0, 0, 0, 0);
+        let mut found_result = Ok(Entry::Dir(Dir {
             vfat: self.clone(),
             first_cluster,
             name: String::from(""),
             metadata,
             size: 0,
-        });
-
-        let mut path_array = Vec::new();
-        path_array = path.as_ref().components().collect();
-        for component in path_array[1..path_array.len() - 2].iter() {
-            dir = dir.unwrap().find(component);
-            match dir {
-                Err(e) => return Err(e),
-                _ => (),
+        }));
+        // if path.as_ref().is)
+        let mut path_vec = Vec::new();
+        path_vec = path.components().collect();
+        if path_vec.len() == 1 {
+            return found_result;
+        } else {
+            for component in path_vec[1..path_vec.len()].iter() {
+                let found_entry = match found_result {
+                    Ok(entry) => entry,
+                    Err(e) => return Err(e),
+                };
+                let working_dir = match found_entry.into_dir() {
+                    Some(dir) => dir,
+                    None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not valid")),
+                };
+                found_result = working_dir.find(component);
             }
         }
-        dir = dir.unwrap().find(path_array[path_array.len() - 1]);
-        match dir {
-            Err(e) => Err(io::Error::new(io::ErrorKind::NotFound, "path not found")),
-            Ok(dir) => Ok(dir),
-        }
-        // // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
+        match found_result {
+            Ok(entry) => Ok(entry),
+            Err(_) => Err(io::Error::new(io::ErrorKind::NotFound, "path is not found")),
+        }        // // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
         // unimplemented!("FileSystem::open()")
     }
 }
