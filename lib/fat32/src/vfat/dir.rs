@@ -61,8 +61,7 @@ pub struct VFatRegularDirEntry {
 
 impl VFatRegularDirEntry {
     fn cluster(&self) -> u32 {
-        self.cluster_address_low as u32
-            + self.cluster_address_high as u32 * 0x10000
+        (self.cluster_address_high as u32) << 16 | self.cluster_address_low as u32
 
         // self.cluster_address_low[0] as u32
         //     + self.cluster_address_low[1] as u32 * 0x100
