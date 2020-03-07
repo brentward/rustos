@@ -61,7 +61,7 @@ pub struct VFatRegularDirEntry {
 
 impl VFatRegularDirEntry {
     fn cluster(&self) -> u32 {
-        (self.cluster_address_high as u32) << 16 | self.cluster_address_low as u32
+        ((self.cluster_address_high as u32) << 16) | self.cluster_address_low as u32
 
         // self.cluster_address_low[0] as u32
         //     + self.cluster_address_low[1] as u32 * 0x100
@@ -91,6 +91,15 @@ pub struct VFatLfnDirEntry {
 }
 
 impl VFatLfnDirEntry {
+    pub fn sequence_number(&self) -> usize {
+        let sequence = self.sequence_number & 0x1F;
+        sequence as usize
+    }
+
+    pub fn last_entry(&self) -> bool {
+        self.sequence_number & 0x40 != 0
+    }
+
     fn is_deleted(&self) -> bool {
         self.sequence_number & 0xE5 != 0
     }
@@ -164,12 +173,12 @@ pub struct DirIterator<HANDLE: VFatHandle> {
 
 impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
     fn lfn(lfn_vec: &mut Vec<&VFatLfnDirEntry>) -> String {
-        lfn_vec.sort_by_key(|lfn| lfn.sequence_number);
+        lfn_vec.sort_by_key(|lfn| lfn.sequence_number());
         let mut name: Vec<u16>  = Vec::with_capacity(lfn_vec.len() * 13);
-        for vec in lfn_vec.iter() {
-            name.extend_from_slice(&vec.name_1);
-            name.extend_from_slice(&vec.name_2);
-            name.extend_from_slice(&vec.name_3);
+        for lfn in lfn_vec.iter() {
+            name.extend_from_slice(&lfn.name_1);
+            name.extend_from_slice(&lfn.name_2);
+            name.extend_from_slice(&lfn.name_3);
         }
         for index in name.len() - 13..name.len() {
             if name[index] == 0x0000 || name[index] == 0x00FF {
@@ -218,35 +227,47 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 
             let unknown_dir_entry = unsafe {dir_entry.unknown};
             if unknown_dir_entry.is_end() {
-                break
                 // self.position = self.dir_entries.len();
-                // return None
+                // break
+                self.position = self.dir_entries.len();
+                return None
             }
             if unknown_dir_entry.is_unused() {
-                self.position += 1;
                 continue
             }
             if unknown_dir_entry.is_lfn() {
-                self.position += 1;
                 lfn_vec.push(unsafe { &dir_entry.long_filename });
             } else {
+                self.position = position + 1;
+
                 let regular_dir = unsafe { dir_entry.regular };
                 let name = if lfn_vec.len() != 0 {
                     Self::lfn(&mut lfn_vec)
                 } else {
                     Self::short_name(&regular_dir.file_name, &regular_dir.file_ext)
                 };
-                let metadata = Metadata::new(
-                    regular_dir.attributes,
-                    regular_dir.creation_time,
-                    regular_dir.creation_date,
-                    regular_dir.accessed_date,
-                    regular_dir.modification_time,
-                    regular_dir.modification_date,
+                let metadata = Metadata::from(
+                    (
+                        regular_dir.attributes,
+                        [
+                            regular_dir.creation_date,
+                            regular_dir.creation_time,
+                            regular_dir.accessed_date,
+                            regular_dir.modification_date,
+                            regular_dir.modification_time
+                        ]
+                        // Timestamp::from((Date::from(regular_dir.creation_date), Time::from(regular_dir.creation_time))),
+                        // Date::from(regular_dir.)
+                    )
+                    // regular_dir.attributes,
+                    // regular_dir.creation_time,
+                    // regular_dir.creation_date,
+                    // regular_dir.accessed_date,
+                    // regular_dir.modification_time,
+                    // regular_dir.modification_date,
                 );
-                self.position += 1;
-                if regular_dir.is_dir(){
-                    return Some(Entry::Dir(
+                return if regular_dir.is_dir(){
+                    Some(Entry::Dir(
                         Dir {
                             vfat: self.vfat.clone(),
                             first_cluster: Cluster::from(regular_dir.cluster()),
@@ -257,20 +278,20 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                     ))
 
                 } else {
-                    return Some(Entry::File(
+                    Some(Entry::File(
                         File {
                             vfat: self.vfat.clone(),
                             first_cluster: Cluster::from(regular_dir.cluster()),
+                            current_sector_location: (Cluster::from(regular_dir.cluster()), 0),
                             name,
                             metadata,
                             size: regular_dir.file_size,
-                            chain_index: 0
+                            current_position: 0
                         },
                     ))
                 }
             }
         }
-        self.position = self.dir_entries.len();
         None
     }
 }

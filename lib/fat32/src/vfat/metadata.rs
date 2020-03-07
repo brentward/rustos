@@ -9,8 +9,8 @@ use crate::traits::{self, Metadata as MetadataTrait, Timestamp as TimestampTrait
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Date(u16);
 
-impl Date {
-    pub fn new(raw_num: u16) -> Date {
+impl From<u16> for Date {
+    fn from(raw_num: u16) -> Date {
         Date(raw_num)
     }
 }
@@ -20,8 +20,8 @@ impl Date {
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Time(u16);
 
-impl Time {
-    pub fn new(raw_num: u16) -> Time {
+impl From<u16> for Time {
+    fn from(raw_num: u16) -> Time {
         Time(raw_num)
     }
 }
@@ -35,8 +35,10 @@ impl Attributes {
     pub fn value(&self) -> u8 {
         self.0
     }
+}
 
-    pub fn new(raw_num: u8) -> Attributes {
+impl From<u8> for Attributes {
+    fn from(raw_num: u8) -> Attributes {
         Attributes(raw_num)
     }
 }
@@ -48,11 +50,11 @@ pub struct Timestamp {
     pub time: Time,
 }
 
-impl Timestamp {
-    pub fn new(date: Date, time: Time) -> Timestamp {
+impl From<(u16, u16)> for Timestamp {
+    fn from(date_time: (u16, u16)) -> Timestamp {
         Timestamp {
-            date,
-            time,
+            date: Date::from(date_time.0),
+            time: Time::from(date_time.1),
         }
     }
 }
@@ -65,20 +67,16 @@ pub struct Metadata {
     modification_timestamp: Timestamp,
 }
 
-impl Metadata {
-    pub fn new(
-        attributes: u8,
-        creation_time: u16,
-        creation_date: u16,
-        accessed_date: u16,
-        modification_time: u16,
-        modification_date: u16,
-    ) -> Metadata {
+impl From<((u8, [u16; 5]))> for Metadata {
+    fn from(metadata_tup: (u8, [u16; 5]))-> Metadata {
         Metadata {
-            attributes: Attributes::new(attributes),
-            creation_timestamp: Timestamp::new(Date::new(creation_date), Time::new(creation_time)),
-            accessed_date: Date::new(accessed_date),
-            modification_timestamp: Timestamp::new(Date::new(modification_date), Time::new(modification_time)),
+            attributes: Attributes::from(metadata_tup.0),
+            creation_timestamp: Timestamp::from((metadata_tup.1[0], metadata_tup.1[1])),
+            accessed_date: Date::from(metadata_tup.1[2]),
+            modification_timestamp: Timestamp::from((metadata_tup.1[3], metadata_tup.1[4])),
+            // creation_timestamp: Timestamp::new(Date::from(creation_date), Time::from(creation_time)),
+            // accessed_date: Date::new(accessed_date),
+            // modification_timestamp: Timestamp::new(Date::from(modification_date), Time::from(modification_time)),
         }
     }
 }

@@ -12,7 +12,7 @@ struct Word {
 
 impl Word {
     fn value(&self) -> u16 {
-        ((self.major as u16) << 8) + self.minor as u16
+        ((self.major as u16) << 8) | self.minor as u16
     }
 
 }

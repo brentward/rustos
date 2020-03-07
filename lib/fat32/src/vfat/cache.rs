@@ -67,13 +67,16 @@ impl CachedPartition {
 
     /// Maps a user's request for a sector `virt` to the physical sector.
     /// Returns `None` if the virtual sector number is out of range.
-    fn virtual_to_physical(&self, virt: u64) -> Option<u64> {
+    pub fn virtual_to_physical(&self, virt: u64) -> Option<u64> {
         if virt >= self.partition.num_sectors {
             return None;
         }
 
         let physical_offset = virt * self.factor();
         let physical_sector = self.partition.start + physical_offset;
+        // let logical_offset = virt - self.partition.start;
+        // let physical_offset = logical_offset * self.factor();
+        // let physical_sector = self.partition.start + physical_offset;
 
         Some(physical_sector)
     }
@@ -88,7 +91,7 @@ impl CachedPartition {
                 )),
             };
             let mut data = Vec::new();
-            for sector in physical_sector..=physical_sector * self.factor() {
+            for sector in physical_sector..physical_sector + self.factor() {
                 self.device.read_all_sector(sector, &mut data)?;
             }
             self.cache.insert(sector, CacheEntry { data, dirty: false });

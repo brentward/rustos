@@ -9,34 +9,35 @@ use crate::vfat::{Cluster, Metadata, VFatHandle};
 pub struct File<HANDLE: VFatHandle> {
     pub vfat: HANDLE,
     pub first_cluster: Cluster,
+    pub current_sector_location: (Cluster, usize),
     pub name: String,
     pub metadata: Metadata,
     pub size: u32,
-    pub chain_index: usize,
+    pub current_position: usize,
 }
 
-// impl<HANDLE: VFatHandle> File<HANDLE> {
-//     pub fn from(
-//         vfat: HANDLE,
-//         first_cluster: Cluster,
-//         name: String,
-//         attributes: u8,
-//         create_time: u16,
-//         create_date: u16,
-//         accessed_date: u16,
-//         modification_time: u16,
-//         nodification_date: u16,
-//         size: u32,
-//     ) -> File<HANDLE> {
-//         let metadata = Metadata {
-//
-//         }
-//         File {
-//             v
-//         }
-//
-//     }
-// }
+impl<HANDLE: VFatHandle> File<HANDLE> {
+    // pub fn from(
+    //     vfat: HANDLE,
+    //     first_cluster: Cluster,
+    //     name: String,
+    //     attributes: u8,
+    //     create_time: u16,
+    //     create_date: u16,
+    //     accessed_date: u16,
+    //     modification_time: u16,
+    //     nodification_date: u16,
+    //     size: u32,
+    // ) -> File<HANDLE> {
+    //     let metadata = Metadata {
+    //
+    //     }
+    //     File {
+    //         v
+    //     }
+    //
+    // }
+}
 
 // FIXME: Implement `traits::File` (and its supertraits) for `File`.
 
@@ -61,26 +62,50 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
                 if offset > self.size() {
                     Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
                 } else {
-                    self.chain_index = offset as usize;
-                    Ok(self.chain_index as u64)
+                    self.current_position = offset as usize;
+                    self.current_sector_location = self.vfat.lock(
+                        |a| {
+                            a.current_sector(
+                                self.current_sector_location.0,
+                                self.current_position - self.current_sector_location.1
+                            )
+                        }
+                    )?;
+                    Ok(self.current_position as u64)
                 }
             }
             SeekFrom::End(offset) => {
                 if self.size() as i64 + offset < 0 {
                     Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond beginning of file"))
                 } else {
-                    self.chain_index = (self.size() as i64 + offset) as usize;
-                    Ok(self.chain_index as u64)
+                    self.current_position = (self.size() as i64 + offset) as usize;
+                    self.current_sector_location = self.vfat.lock(
+                        |a| {
+                            a.current_sector(
+                                self.current_sector_location.0,
+                                self.current_position - self.current_sector_location.1
+                            )
+                        }
+                    )?;
+                    Ok(self.current_position as u64)
                 }
             }
             SeekFrom::Current(offset) => {
-                if self.chain_index as i64 + offset < 0 {
+                if self.current_position as i64 + offset < 0 {
                     Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond beginning of file"))
-                } else if self.chain_index as i64 + offset > self.size() as i64 {
+                } else if self.current_position as i64 + offset > self.size() as i64 {
                     Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
                 } else {
-                    self.chain_index = (self.chain_index as i64 + offset) as usize;
-                    Ok(self.chain_index as u64)
+                    self.current_position = (self.current_position as i64 + offset) as usize;
+                    self.current_sector_location = self.vfat.lock(
+                        |a| {
+                            a.current_sector(
+                                self.current_sector_location.0,
+                                self.current_position - self.current_sector_location.1
+                            )
+                        }
+                    )?;
+                    Ok(self.current_position as u64)
                 }
             }
         }
@@ -98,14 +123,43 @@ impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
 
 impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut full_buf = Vec::new();
-        let bytes = self.vfat.lock(|a| a.read_chain(self.first_cluster, &mut full_buf))?;
-        let max_size = buf.len().min(bytes - self.chain_index);
-        for index in 0..max_size {
-            buf[index] = full_buf[index + self.chain_index];
+        let mut bytes_read = 0usize;
+        let max_bytes = (self.size as usize  - self.current_position as usize)
+            .min(buf.len());
+        while self.current_position < self.size as usize {
+            let bytes = self.vfat.lock(
+                |a| {
+                    a.read_cluster(
+                        self.current_sector_location.0,
+                        self.current_position - self.current_sector_location.1,
+                        &mut buf[bytes_read..max_bytes]
+                    )
+                }
+            )?;
+            if bytes == 0 {
+                break
+            }
+            bytes_read += bytes;
+            self.current_position += bytes as usize;
+            self.current_sector_location = self.vfat.lock(
+                |a| {
+                    a.current_sector(
+                        self.current_sector_location.0,
+                        self.current_position - self.current_sector_location.1
+                    )
+                }
+            )?;
         }
-        self.chain_index += max_size;
-        Ok(max_size)
+        Ok(bytes_read)
+        // let mut full_buf = Vec::new();
+        // let bytes = self.vfat.lock(|a| a.read_chain(self.first_cluster, &mut full_buf))?;
+        // let max_size = buf.len().min(bytes - self.current_position);
+        // while self.current_position > self.size() as usize
+        // for index in 0..max_size {
+        //     buf[index] = full_buf[index + self.current_position];
+        // }
+        // self.current_position += max_size;
+        // Ok(max_size)
     }
 }
 
