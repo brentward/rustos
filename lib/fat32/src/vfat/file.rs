@@ -137,6 +137,7 @@ impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
                 }
             )?;
             if bytes == 0 {
+                // Problem in this method with resuming read in position
                 break
             }
             bytes_read += bytes;

@@ -81,8 +81,8 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
 
         for i in 0..cluster_index {
             let fat_entry = self.fat_entry(current_cluster)?.status();
-             match fat_entry {
-                Status::Data(next_cluster) => current_cluster = next_cluster,
+             current_cluster = match fat_entry {
+                Status::Data(next_cluster) => next_cluster,
                 Status::Eoc(next_cluster) => {
                     // if i + 1 != cluster_index {
                     //     return Err(io::Error::new(
@@ -90,7 +90,8 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                     //         "file ended unexpectedly early"
                     //     ))
                     // };
-                    current_cluster = Cluster::from(next_cluster);
+                    Cluster::from(next_cluster)
+                    // Cluster::from(0xFFFFFFFF)
                 },
                 Status::Bad => return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -174,17 +175,30 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //    into a vector.
     //
     fn add_cluster_to_buf(&mut self, cluster: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
-        let mut bytes = 0usize;
-        let bytes_per_cluster = self.sectors_per_cluster as u16 * self.bytes_per_sector;
+        let start = buf.len();
+
+        let bytes_per_cluster = (self.sectors_per_cluster as u16 * self.bytes_per_sector) as usize;
+        let max_size = start + bytes_per_cluster;
+        buf.reserve(max_size);
+        // unsafe {
+        //     buf.set_len(start + bytes_per_cluster);
+        // }
+        // let bytes_read = self.read_cluster(cluster, 0, &mut buf[start..start + bytes_per_cluster])?;
+
         let mut cluster_chunk_buf = [0u8; 512];
+        let mut bytes_total = 0usize;
         for cluster_chunk in 0usize..(bytes_per_cluster as usize / 512) {
             let bytes_read = self.read_cluster(cluster, cluster_chunk * 512, &mut cluster_chunk_buf)?;
-            for &byte in cluster_chunk_buf[0..bytes_read.min(cluster_chunk_buf.len())].iter() {
+            for &byte in cluster_chunk_buf[0..bytes_read].iter() {
                 buf.push(byte);
-                bytes += 1;
             }
+            bytes_total += bytes_read;
+
         }
-        Ok(bytes)
+        unsafe {
+            buf.set_len(start + bytes_total);
+        }
+        Ok(bytes_total)
     }
 
     pub fn read_chain(
@@ -251,6 +265,11 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         }
         let data = self
             .device.get(self.fat_start_sector + sector)?;
+        let zero = if data.len() == 0 {
+            Some(())
+        } else {
+            None
+        };
         Ok(unsafe { &data[position_in_sector..position_in_sector + 4].cast()[0] })
     }
 }
