@@ -228,18 +228,21 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                     bytes += self.add_cluster_to_buf(cluster, buf)?;
                     break
                 },
-                Status::Bad => return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "cluster in chain unexpectedly marked bad"
-                )),
-                Status::Reserved => return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "cluster in chain unexpectedly marked reserved"
-                )),
-                Status::Free => return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "cluster in chain unexpectedly marked free"
-                )),
+                Status::Bad => return ioerr!(InvalidData, "cluster in chain marked bad"),
+                //     Err(io::Error::new(
+                //     io::ErrorKind::InvalidData,
+                //     "cluster in chain unexpectedly marked bad"
+                // )),
+                Status::Reserved => return ioerr!(InvalidData, "cluster in chain marked reserved"),
+                //     Err(io::Error::new(
+                //     io::ErrorKind::InvalidData,
+                //     "cluster in chain unexpectedly marked reserved"
+                // )),
+                Status::Free => return ioerr!(InvalidData, "cluster in chain marked free"),
+                //     Err(io::Error::new(
+                //     io::ErrorKind::InvalidData,
+                //     "cluster in chain unexpectedly marked free"
+                // )),
             };
             // clusters.push(next_cluster);
             // fat_entry = self.fat_entry(next_cluster)?;
@@ -267,8 +270,9 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let sector = cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
         let position_in_sector = cluster.fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
         if sector > self.sectors_per_fat as u64 {
-            return Err(io::Error::new(io::ErrorKind::NotFound,
-                                      "Invalid cluster index"));
+            return ioerr!(NotFound, "invalid cluster index")
+                // Err(io::Error::new(io::ErrorKind::NotFound,
+                //                       "Invalid cluster index"));
         }
         let data = self
             .device.get(self.fat_start_sector + sector)?;
@@ -293,7 +297,7 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
 
         let path = path.as_ref();
         if !path.is_absolute() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not absolute"))
+            return ioerr!(InvalidInput, "path is not absolute")//Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not absolute"))
         }
 
         let mut first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
@@ -313,14 +317,15 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
         for component in path.components() {
             match component {
                 Component::ParentDir => {
-                    dir = dir.into_dir().ok_or(
-                        io::Error::new(io::ErrorKind::InvalidInput,
-                                       "Expected dir"))?.find("..")?;
+                    dir = dir.into_dir().ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
+                        .find("..")?;
+                    // io::Error::new(io::ErrorKind::InvalidInput,
+                    //                "Expected dir")
                 },
                 Component::Normal(name) => {
-                    dir = dir.into_dir().ok_or(
-                        io::Error::new(io::ErrorKind::NotFound,
-                                       "Expected dir"))?.find(name)?;
+                    dir = dir.into_dir().ok_or(newioerr!(NotFound, "path not found"))?.find(name)?;
+                    // io::Error::new(io::ErrorKind::NotFound,
+                    //                "Expected dir")
                 }
                 _ => (),
             }

@@ -3,8 +3,10 @@ use alloc::vec::Vec;
 use core::fmt;
 use hashbrown::HashMap;
 use shim::io;
+use shim::ioerr;
 
 use crate::vfat::Error;
+
 
 use crate::traits::BlockDevice;
 
@@ -85,10 +87,11 @@ impl CachedPartition {
         if !self.cache.contains_key(&sector) {
             let physical_sector = match self.virtual_to_physical(sector) {
                 Some(physical_sector) => physical_sector,
-                None => return Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "Virtual sector out of range"
-                )),
+                None => return ioerr!(NotFound, "virtual sector out of range")
+                //     Err(io::Error::new(
+                //     io::ErrorKind::NotFound,
+                //     "Virtual sector out of range"
+                // )),
             };
             let mut data = Vec::new();
             for sector in physical_sector..physical_sector + self.factor() {
@@ -148,13 +151,15 @@ impl BlockDevice for CachedPartition {
             }
             Ok(buf.len() as usize)
         } else {
-            Err(io::Error::new(io::ErrorKind::Other, "sector larger than buf size"))
+            ioerr!(Other, "sector larger than buf size")
+            // Err(io::Error::new(io::ErrorKind::Other, "sector larger than buf size"))
         }
     }
 
     fn write_sector(&mut self, sector: u64, buf: &[u8]) -> io::Result<usize> {
         if buf.len() > self.sector_size() as usize {
-            Err(io::Error::new(io::ErrorKind::Other, "buf larger than sector size"))
+            ioerr!(Other, "buf larger than sector size")
+            // Err(io::Error::new(io::ErrorKind::Other, "buf larger than sector size"))
         } else {
             let mut data = self.get_mut(sector)?;
             for index in 0usize..buf.len() {

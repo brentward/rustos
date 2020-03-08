@@ -156,11 +156,11 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
         use traits::{Dir, Entry};
         let name = name.as_ref().to_str()
-            .ok_or(io::Error::new(io::ErrorKind::InvalidInput, "name is not valid UTF-8"))?;
+            .ok_or(newioerr!(InvalidInput, "name is not valid UTF-8"))?;//io::Error::new(io::ErrorKind::InvalidInput, "name is not valid UTF-8"))?;
         self.entries()?.find(|entry| {
             let entry_name = entry.name();
             entry_name.eq_ignore_ascii_case(name)
-        }).ok_or(io::Error::new(io::ErrorKind::NotFound, "name was not found"))
+        }).ok_or(newioerr!(NotFound, "name was not found"))//io::Error::new(io::ErrorKind::NotFound, "name was not found"))
     }
 }
 
@@ -284,7 +284,6 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         name,
                         metadata,
                         regular_dir.file_size as usize,
-
                     )))
                 }
             }

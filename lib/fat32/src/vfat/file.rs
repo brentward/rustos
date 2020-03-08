@@ -226,7 +226,8 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
         match pos {
             SeekFrom::Start(offset) => {
                 if offset > self.size() {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
+                    ioerr!(InvalidInput, "beyond end of file")
+                    // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
                 } else {
                     self.offset = offset as usize;
                     // self.set_offset(offset as usize)?;
@@ -243,7 +244,8 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
             }
             SeekFrom::End(offset) => {
                 if self.size() as i64 + offset < 0 {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond beginning of file"))
+                    ioerr!(InvalidInput, "beyond beginning of file")
+                    // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond beginning of file"))
                 } else {
                     self.offset = (self.size() as i64 + offset) as usize;
                     // self.current_sector_location = self.vfat.lock(
@@ -259,9 +261,11 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
             }
             SeekFrom::Current(offset) => {
                 if self.offset as i64 + offset < 0 {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond beginning of file"))
+                    ioerr!(InvalidInput, "beyond beginning of file")
+                    // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond beginning of file"))
                 } else if self.offset as i64 + offset > self.size() as i64 {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
+                    ioerr!(InvalidInput, "beyond end of file")
+                    // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
                 } else {
                     self.offset = (self.offset as i64 + offset) as usize;
                     // self.current_sector_location = self.vfat.lock(
@@ -327,18 +331,22 @@ impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
                             // Ok(current_cluster)
                         // }
                         // Cluster::from(0xFFFFFFFF)
-                        Status::Bad => Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "cluster in chain unexpectedly marked bad"
-                        )),
-                        Status::Reserved => Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "cluster in chain unexpectedly marked reserved"
-                        )),
-                        Status::Free => Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "cluster in chain unexpectedly marked free"
-                        )),
+                        Status::Bad => ioerr!(InvalidInput, "cluster in chain marked bad"),
+
+                        //     Err(io::Error::new(
+                        //     io::ErrorKind::InvalidData,
+                        //     "cluster in chain unexpectedly marked bad"
+                        // )),
+                        Status::Reserved => ioerr!(InvalidInput, "cluster in chain marked reserved"),
+                        //     Err(io::Error::new(
+                        //     io::ErrorKind::InvalidData,
+                        //     "cluster in chain unexpectedly marked reserved"
+                        // )),
+                        Status::Free => ioerr!(InvalidInput, "cluster in chain marked free"),
+                        //     Err(io::Error::new(
+                        //     io::ErrorKind::InvalidData,
+                        //     "cluster in chain unexpectedly marked free"
+                        // )),
                     }
                 });
                 current_cluster = current_cluster_result?;
