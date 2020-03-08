@@ -37,7 +37,8 @@ impl Allocator {
         let total_mem = end - current;
         let max_block_size = 1 << (mem::size_of::<usize>() * 8 - total_mem.leading_zeros() as usize - 1);
         let bin_count = (max_block_size as u64).trailing_zeros() as usize - 2;
-        let mut bins = [LinkedList::new(); BLOCK_SIZE_COUNT];
+        let bins = [LinkedList::new(); BLOCK_SIZE_COUNT];
+        // let mut bins = [LinkedList::new(); BLOCK_SIZE_COUNT];
         let fragmentation = 0;
         // let current = align_up(current, max_block_size);
         // let fragmentation = current - start;
@@ -209,9 +210,7 @@ impl LocalAlloc for Allocator {
     /// behavior.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         let index = self.map_to_bin(&layout);
-        unsafe {
-            self.bins[index].push(ptr as *mut usize)
-        }
+        self.bins[index].push(ptr as *mut usize)
     }
 }
 
