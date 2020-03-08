@@ -19,7 +19,7 @@ pub struct Dir<HANDLE: VFatHandle> {
     pub first_cluster: Cluster,
     pub name: String,
     pub metadata: Metadata,
-    pub size: u32,
+    pub size: usize,
 }
 
 // impl<HANDLE: VFatHandle> Date<HANDLE> {
@@ -273,22 +273,19 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                             first_cluster: Cluster::from(regular_dir.cluster()),
                             name,
                             metadata,
-                            size: regular_dir.file_size,
+                            size: regular_dir.file_size as usize,
                         }
                     ))
 
                 } else {
-                    Some(Entry::File(
-                        File {
-                            vfat: self.vfat.clone(),
-                            first_cluster: Cluster::from(regular_dir.cluster()),
-                            current_sector_location: (Cluster::from(regular_dir.cluster()), 0),
-                            name,
-                            metadata,
-                            size: regular_dir.file_size,
-                            current_position: 0
-                        },
-                    ))
+                    Some(Entry::File(File::from(
+                        self.vfat.clone(),
+                        Cluster::from(regular_dir.cluster()),
+                        name,
+                        metadata,
+                        regular_dir.file_size as usize,
+
+                    )))
                 }
             }
         }

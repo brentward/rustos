@@ -74,42 +74,49 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         Ok(VFatHandle::new(vfat))
     }
 
-    pub fn current_sector(&mut self, start: Cluster, offset: usize) -> io::Result<(Cluster, usize)> {
-        let cluster_size = self.bytes_per_sector as usize * self.sectors_per_cluster as usize;
-        let cluster_index = offset / cluster_size;
-        let mut current_cluster = start;
-
-        for i in 0..cluster_index {
-            let fat_entry = self.fat_entry(current_cluster)?.status();
-             current_cluster = match fat_entry {
-                Status::Data(next_cluster) => next_cluster,
-                Status::Eoc(next_cluster) => {
-                    // if i + 1 != cluster_index {
-                    //     return Err(io::Error::new(
-                    //         io::ErrorKind::UnexpectedEof,
-                    //         "file ended unexpectedly early"
-                    //     ))
-                    // };
-                    Cluster::from(next_cluster)
-                    // Cluster::from(0xFFFFFFFF)
-                },
-                Status::Bad => return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "cluster in chain unexpectedly marked bad"
-                )),
-                Status::Reserved => return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "cluster in chain unexpectedly marked reserved"
-                )),
-                Status::Free => return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "cluster in chain unexpectedly marked free"
-                )),
-            };
-        }
-
-        Ok((current_cluster, cluster_index * cluster_size))
+    pub fn bytes_per_cluster(&self) -> usize {
+        (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize
     }
+
+    pub fn current_sector(&mut self, start: Cluster, offset: usize) -> io::Result<(Cluster, usize)> {
+        // TODO Remove VFat::current_sector()
+        unimplemented!("remove this method: VFat::current_sector()")
+    }
+    //     let cluster_size = self.bytes_per_sector as usize * self.sectors_per_cluster as usize;
+    //     let cluster_index = offset / cluster_size;
+    //     let mut current_cluster = start;
+    //
+    //     for i in 0..cluster_index {
+    //         let fat_entry = self.fat_entry(current_cluster)?.status();
+    //          current_cluster = match fat_entry {
+    //             Status::Data(next_cluster) => next_cluster,
+    //             Status::Eoc(next_cluster) => {
+    //                 // if i + 1 != cluster_index {
+    //                 //     return Err(io::Error::new(
+    //                 //         io::ErrorKind::UnexpectedEof,
+    //                 //         "file ended unexpectedly early"
+    //                 //     ))
+    //                 // };
+    //                 Cluster::from(next_cluster)
+    //                 // Cluster::from(0xFFFFFFFF)
+    //             },
+    //             Status::Bad => return Err(io::Error::new(
+    //                 io::ErrorKind::InvalidData,
+    //                 "cluster in chain unexpectedly marked bad"
+    //             )),
+    //             Status::Reserved => return Err(io::Error::new(
+    //                 io::ErrorKind::InvalidData,
+    //                 "cluster in chain unexpectedly marked reserved"
+    //             )),
+    //             Status::Free => return Err(io::Error::new(
+    //                 io::ErrorKind::InvalidData,
+    //                 "cluster in chain unexpectedly marked free"
+    //             )),
+    //         };
+    //     }
+    //
+    //     Ok((current_cluster, cluster_index * cluster_size))
+    // }
 
     // TODO: The following methods may be useful here:
     //
@@ -133,7 +140,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
             let current_offset = (offset + bytes) - (sector_index as usize * self.bytes_per_sector as usize);
             let data = self.device.get(first_sector + sector_index)?;
             let bytes_written = buf.write(&data[current_offset..])?;
-            bytes += bytes_written;
+            bytes += bytes_written; // TODO Go back to old method in loop and remove mut from buf
             if buf.is_empty() {
                 break;
             }
@@ -256,7 +263,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //  * A method to return a reference to a `FatEntry` for a cluster where the
     //    reference points directly into a cached sector.
     //
-    fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
+    pub fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
         let sector = cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
         let position_in_sector = cluster.fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
         if sector > self.sectors_per_fat as u64 {
