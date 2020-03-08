@@ -1,7 +1,6 @@
 use crate::traits;
 use crate::vfat::{Dir, File, Metadata, VFatHandle};
 use core::fmt;
-use core::marker::Copy;
 
 // You can change this definition if you want
 #[derive(Debug)]

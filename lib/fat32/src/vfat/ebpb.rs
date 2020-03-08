@@ -103,7 +103,23 @@ impl BiosParameterBlock {
     pub fn root_dir_cluster(&self) -> u32 {
         self.root_dir_cluster
     }
- }
+
+    pub fn hidden_sector_count(&self) -> u32 {
+        self.hidden_sector_count
+    }
+
+    pub fn total_logical_sectors(&self) -> u32 {
+        self.total_logical_sectors
+    }
+
+    pub fn sectors_per_fat32(&self) -> u32 {
+        self.sectors_per_fat32
+    }
+
+    pub fn volume_id(&self) -> u32 {
+        self.volume_id
+    }
+}
 
 impl fmt::Debug for BiosParameterBlock {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -120,19 +136,19 @@ impl fmt::Debug for BiosParameterBlock {
             .field("sectors_per_fat", &self.sectors_per_fat)
             .field("sectors_per_track", &self.sectors_per_track)
             .field("heads_count", &self.heads_count)
-            .field("hidden_sector_count", &self.hidden_sector_count)
-            .field("total_logical_sectors", &self.total_logical_sectors)
-            .field("sectors_per_fat32", &self.sectors_per_fat32)
+            .field("hidden_sector_count", &self.hidden_sector_count())
+            .field("total_logical_sectors", &self.total_logical_sectors())
+            .field("sectors_per_fat32", &self.sectors_per_fat32())
             .field("flags", &self.flags)
             .field("fat_version", &self.fat_version)
-            .field("root_cluster", &self.root_dir_cluster)
+            .field("root_cluster", &self.root_dir_cluster())
             .field("fsinfo_sector", &self.fsinfo_sector)
             .field("backup_boot_sector", &self.backup_boot_sector)
             .field("reserved", &self.reserved)
             .field("drive_number", &self.drive_number)
             .field("windows_nt_flags", &self.windows_nt_flags)
             .field("signature", &self.signature)
-            .field("volume_id", &self.volume_id)
+            .field("volume_id", &self.volume_id())
             .field("volume_label", &self.volume_label)
             .field("system_identifier", &self.system_identifier)
             .field("bootable_partition_signature", &self.bootable_partition_signature)

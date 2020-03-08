@@ -77,8 +77,8 @@ impl fmt::Debug for PartitionEntry {
             .field("start CHS", &self.start_chs)
             .field("partition type", &self.partition_type)
             .field("end CHS", &self.end_chs)
-            .field("start sector", &self.start_sector)
-            .field("total sector", &self.total_sectors)
+            .field("start sector", &self.start_sector())
+            .field("total sector", &self.total_sectors())
             .finish()
     }
 }

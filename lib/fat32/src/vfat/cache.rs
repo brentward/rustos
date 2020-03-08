@@ -5,9 +5,6 @@ use hashbrown::HashMap;
 use shim::io;
 use shim::ioerr;
 
-use crate::vfat::Error;
-
-
 use crate::traits::BlockDevice;
 
 #[derive(Debug)]
@@ -161,7 +158,7 @@ impl BlockDevice for CachedPartition {
             ioerr!(Other, "buf larger than sector size")
             // Err(io::Error::new(io::ErrorKind::Other, "buf larger than sector size"))
         } else {
-            let mut data = self.get_mut(sector)?;
+            let data = self.get_mut(sector)?;
             for index in 0usize..buf.len() {
                 data[index] = buf[index]
             }

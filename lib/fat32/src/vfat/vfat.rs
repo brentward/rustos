@@ -79,10 +79,10 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize
     }
 
-    pub fn current_sector(&mut self, start: Cluster, offset: usize) -> io::Result<(Cluster, usize)> {
-        // TODO Remove VFat::current_sector()
-        unimplemented!("remove this method: VFat::current_sector()")
-    }
+    // pub fn current_sector(&mut self, start: Cluster, offset: usize) -> io::Result<(Cluster, usize)> {
+    //     // TODO Remove VFat::current_sector()
+    //     unimplemented!("remove this method: VFat::current_sector()")
+    // }
     //     let cluster_size = self.bytes_per_sector as usize * self.sectors_per_cluster as usize;
     //     let cluster_index = offset / cluster_size;
     //     let mut current_cluster = start;
@@ -131,7 +131,8 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     ) -> io::Result<usize> {
         // let fat_entry = self.fat_entry(cluster)?;
         let first_sector = self.data_start_sector + (cluster.data_address() as u64 * self.sectors_per_cluster as u64);
-        let mut sector_index = offset as u64 / self.bytes_per_sector as u64 ;
+        // let mut sector_index = offset as u64 / self.bytes_per_sector as u64 ;
+        let mut sector_index: u64;
         let mut bytes = 0usize;
         loop {
             sector_index = (offset + bytes) as u64 / self.bytes_per_sector as u64;
@@ -277,11 +278,6 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         }
         let data = self
             .device.get(self.fat_start_sector + sector)?;
-        let zero = if data.len() == 0 {
-            Some(())
-        } else {
-            None
-        };
         Ok(unsafe { &data[position_in_sector..position_in_sector + 4].cast()[0] })
     }
 }
@@ -292,16 +288,14 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
     type Entry = crate::vfat::Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        use crate::vfat::{Dir, File, Entry};
         use crate::traits::Entry as EntryTrait;
-        use Component;
 
         let path = path.as_ref();
         if !path.is_absolute() {
             return ioerr!(InvalidInput, "path is not absolute")//Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not absolute"))
         }
 
-        let mut first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
+        let first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
         // let metadata = Metadata::from((0, [0, 0, 0, 0, 0]));
         let mut dir = Entry::Dir(Dir {
             vfat: self.clone(),

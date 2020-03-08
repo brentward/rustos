@@ -1,6 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::marker::{PhantomData, Copy};
+use core::marker::PhantomData;
 
 use shim::const_assert_size;
 use shim::ffi::OsStr;
@@ -104,6 +104,18 @@ impl VFatLfnDirEntry {
         self.sequence_number & 0xE5 != 0
     }
 
+    fn name_1(&self) -> &[u16; 5] {
+        unsafe { &self.name_1 }
+    }
+
+    fn name_2(&self) -> &[u16; 6] {
+        unsafe { &self.name_2 }
+    }
+
+    fn name_3(&self) -> &[u16; 2] {
+        unsafe { &self.name_3 }
+    }
+
 
 }
 
@@ -176,9 +188,9 @@ impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
         lfn_vec.sort_by_key(|lfn| lfn.sequence_number());
         let mut name: Vec<u16>  = Vec::with_capacity(lfn_vec.len() * 13);
         for lfn in lfn_vec.iter() {
-            name.extend_from_slice(&lfn.name_1);
-            name.extend_from_slice(&lfn.name_2);
-            name.extend_from_slice(&lfn.name_3);
+            name.extend_from_slice(&lfn.name_1()[..]);
+            name.extend_from_slice(&lfn.name_2()[..]);
+            name.extend_from_slice(&lfn.name_3()[..]);
         }
         for index in name.len() - 13..name.len() {
             if name[index] == 0x0000 || name[index] == 0x00FF {
