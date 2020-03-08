@@ -2,7 +2,7 @@ use core::time::Duration;
 use shim::io;
 use shim::ioerr;
 
-use pi::timer;
+use pi::timer::spin_sleep;
 use fat32::traits::BlockDevice;
 
 extern "C" {
@@ -31,8 +31,8 @@ extern "C" {
 }
 
 #[no_mangle]
-pub fn wait_micros(ms: u32) {
-    timer::spin_sleep(Duration::from_micros(ms as u64));
+pub extern "C" fn wait_micros(us: u32) {
+    spin_sleep(Duration::from_micros(us as u64 * 100));
 }
 // FIXME: Define a `#[no_mangle]` `wait_micros` function for use by `libsd`.
 // The `wait_micros` C signature is: `void wait_micros(unsigned int);`
@@ -48,11 +48,12 @@ impl Sd {
     /// with atomic memory access, but we can't use it yet since we haven't
     /// written the memory management unit (MMU).
     pub unsafe fn new() -> Result<Sd, io::Error> {
-        match sd_init() {
+        let sd_init_result = sd_init();
+        match sd_init_result {
             0 => Ok(Sd),
             -1 => ioerr!(TimedOut, "sd_init() Timed Out"),
             -2 => ioerr!(Other, "sd_init() error sending commands to SD card"),
-            err => ioerr!(Other, "sd_init() unexpected error value"),
+            _e => ioerr!(Other, "sd_init() unexpected error value"),
         }
     }
 }
@@ -75,7 +76,7 @@ impl BlockDevice for Sd {
             ioerr!(InvalidInput, "buf smaller than sector size of 512")
         } else {
             let read_result = unsafe {
-                sd_readsector(n as i32, buf[0] as *mut u8)
+                sd_readsector(n as i32, buf.as_mut_ptr())
             };
             match read_result {
                 _error_code if _error_code <= 0 => {

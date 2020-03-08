@@ -27,6 +27,7 @@ use core::time::Duration;
 
 use allocator::Allocator;
 use fs::FileSystem;
+use fs::sd::wait_micros;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
@@ -34,6 +35,7 @@ pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
+    wait_micros(3);
     use fs::sd::Sd;
     use fat32::traits::BlockDevice;
     pi::timer::spin_sleep(Duration::from_secs(1));
@@ -42,7 +44,7 @@ fn kmain() -> ! {
         // FILESYSTEM.initialize();
     }
     kprintln!("init SD card...");
-    use fs::sd::wait_micros;
+
     let mut sd = unsafe { Sd::new() }.unwrap();
     let mut buf = [0u8; 512];
     kprintln!("read SD card MBR...");
