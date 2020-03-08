@@ -3,6 +3,7 @@ use core::marker::PhantomData;
 use core::mem::size_of;
 
 use alloc::vec::Vec;
+use alloc::string::String;
 
 use shim::io::{self, Write};
 use shim::ioerr;
