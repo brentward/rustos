@@ -2,6 +2,7 @@ use core::time::Duration;
 use shim::io;
 use shim::ioerr;
 
+use pi::timer;
 use fat32::traits::BlockDevice;
 
 extern "C" {
@@ -29,6 +30,10 @@ extern "C" {
     fn sd_readsector(n: i32, buffer: *mut u8) -> i32;
 }
 
+#[no_mangle]
+pub fn wait_micros(ms: u32) {
+    timer::spin_sleep(Duration::from_micros(ms as u64));
+}
 // FIXME: Define a `#[no_mangle]` `wait_micros` function for use by `libsd`.
 // The `wait_micros` C signature is: `void wait_micros(unsigned int);`
 
@@ -43,7 +48,12 @@ impl Sd {
     /// with atomic memory access, but we can't use it yet since we haven't
     /// written the memory management unit (MMU).
     pub unsafe fn new() -> Result<Sd, io::Error> {
-        unimplemented!("Sd::new()")
+        match sd_init() {
+            0 => Ok(Sd),
+            -1 => ioerr!(TimedOut, "sd_init() Timed Out"),
+            -2 => ioerr!(Other, "sd_init() error sending commands to SD card"),
+            err => ioerr!(Other, "sd_init() unexpected error value"),
+        }
     }
 }
 
@@ -61,7 +71,24 @@ impl BlockDevice for Sd {
     ///
     /// An error of kind `Other` is returned for all other errors.
     fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
-        unimplemented!("Sd::read_sector()")
+        if buf.len() < 512 {
+            ioerr!(InvalidInput, "buf smaller than sector size of 512")
+        } else {
+            let read_result = unsafe {
+                sd_readsector(n as i32, buf[0] as *mut u8)
+            };
+            match read_result {
+                _error_code if _error_code <= 0 => {
+                    match unsafe { sd_err } {
+                        -1 => ioerr!(TimedOut, "sd_readsector() timed out reading SD card"),
+                        -2 => ioerr!(Other, "sd_readsector() error sending commands to SD card"),
+                        n if n < 0 => ioerr!(Other, "sd_readsector() undefined error"),
+                        _ => panic!("global sd_err was positive when it should hold an error condition"),
+                    }
+                },
+                bytes=> Ok(bytes as usize),
+            }
+        }
     }
 
     fn write_sector(&mut self, _n: u64, _buf: &[u8]) -> io::Result<usize> {

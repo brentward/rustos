@@ -34,11 +34,22 @@ pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
+    use fs::sd::Sd;
+    use fat32::traits::BlockDevice;
     pi::timer::spin_sleep(Duration::from_secs(1));
     unsafe {
         ALLOCATOR.initialize();
         // FILESYSTEM.initialize();
     }
+    kprintln!("init SD card...");
+    use fs::sd::wait_micros;
+    let mut sd = unsafe { Sd::new() }.unwrap();
+    let mut buf = [0u8; 512];
+    kprintln!("read SD card MBR...");
+    let mbr_bytes = sd.read_sector(0, &mut buf).unwrap();
+    kprintln!("MBR bytes read: {}", mbr_bytes);
+    kprintln!("MBR sig: {},{}", buf[510], buf[511]);
+    kprintln!("Partition boot flag: {}", buf[446]);
     kprintln!("Welcome to BrentOS");
     shell::shell("> ");
 }
