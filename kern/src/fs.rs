@@ -9,7 +9,7 @@ use shim::path::Path;
 pub use fat32::traits;
 use fat32::vfat::{Dir, Entry, File, VFat, VFatHandle};
 
-use self::sd::Sd;
+use self::sd::{Sd, wait_micros};
 use crate::mutex::Mutex;
 
 #[derive(Clone)]
@@ -57,9 +57,41 @@ impl FileSystem {
     ///
     /// Panics if the underlying disk or file sytem failed to initialize.
     pub unsafe fn initialize(&self) {
-        unimplemented!("FileSystem::initialize()")
+        let block_device = Sd::new().expect("SD card failed to init");
+        let vfat = VFat::<PiVFatHandle>::from(block_device).expect("VFat::from() on SD card block device failed");
+        *self.0.lock() = Some(vfat);
     }
 }
 
 // FIXME: Implement `fat32::traits::FileSystem` for `&FileSystem`
-// impl fat32::traits::FileSystem for &FileSystem {}
+impl<'a> fat32::traits::FileSystem for &'a FileSystem {
+    type File = File<PiVFatHandle>;
+    type Dir = Dir<PiVFatHandle>;
+    type Entry = Entry<PiVFatHandle>;
+
+    fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
+        let vfat_handle = match self.0.lock().clone() {
+            Some(vfat_handle) => vfat_handle,
+            None => return ioerr!(NotConnected, "file system uninitialized"),
+        };
+        vfat_handle.lock(|vfat|vfat.open(path))
+    }
+
+    fn open_file<P: AsRef<Path>>(self, path: P) -> io::Result<Self::File> {
+        use fat32::traits::FileSystem;
+        let vfat_handle = match self.0.lock().clone() {
+            Some(vfat_handle) => vfat_handle,
+            None => return ioerr!(NotConnected, "file system uninitialized"),
+        };
+        vfat_handle.lock(|vfat|vfat.open_file(path))
+    }
+
+    fn open_dir<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Dir> {
+        use fat32::traits::FileSystem;
+        let vfat_handle = match self.0.lock().clone() {
+            Some(vfat_handle) => vfat_handle,
+            None => return ioerr!(NotConnected, "file system uninitialized"),
+        };
+        vfat_handle.lock(|vfat|vfat.open_dir(path))
+    }
+}
