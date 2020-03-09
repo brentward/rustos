@@ -21,13 +21,13 @@ pub mod mutex;
 pub mod shell;
 
 use console::kprintln;
-// use pi::{timer, gpio, uart};
+use pi::{timer, gpio, uart};
 use core::time::Duration;
+use alloc::vec::Vec;
 // use core::fmt::Write;
 
 use allocator::Allocator;
 use fs::FileSystem;
-use fs::sd::wait_micros;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
@@ -35,23 +35,21 @@ pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
-    wait_micros(3);
-    use fs::sd::Sd;
-    use fat32::traits::BlockDevice;
-    pi::timer::spin_sleep(Duration::from_secs(1));
+
     unsafe {
         ALLOCATOR.initialize();
-        // FILESYSTEM.initialize();
+        FILESYSTEM.initialize();
     }
-    kprintln!("init SD card...");
-
-    let mut sd = unsafe { Sd::new() }.unwrap();
-    let mut buf = [0u8; 512];
-    kprintln!("read SD card MBR...");
-    let mbr_bytes = sd.read_sector(0, &mut buf).unwrap();
-    kprintln!("MBR bytes read: {}", mbr_bytes);
-    kprintln!("MBR sig: {},{}", buf[510], buf[511]);
-    kprintln!("Partition boot flag: {}", buf[446]);
-    kprintln!("Welcome to BrentOS");
+    use fs::traits::{FileSystem, Dir, Entry};
+    let root_dir = FILESYSTEM.open_dir("/").unwrap();
+    pi::timer::spin_sleep(Duration::from_secs(2));
+    let entries = root_dir.entries().unwrap().collect::<Vec<_>>();
+    for entry in entries {
+        if entry.is_file() {
+            kprintln!("{:?}", entry.into_file());
+        } else {
+            kprintln!("{:?}", entry.into_dir());
+        }
+    }
     shell::shell("> ");
 }
