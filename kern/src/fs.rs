@@ -61,6 +61,14 @@ impl FileSystem {
         let vfat = VFat::<PiVFatHandle>::from(block_device).expect("VFat::from() on SD card block device failed");
         *self.0.lock() = Some(vfat);
     }
+    //
+    // fn get_vfat_handle(&self) -> io::Result<Shared<VFat>> {
+    //     match *self.0.lock() {
+    //         Some(ref vfat) => Ok(vfat.clone()),
+    //         None => Err(io::Error::new(io::ErrorKind::NotConnected,
+    //                                    "Not initialized")),
+    //     }
+    // }
 }
 
 // FIXME: Implement `fat32::traits::FileSystem` for `&FileSystem`
@@ -68,29 +76,32 @@ impl<'a> fat32::traits::FileSystem for &'a FileSystem {
     type File = File<PiVFatHandle>;
     type Dir = Dir<PiVFatHandle>;
     type Entry = Entry<PiVFatHandle>;
+    // type File = < &'a PiVFatHandle as fat32::traits::FileSystem >::File;
+    // type Dir = < &'a PiVFatHandle as fat32::traits::FileSystem >::Dir;
+    // type Entry = < &'a PiVFatHandle as fat32::traits::FileSystem >::Entry;
+
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        let vfat_handle = match self.0.lock().clone() {
-            Some(vfat_handle) => vfat_handle,
+        let handle = match *self.0.lock() {
+            Some(ref handle) => handle.clone(),
             None => return ioerr!(NotConnected, "file system uninitialized"),
         };
-        vfat_handle.lock(|vfat|vfat.open(path))
+        handle.open(path)
     }
 
     fn open_file<P: AsRef<Path>>(self, path: P) -> io::Result<Self::File> {
-        let vfat_handle = match self.0.lock().clone() {
-            Some(vfat_handle) => vfat_handle,
+        let handle = match *self.0.lock() {
+            Some(ref handle) => handle.clone(),
             None => return ioerr!(NotConnected, "file system uninitialized"),
         };
-        vfat_handle.lock(|vfat|vfat.open_file(path))
+        handle.open_file(path)
     }
 
     fn open_dir<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Dir> {
-        use fat32::traits::FileSystem;
-        let vfat_handle = match self.0.lock().clone() {
-            Some(vfat_handle) => vfat_handle,
+        let handle = match *self.0.lock() {
+            Some(ref handle) => handle.clone(),
             None => return ioerr!(NotConnected, "file system uninitialized"),
         };
-        vfat_handle.lock(|vfat|vfat.open_dir(path))
+        handle.open_dir(path)
     }
 }
