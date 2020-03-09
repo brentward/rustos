@@ -78,7 +78,6 @@ impl<'a> fat32::traits::FileSystem for &'a FileSystem {
     }
 
     fn open_file<P: AsRef<Path>>(self, path: P) -> io::Result<Self::File> {
-        use fat32::traits::FileSystem;
         let vfat_handle = match self.0.lock().clone() {
             Some(vfat_handle) => vfat_handle,
             None => return ioerr!(NotConnected, "file system uninitialized"),
