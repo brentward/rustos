@@ -21,10 +21,8 @@ pub mod mutex;
 pub mod shell;
 
 use console::kprintln;
-use pi::{timer, gpio, uart};
+use pi::timer;
 use core::time::Duration;
-use alloc::vec::Vec;
-// use core::fmt::Write;
 
 use allocator::Allocator;
 use fs::FileSystem;
@@ -40,16 +38,7 @@ fn kmain() -> ! {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
     }
-    use fs::traits::{FileSystem, Dir, Entry};
-    let root_dir = FILESYSTEM.open_dir("/").unwrap();
-    pi::timer::spin_sleep(Duration::from_secs(2));
-    let entries = root_dir.entries().unwrap().collect::<Vec<_>>();
-    for entry in entries {
-        if entry.is_file() {
-            kprintln!("{:?}", entry.into_file());
-        } else {
-            kprintln!("{:?}", entry.into_dir());
-        }
-    }
+    pi::timer::spin_sleep(Duration::from_millis(250));
+    kprintln!("Welcome to BrentOS");
     shell::shell("> ");
 }
