@@ -1,4 +1,5 @@
 use shim::io;
+use shim::io::{Write, Read};
 use shim::path::{Path, PathBuf};
 
 use stack_vec::StackVec;
@@ -269,34 +270,35 @@ struct Ls;
 
 impl Executable for Ls {
     fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
-        if cmd.args.len() > 3 {
+        let mut option_end = cmd.args.len();
+        let mut show_hidden = false;
+        if cmd.args.len() > 1 {
+            for arg_index in 1..cmd.args.len() {
+                if &cmd.args[arg_index][..1] != "-" {
+                    option_end = arg_index;
+                    break
+                }
+            }
+        }
+        for param in cmd.args[1..option_end].iter() {
+            match param {
+                &"-a" => show_hidden = true,
+                &option => {
+                    let mut result = String::from("ls: invalid option: ");
+                    result.push_str(option);
+                    result.push_str("\r\n");
+                    return Err(StdErr { result, code: 1 });
+                }
+            }
+        }
+        if cmd.args.len() > option_end + 1 {
             let result = String::from("ls: too many arguments\r\n");
             return Err(StdErr { result, code: 1 });
         }
-        let show_hidden = if cmd.args.len() > 1 {
-            if cmd.args[1] == "-a" {
-                true
-            } else {
-                false
-            }
+        let path = if cmd.args.len() > option_end {
+            Path::new(cmd.args[option_end])
         } else {
-            false
-        };
-        let path = if show_hidden {
-            if cmd.args.len() == 3 {
-                Path::new(cmd.args[2])
-            } else {
-                Path::new(".")
-            }
-        } else {
-            if cmd.args.len() >2 {
-                let result = String::from("ls: too many arguments\r\n");
-                return Err(StdErr { result, code: 1 });
-            } else if cmd.args.len() == 2 {
-                Path::new(cmd.args[1])
-            } else {
-                Path::new(".")
-            }
+            Path::new(".")
         };
 
         let mut working_dir = cwd.clone();
@@ -389,11 +391,84 @@ impl Executable for Cat {
     fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
         let mut result = String::new();
         for &arg in cmd.args[1..].iter() {
-            result.push_str(arg);
-            result.push(' ');
-        }
-        if result.len() > 0 {
-            result.pop();
+            let mut working_dir = cwd.clone();
+
+            let path = Path::new(&arg);
+            for dir in path.iter() {
+                if dir.to_str().unwrap() == "." {
+                } else if dir.to_str().unwrap() == ".." {
+                    working_dir.pop();
+                } else {
+                    working_dir.push(Path::new(dir))
+                }
+            }
+
+            if path.is_absolute() {
+                while working_dir.pop() {
+                    working_dir.pop();
+                }
+            }
+
+            let entry = match FILESYSTEM.open(working_dir.as_path()) {
+                Ok(entry) => entry,
+                Err(_) => {
+                    let mut result = String::from("cat: ");
+                    result.push_str( path.to_str()
+                        .expect("path is not valid unicode"));
+                    result.push_str(": no such file or directory");
+                    result.push_str("\r\n");
+                    return Err(StdErr { result, code: 1 });
+                }
+            };
+
+            let mut file_vec = Vec::new();
+            let mut bytes_read = 0usize;
+            let total_size = entry.size();
+            let mut file = match entry.into_file() {
+                Some(file) => file,
+                None => {
+                    let mut result = String::from("cat: ");
+                    result.push_str(path.to_str()
+                        .expect("path is not valid unicode"));
+                    result.push_str(": is a directory");
+                    result.push_str("\r\n");
+                    return Err(StdErr { result, code: 1 });
+                }
+            };
+            while bytes_read < total_size {
+                let mut buf = [0u8;1024];
+                let bytes = match file.read(&mut buf) {
+                    Ok(bytes) => bytes,
+                    Err(_) => {
+                        let mut result = String::from("cat: ");
+                        result.push_str( path.to_str()
+                            .expect("path is not valid unicode"));
+                        result.push_str(": file could not be opened");
+                        result.push_str("\r\n");
+                        return Err(StdErr { result, code: 1 });
+                    }
+                };
+                let bytes_written = file_vec.write(&buf)
+                    .expect("failed to write to vector");
+                bytes_read += bytes;
+            }
+            while file_vec.len() > bytes_read {
+                file_vec.pop();
+            }
+            match String::from_utf8(file_vec) {
+                Ok(string) => {
+                    result.push_str(string.as_str());
+                    result.push_str("\r\n");
+                },
+                Err(_) => {
+                    let mut result = String::from("cat: ");
+                    result.push_str( path.to_str()
+                        .expect("path is not valid unicode"));
+                    result.push_str(": file not valid UTF-8");
+                    result.push_str("\r\n");
+                    return Err(StdErr { result, code: 1 });
+                }
+            }
         }
 
         Ok(StdOut { result, code: 0 })
