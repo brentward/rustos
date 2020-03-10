@@ -289,7 +289,10 @@ impl Executable for Ls {
                 Path::new(".")
             }
         } else {
-            if cmd.args.len() == 2 {
+            if cmd.args.len() >2 {
+                let result = String::from("ls: too many arguments\r\n");
+                return Err(StdErr { result, code: 1 });
+            } else if cmd.args.len() == 2 {
                 Path::new(cmd.args[1])
             } else {
                 Path::new(".")
@@ -329,7 +332,6 @@ impl Executable for Ls {
                 let entries = dir.entries().unwrap().collect::<Vec<_>>();
                 for entry in entries {
                     if show_hidden || !entry.metadata().hidden() {
-
                         let name = if entry.metadata().directory() {
                             let mut name = String::from(entry.name());
                             name.push('/');
