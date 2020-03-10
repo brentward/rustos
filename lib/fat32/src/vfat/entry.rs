@@ -19,7 +19,14 @@ pub enum Entry<HANDLE: VFatHandle> {
 //     size: u32,
 // }
 
-// impl<HANDLE: VFatHandle> Entry<HANDLE> {
+impl<HANDLE: VFatHandle> Entry<HANDLE> {
+    pub fn size(&self) -> usize {
+        match self {
+            Entry::File(file) => file.size,
+            Entry::Dir(dir) => dir.size,
+        }
+    }
+}
 //     pub fn from_file(
 //         file: File<HANDLE>,
 //         name: String,
@@ -57,7 +64,7 @@ impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE> {
     fn name(&self) -> &str {
         match self {
             Entry::File(file) => file.name.as_str(),
-            Entry::Dir(dir) => dir.name.as_str()
+            Entry::Dir(dir) => dir.name.as_str(),
         }
     }
     fn metadata(&self) -> &Self::Metadata {

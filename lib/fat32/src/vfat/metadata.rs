@@ -153,12 +153,12 @@ impl Metadata {
     }
 
     /// Whether the entry is a volume ID.
-    fn volume_id(&self) -> bool {
+    pub fn volume_id(&self) -> bool {
         ((self.attributes.0 & 0x08) >> 3) != 0
     }
 
     /// Whether the entry is a directory.
-    fn directory(&self) -> bool {
+    pub fn directory(&self) -> bool {
         ((self.attributes.0 & 0x10) >> 4) != 0
     }
 
