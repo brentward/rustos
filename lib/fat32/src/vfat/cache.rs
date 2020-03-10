@@ -149,14 +149,12 @@ impl BlockDevice for CachedPartition {
             Ok(buf.len() as usize)
         } else {
             ioerr!(Other, "sector larger than buf size")
-            // Err(io::Error::new(io::ErrorKind::Other, "sector larger than buf size"))
         }
     }
 
     fn write_sector(&mut self, sector: u64, buf: &[u8]) -> io::Result<usize> {
         if buf.len() > self.sector_size() as usize {
             ioerr!(Other, "buf larger than sector size")
-            // Err(io::Error::new(io::ErrorKind::Other, "buf larger than sector size"))
         } else {
             let data = self.get_mut(sector)?;
             for index in 0usize..buf.len() {

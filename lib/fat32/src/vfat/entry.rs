@@ -2,22 +2,11 @@ use crate::traits;
 use crate::vfat::{Dir, File, Metadata, VFatHandle};
 use core::fmt;
 
-// You can change this definition if you want
 #[derive(Debug)]
 pub enum Entry<HANDLE: VFatHandle> {
     File(File<HANDLE>),
     Dir(Dir<HANDLE>),
 }
-
-// TODO: Implement any useful helper methods on `Entry`.
-
-// #[derive(Debug)]
-// pub struct Entry<HANDLE: VFatHandle> {
-//     entry: EntryData<HANDLE>,
-//     name: String,
-//     metadata: Metadata,
-//     size: u32,
-// }
 
 impl<HANDLE: VFatHandle> Entry<HANDLE> {
     pub fn size(&self) -> usize {
@@ -27,34 +16,6 @@ impl<HANDLE: VFatHandle> Entry<HANDLE> {
         }
     }
 }
-//     pub fn from_file(
-//         file: File<HANDLE>,
-//         name: String,
-//         metadata: Metadata,
-//         size: u32
-//     ) -> Entry<HANDLE> {
-//         Entry {
-//             entry: EntryData::File(file),
-//             name,
-//             metadata,
-//             size
-//         }
-//     }
-//
-//     pub fn from_dir(
-//         dir: Dir<HANDLE>,
-//         name: String,
-//         metadata: Metadata,
-//         size: u32
-//     ) -> Entry<HANDLE> {
-//         Entry {
-//             entry: EntryData::Dir(dir),
-//             name,
-//             metadata,
-//             size
-//         }
-//     }
-// }
 
 impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE> {
     type File = File<HANDLE>;

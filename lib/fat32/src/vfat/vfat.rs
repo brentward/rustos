@@ -79,130 +79,45 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize
     }
 
-    // pub fn current_sector(&mut self, start: Cluster, offset: usize) -> io::Result<(Cluster, usize)> {
-    //     // TODO Remove VFat::current_sector()
-    //     unimplemented!("remove this method: VFat::current_sector()")
-    // }
-    //     let cluster_size = self.bytes_per_sector as usize * self.sectors_per_cluster as usize;
-    //     let cluster_index = offset / cluster_size;
-    //     let mut current_cluster = start;
-    //
-    //     for i in 0..cluster_index {
-    //         let fat_entry = self.fat_entry(current_cluster)?.status();
-    //          current_cluster = match fat_entry {
-    //             Status::Data(next_cluster) => next_cluster,
-    //             Status::Eoc(next_cluster) => {
-    //                 // if i + 1 != cluster_index {
-    //                 //     return Err(io::Error::new(
-    //                 //         io::ErrorKind::UnexpectedEof,
-    //                 //         "file ended unexpectedly early"
-    //                 //     ))
-    //                 // };
-    //                 Cluster::from(next_cluster)
-    //                 // Cluster::from(0xFFFFFFFF)
-    //             },
-    //             Status::Bad => return Err(io::Error::new(
-    //                 io::ErrorKind::InvalidData,
-    //                 "cluster in chain unexpectedly marked bad"
-    //             )),
-    //             Status::Reserved => return Err(io::Error::new(
-    //                 io::ErrorKind::InvalidData,
-    //                 "cluster in chain unexpectedly marked reserved"
-    //             )),
-    //             Status::Free => return Err(io::Error::new(
-    //                 io::ErrorKind::InvalidData,
-    //                 "cluster in chain unexpectedly marked free"
-    //             )),
-    //         };
-    //     }
-    //
-    //     Ok((current_cluster, cluster_index * cluster_size))
-    // }
-
-    // TODO: The following methods may be useful here:
-    //
-    //  * A method to read from an offset of a cluster into a buffer.
-    //
     pub fn read_cluster(
         &mut self,
         cluster: Cluster,
         offset: usize,
         mut buf: &mut [u8]
     ) -> io::Result<usize> {
-        // let fat_entry = self.fat_entry(cluster)?;
-        let first_sector = self.data_start_sector + (cluster.data_address() as u64 * self.sectors_per_cluster as u64);
-        // let mut sector_index = offset as u64 / self.bytes_per_sector as u64 ;
-        let mut sector_index: u64;
+        let first_sector = self.data_start_sector
+            + (cluster.data_address() as u64 * self.sectors_per_cluster as u64);
         let mut bytes = 0usize;
-        loop {
-            sector_index = (offset + bytes) as u64 / self.bytes_per_sector as u64;
-            if sector_index >= self.sectors_per_cluster as u64 {
-                break;
+        let start_sector_index = offset / self.bytes_per_sector as usize;
+        for sector_index in start_sector_index..self.sectors_per_cluster as usize  {
+            if buf.len() == 0 {
+                break
             }
-            let current_offset = (offset + bytes) - (sector_index as usize * self.bytes_per_sector as usize);
-            let data = self.device.get(first_sector + sector_index)?;
+            let current_offset = (offset + bytes)
+                - (sector_index as usize * self.bytes_per_sector as usize);
+            let data = self.device.get(first_sector + sector_index as u64)?;
             let bytes_written = buf.write(&data[current_offset..])?;
             bytes += bytes_written; // TODO Go back to old method in loop and remove mut from buf
-            if buf.is_empty() {
-                break;
-            }
-
-            // for &byte in data[current_offset..data.len().min(current_offset + buf.len())].iter() {
-            //     buf[bytes] = byte;
-            //     bytes += 1;
-            //     if bytes == buf.len() {
-            //         break 'fill_buf
-            //     }
-            // }
-
-
-            // bytes += buf.write(&data[current_offset..])?;
         }
-
-        // let start_sector =  first_sector + (offset as u64 / self.bytes_per_sector as u64);
-        // if start_sector - first_sector > self.sectors_per_cluster as u64 {
-        //     return Err(io::Error::new(io::ErrorKind::Other, "offset larger than cluster"))
-        // };
-        // let sector_offset = offset % self.bytes_per_sector as usize;
-        // let data = self.device.get(start_sector)?;
-        // let mut bytes = 0usize;
-        // for byte in data[sector_offset..].iter() {
-        //     buf[bytes] = *byte;
-        //     bytes += 1;
-        // }
-        // for sector in start_sector + 1..last_sector {
-        //     let data = self.device.get(sector)?;
-        //     for byte in data.iter() {
-        //         buf[bytes] = *byte;
-        //         bytes += 1;
-        //     }
-        // }
         Ok(bytes)
     }
-    //
-    //  * A method to read all of the clusters chained from a starting cluster
-    //    into a vector.
-    //
+
     fn add_cluster_to_buf(&mut self, cluster: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
         let start = buf.len();
-
-        let bytes_per_cluster = (self.sectors_per_cluster as u16 * self.bytes_per_sector) as usize;
+        let bytes_per_cluster =
+            (self.sectors_per_cluster as u16 * self.bytes_per_sector) as usize;
         let max_size = start + bytes_per_cluster;
         buf.reserve(max_size);
-        // unsafe {
-        //     buf.set_len(start + bytes_per_cluster);
-        // }
-        // let bytes_read = self.read_cluster(cluster, 0, &mut buf[start..start + bytes_per_cluster])?;
 
         let mut cluster_chunk_buf = [0u8; 512];
         let mut bytes_total = 0usize;
         for cluster_chunk in 0usize..(bytes_per_cluster as usize / 512) {
-            let bytes_read = self.read_cluster(cluster, cluster_chunk * 512, &mut cluster_chunk_buf)?;
+            let bytes_read = self
+                .read_cluster(cluster, cluster_chunk * 512, &mut cluster_chunk_buf)?;
             for &byte in cluster_chunk_buf[0..bytes_read].iter() {
                 buf.push(byte);
             }
             bytes_total += bytes_read;
-
         }
         unsafe {
             buf.set_len(start + bytes_total);
@@ -217,8 +132,6 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     ) -> io::Result<usize> {
         let mut cluster = start;
         let mut bytes = 0usize;
-        // let mut clusters = vec![start];
-        // let mut fat_entry = self.fat_entry(start)?;
         loop {
             let fat_entry = self.fat_entry(cluster)?.status();
             match fat_entry {
@@ -231,50 +144,19 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                     break
                 },
                 Status::Bad => return ioerr!(InvalidData, "cluster in chain marked bad"),
-                //     Err(io::Error::new(
-                //     io::ErrorKind::InvalidData,
-                //     "cluster in chain unexpectedly marked bad"
-                // )),
                 Status::Reserved => return ioerr!(InvalidData, "cluster in chain marked reserved"),
-                //     Err(io::Error::new(
-                //     io::ErrorKind::InvalidData,
-                //     "cluster in chain unexpectedly marked reserved"
-                // )),
                 Status::Free => return ioerr!(InvalidData, "cluster in chain marked free"),
-                //     Err(io::Error::new(
-                //     io::ErrorKind::InvalidData,
-                //     "cluster in chain unexpectedly marked free"
-                // )),
             };
-            // clusters.push(next_cluster);
-            // fat_entry = self.fat_entry(next_cluster)?;
         }
-        // let mut bytes = 0usize;
-        //
-        // for cluster in clusters.iter() {
-        //     let first_sector = self.data_start_sector + cluster.data_address() as u64 * self.sectors_per_cluster as u64;
-        //     let last_sector = first_sector + self.sectors_per_cluster as u64;
-        //     for sector in first_sector..last_sector {
-        //         let data = self.device.get(sector)?;
-        //         for byte in data.iter() {
-        //             buf.push(*byte);
-        //             bytes += 1;
-        //         }
-        //     }
-        // }
     Ok(bytes)
     }
-    //
-    //  * A method to return a reference to a `FatEntry` for a cluster where the
-    //    reference points directly into a cached sector.
-    //
+
     pub fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
         let sector = cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
-        let position_in_sector = cluster.fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
+        let position_in_sector = cluster
+            .fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
         if sector > self.sectors_per_fat as u64 {
             return ioerr!(NotFound, "invalid cluster index")
-                // Err(io::Error::new(io::ErrorKind::NotFound,
-                //                       "Invalid cluster index"));
         }
         let data = self
             .device.get(self.fat_start_sector + sector)?;
@@ -292,11 +174,10 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
 
         let path = path.as_ref();
         if !path.is_absolute() {
-            return ioerr!(InvalidInput, "path is not absolute")//Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not absolute"))
+            return ioerr!(InvalidInput, "path is not absolute")
         }
 
         let first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
-        // let metadata = Metadata::from((0, [0, 0, 0, 0, 0]));
         let mut dir = Entry::Dir(Dir {
             vfat: self.clone(),
             first_cluster,
@@ -304,42 +185,21 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
             metadata: Metadata::default(),
             size: 0,
         });
-        // let mut path_vec = Vec::new();
-        // path_vec = path.components().collect();
-        // if path_vec.len() == 1 {
-        //     return found_result;
-        // } else {
         for component in path.components() {
             match component {
                 Component::ParentDir => {
-                    dir = dir.into_dir().ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
+                    dir = dir.into_dir()
+                        .ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
                         .find("..")?;
-                    // io::Error::new(io::ErrorKind::InvalidInput,
-                    //                "Expected dir")
                 },
                 Component::Normal(name) => {
-                    dir = dir.into_dir().ok_or(newioerr!(NotFound, "path not found"))?.find(name)?;
-                    // io::Error::new(io::ErrorKind::NotFound,
-                    //                "Expected dir")
+                    dir = dir.into_dir()
+                        .ok_or(newioerr!(NotFound, "path not found"))?
+                        .find(name)?;
                 }
                 _ => (),
             }
-            // let found_entry = match found_result {
-            //     Ok(entry) => entry,
-            //     Err(e) => return Err(e),
-            // };
-            // let working_dir = match found_entry.into_dir() {
-            //     Some(dir) => dir,
-            //     None => return Err(io::Error::new(io::ErrorKind::InvalidInput, "path is not valid")),
-            // };
-            // found_result = working_dir.find(component);
         }
         Ok(dir)
-        // // }
-        // match found_result {
-        //     Ok(entry) => Ok(entry),
-        //     Err(_) => Err(io::Error::new(io::ErrorKind::NotFound, "path is not found")),
-        // }        // // Err(io::Error::new(io::ErrorKind::InvalidInput, "Beyond end of file"))
-        // // unimplemented!("FileSystem::open()")
     }
 }

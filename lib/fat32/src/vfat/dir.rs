@@ -22,25 +22,6 @@ pub struct Dir<HANDLE: VFatHandle> {
     pub size: usize,
 }
 
-// impl<HANDLE: VFatHandle> Date<HANDLE> {
-//     pub fn from(
-//         vfat: HANDLE,
-//         first_cluster: Cluster,
-//         name: String,
-//         attributes: u8,
-//         create_time: u16,
-//         create_date: u16,
-//         accessed_date: u16,
-//         modification_time: u16,
-//         nodification_date: u16,
-//         size: u32,
-//     ) -> Dir<HANDLE> {
-//
-//     }
-// }
-
-
-
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct VFatRegularDirEntry {
@@ -62,11 +43,6 @@ pub struct VFatRegularDirEntry {
 impl VFatRegularDirEntry {
     fn cluster(&self) -> u32 {
         ((self.cluster_address_high as u32) << 16) | self.cluster_address_low as u32
-
-        // self.cluster_address_low[0] as u32
-        //     + self.cluster_address_low[1] as u32 * 0x100
-        //     + self.cluster_address_high[0] as u32 * 0x10000
-        //     + self.cluster_address_high[1] as u32 * 0x1000000
     }
 
     fn is_dir(&self) -> bool {
@@ -115,11 +91,10 @@ impl VFatLfnDirEntry {
     fn name_3(&self) -> &[u16; 2] {
         unsafe { &self.name_3 }
     }
-
-
 }
 
 const_assert_size!(VFatLfnDirEntry, 32);
+
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
@@ -146,12 +121,12 @@ impl VFatUnknownDirEntry {
 
 const_assert_size!(VFatUnknownDirEntry, 32);
 
+
 pub union VFatDirEntry {
     unknown: VFatUnknownDirEntry,
     regular: VFatRegularDirEntry,
     long_filename: VFatLfnDirEntry,
 }
-
 
 
 impl<HANDLE: VFatHandle> Dir<HANDLE> {
@@ -168,11 +143,11 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
         use traits::{Dir, Entry};
         let name = name.as_ref().to_str()
-            .ok_or(newioerr!(InvalidInput, "name is not valid UTF-8"))?;//io::Error::new(io::ErrorKind::InvalidInput, "name is not valid UTF-8"))?;
+            .ok_or(newioerr!(InvalidInput, "name is not valid UTF-8"))?;
         self.entries()?.find(|entry| {
             let entry_name = entry.name();
             entry_name.eq_ignore_ascii_case(name)
-        }).ok_or(newioerr!(NotFound, "name was not found"))//io::Error::new(io::ErrorKind::NotFound, "name was not found"))
+        }).ok_or(newioerr!(NotFound, "name was not found"))
     }
 }
 
@@ -239,8 +214,6 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 
             let unknown_dir_entry = unsafe {dir_entry.unknown};
             if unknown_dir_entry.is_end() {
-                // self.position = self.dir_entries.len();
-                // break
                 self.position = self.dir_entries.len();
                 return None
             }
@@ -268,15 +241,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                             regular_dir.modification_date,
                             regular_dir.modification_time
                         ]
-                        // Timestamp::from((Date::from(regular_dir.creation_date), Time::from(regular_dir.creation_time))),
-                        // Date::from(regular_dir.)
                     )
-                    // regular_dir.attributes,
-                    // regular_dir.creation_time,
-                    // regular_dir.creation_date,
-                    // regular_dir.accessed_date,
-                    // regular_dir.modification_time,
-                    // regular_dir.modification_date,
                 );
                 return if regular_dir.is_dir(){
                     Some(Entry::Dir(
@@ -304,14 +269,15 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
     }
 }
 
-
 impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
     type Entry = Entry<HANDLE>;
     type Iter = DirIterator<HANDLE>;
 
     fn entries(&self) -> io::Result<Self::Iter> {
         let mut cluster_chain: Vec<u8> = Vec::new();
-        self.vfat.lock(|a| a.read_chain(self.first_cluster, &mut cluster_chain))?;
+        self.vfat.lock(
+            |vfat| vfat.read_chain(self.first_cluster, &mut cluster_chain)
+        )?;
         Ok(DirIterator {
             phantom: PhantomData,
             dir_entries: unsafe { cluster_chain.cast() },

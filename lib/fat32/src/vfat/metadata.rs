@@ -208,10 +208,19 @@ impl fmt::Display for Metadata {
         let volume_id = if self.volume_id() { "i" } else { "-" };
         let filetype = if self.directory() { "d" } else { "f" };
         let archive = if self.archive() { "a" } else { "-" };
-        write!(f, "{}{}{}{}{}{}", read_write, hidden_visible, system, volume_id, filetype, archive)?;
         write!(
             f,
-            "  M{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
+            "{}{}{}{}{}{}",
+            read_write,
+            hidden_visible,
+            system,
+            volume_id,
+            filetype,
+            archive
+        )?;
+        write!(
+            f,
+            "  Mod: {:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
             self.modified().year(),
             self.modified().month(),
             self.modified().day(),
@@ -221,7 +230,7 @@ impl fmt::Display for Metadata {
         )?;
         write!(
             f,
-            "   C{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
+            "  Crtd: {:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
             self.created().year(),
             self.created().month(),
             self.created().day(),
