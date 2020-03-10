@@ -74,9 +74,6 @@ impl From<((u8, [u16; 5]))> for Metadata {
             creation_timestamp: Timestamp::from((metadata_tup.1[0], metadata_tup.1[1])),
             accessed_date: Date::from(metadata_tup.1[2]),
             modification_timestamp: Timestamp::from((metadata_tup.1[3], metadata_tup.1[4])),
-            // creation_timestamp: Timestamp::new(Date::from(creation_date), Time::from(creation_time)),
-            // accessed_date: Date::new(accessed_date),
-            // modification_timestamp: Timestamp::new(Date::from(modification_date), Time::from(modification_time)),
         }
     }
 }
