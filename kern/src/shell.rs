@@ -12,6 +12,7 @@ use core::fmt::{self, Write as FmtWrite};
 
 use fat32::traits::FileSystem;
 use fat32::traits::{Dir, Entry, Metadata};
+use fat32::vfat::HumanReadableEntry;
 
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
@@ -61,8 +62,6 @@ const LF: u8 = b'\n';
 const BELL: u8 = 7;
 const BACK: u8 = 8;
 const DEL: u8 = 127;
-
-
 
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// never returns.
@@ -350,31 +349,23 @@ impl Executable for Ls {
                 let entries = dir.entries().unwrap().collect::<Vec<_>>();
                 for entry in entries {
                     if show_hidden || !entry.metadata().hidden() {
-                        let name = if entry.metadata().directory() {
-                            let mut name = String::from(entry.name());
-                            name.push('/');
-                            name
+                        if human_readable {
+                            let human_readable_entry = HumanReadableEntry { entry };
+                            write!(result, "{}", human_readable_entry);
                         } else {
-                            String::from(entry.name())
-                        };
-                        let metadata = entry.metadata().to_string();
-                        let size = get_size(entry.size(), human_readable);
-                        write!(result, "{}  {:<8}  {} \r\n", metadata, size, name);
+                            write!(result, "{}", entry);
+                        }
                     }
                 }
             }
             None => {
                 if show_hidden || !entry.metadata().hidden() {
-                    let name = if entry.metadata().directory() {
-                        let mut name = String::from(entry.name());
-                        name.push('/');
-                        name
+                    if human_readable {
+                        let human_readable_entry = HumanReadableEntry { entry };
+                        write!(result, "{}", human_readable_entry);
                     } else {
-                        String::from(entry.name())
-                    };
-                    let metadata = entry.metadata().to_string();
-                    let size = get_size(entry.size(), human_readable);
-                    write!(result, "{}  {:<10} {} \r\n", metadata, size, name);
+                        write!(result, "{}", entry);
+                    }
                 }
             }
         }
