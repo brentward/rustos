@@ -199,41 +199,43 @@ impl MetadataTrait for Metadata {
 
 impl fmt::Display for Metadata {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let read_write = if self.read_only() { "r" } else { "w" };
-        let hidden_visible = if self.hidden() { "h" } else { "v" };
-        let system = if self.system() { "s" } else { "-" };
-        let volume_id = if self.volume_id() { "i" } else { "-" };
-        let filetype = if self.directory() { "d" } else { "f" };
-        let archive = if self.archive() { "a" } else { "-" };
+        use fmt::Write;
+
+        fn write_bool(to: &mut fmt::Formatter, b: bool, c: char) -> fmt::Result {
+            if b {
+                write!(to, "{}", c)
+            } else {
+                write!(to, "-")
+            }
+        }
+
+        write_bool(f, self.directory(), 'd')?;
+        write_bool(f, !self.directory(), 'f')?;
+        write_bool(f, self.read_only(), 'r')?;
+        write_bool(f, self.hidden(), 'h')?;
+        write_bool(f, self.system(), 's')?;
+        write_bool(f, self.volume_id(), 'i')?;
+        write_bool(f, self.archive(), 'a')?;
         write!(
             f,
-            "{}{}{}{}{}{}",
-            read_write,
-            hidden_visible,
-            system,
-            volume_id,
-            filetype,
-            archive
-        )?;
-        write!(
-            f,
-            "  Mod: {:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
-            self.modified().year(),
-            self.modified().month(),
-            self.modified().day(),
-            self.modified().hour(),
-            self.modified().minute(),
-            self.modified().second()
-        )?;
-        write!(
-            f,
-            "  Crtd: {:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
+            "  {:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
             self.created().year(),
             self.created().month(),
             self.created().day(),
             self.created().hour(),
             self.created().minute(),
             self.created().second()
+        )
+        ?;
+        write!(
+            f,
+            "  {:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
+            self.modified().year(),
+            self.modified().month(),
+            self.modified().day(),
+            self.modified().hour(),
+            self.modified().minute(),
+            self.modified().second()
         )
     }
 }
