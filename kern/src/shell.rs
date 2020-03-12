@@ -141,6 +141,7 @@ pub fn shell(prefix: &str) -> ! {
                     "cd" => Cd::exec(&command, &mut cwd),
                     "ls" => Ls::exec(&command, &mut cwd),
                     "cat" => Cat::exec(&command, &mut cwd),
+                    "panic!" => panic!("called panic"),
                     _path => Unknown::exec(&command, &mut cwd),
                 };
                 match exec_result {
