@@ -40,9 +40,41 @@ impl<'a> Command<'a> {
     /// arguments than `buf` can hold, returns `Error::TooManyArgs`.
     fn parse(s: &'a str, buf: &'a mut [&'a str]) -> Result<Command<'a>, Error> {
         let mut args = StackVec::new(buf);
-        for arg in s.split(' ').filter(|a| !a.is_empty()) {
-            args.push(arg).map_err(|_| Error::TooManyArgs)?;
+        let mut arg_start = 0usize;
+        let mut in_quote = false;
+        for (index, ch) in s.chars().enumerate() {
+            match ch {
+                ' ' => {
+                    if !in_quote {
+                        if arg_start < index {
+                            args.push(&s[arg_start..index].trim_matches('"'))
+                                .map_err(|_| Error::TooManyArgs)?;
+                        }
+                        arg_start = index + 1;
+                    }
+                },
+                '"' => {
+                    if in_quote {
+                        in_quote = false;
+                    } else {
+                        in_quote = true;
+                    }
+                    if arg_start < index {
+                        args.push(&s[arg_start..index].trim_matches('"'))
+                            .map_err(|_| Error::TooManyArgs)?;
+                    }
+                    arg_start = index + 1;
+                }
+                _ => (),
+            }
         }
+        if arg_start < s.len() {
+            args.push(&s[arg_start..].trim_matches('"'))
+                .map_err(|_| Error::TooManyArgs)?;
+        }
+        // for arg in s.split(' ').filter(|a| !a.is_empty()) {
+        //     args.push(arg).map_err(|_| Error::TooManyArgs)?;
+        // }
 
         if args.is_empty() {
             return Err(Error::Empty);
@@ -140,6 +172,15 @@ struct StdErr{
     pub code: u8
 }
 
+impl From<fmt::Error> for StdErr {
+    fn from(_error: fmt::Error) -> Self {
+        StdErr {
+            result: String::from("Format error"),
+            code: 1,
+        }
+    }
+}
+
 
 trait Executable {
     fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr>;
@@ -198,7 +239,7 @@ impl Executable for Cd {
         let mut path = Path::new("/");
         let mut working_dir = cwd.clone();
         if cmd.args.len() > 2 {
-            writeln!(result, "cd: too many arguments");
+            writeln!(result, "cd: too many arguments")?;
 
             return Err(StdErr { result, code: 1 });
         } else if cmd.args.len() == 2 {
@@ -222,7 +263,7 @@ impl Executable for Cd {
         let entry = match FILESYSTEM.open(working_dir.as_path()) {
             Ok(entry) => entry,
             Err(_) => {
-                writeln!(result, "cd: no such file or directory: {}", path.to_str().unwrap());
+                writeln!(result, "cd: no such file or directory: {}", path.to_str().unwrap())?;
 
                 return Err(StdErr { result, code: 1 });
             }
@@ -238,7 +279,7 @@ impl Executable for Cd {
                 Ok(StdOut { result, code: 0 })
             }
             None => {
-                writeln!(result, "cd: not a directory: {}", path.to_str().unwrap());
+                writeln!(result, "cd: not a directory: {}", path.to_str().unwrap())?;
 
                 Err(StdErr { result, code: 1 })
             }
@@ -284,7 +325,7 @@ impl Executable for Ls {
                         "all" => show_hidden = true,
                         "human-readable" => human_readable = true,
                         option => {
-                            writeln!(result, "ls: invalid option: --{}", option);
+                            writeln!(result, "ls: invalid option: --{}", option)?;
 
                             return Err(StdErr { result, code: 1 });
                         }
@@ -295,7 +336,7 @@ impl Executable for Ls {
                             'a' => show_hidden = true,
                             'h' => human_readable = true,
                             option => {
-                                writeln!(result, "ls: invalid option: -{}", option);
+                                writeln!(result, "ls: invalid option: -{}", option)?;
 
                                 return Err(StdErr { result, code: 1 });
                             }
@@ -308,7 +349,7 @@ impl Executable for Ls {
             }
         }
         if cmd.args.len() > option_end + 1 {
-            writeln!(result, "ls: too many arguments");
+            writeln!(result, "ls: too many arguments")?;
 
             return Err(StdErr { result, code: 1 });
         }
@@ -338,8 +379,8 @@ impl Executable for Ls {
         let entry = match FILESYSTEM.open(working_dir.as_path()) {
             Ok(entry) => entry,
             Err(_) => {
-                writeln!(result, "cd: no such file or directory: {}", path.to_str()
-                    .expect("path is not valid unicode"));
+                writeln!(result, "ls: no such file or directory: {}", path.to_str()
+                    .expect("path is not valid unicode"))?;
 
                 return Err(StdErr { result, code: 1 });
             }
@@ -351,9 +392,9 @@ impl Executable for Ls {
                     if show_hidden || !entry.metadata().hidden() {
                         if human_readable {
                             let human_readable_entry = HumanReadableEntry { entry };
-                            write!(result, "{}", human_readable_entry);
+                            write!(result, "{}", human_readable_entry)?;
                         } else {
-                            write!(result, "{}", entry);
+                            write!(result, "{}", entry)?;
                         }
                     }
                 }
@@ -362,9 +403,9 @@ impl Executable for Ls {
                 if show_hidden || !entry.metadata().hidden() {
                     if human_readable {
                         let human_readable_entry = HumanReadableEntry { entry };
-                        write!(result, "{}", human_readable_entry);
+                        write!(result, "{}", human_readable_entry)?;
                     } else {
-                        write!(result, "{}", entry);
+                        write!(result, "{}", entry)?;
                     }
                 }
             }
@@ -403,7 +444,7 @@ impl Executable for Cat {
                 Ok(entry) => entry,
                 Err(_) => {
                     writeln!(&mut result, "cat: {} no such fhe or directory", path.to_str()
-                        .expect("path is not valid unicode"));
+                        .expect("path is not valid unicode"))?;
 
                     return Err(StdErr { result, code: 1 });
                 }
@@ -416,7 +457,7 @@ impl Executable for Cat {
                 Some(file) => file,
                 None => {
                     writeln!(result, "cat: {}: is a directory", path.to_str()
-                        .expect("path is not valid unicode"));
+                        .expect("path is not valid unicode"))?;
 
                     return Err(StdErr { result, code: 1 });
                 }
@@ -427,7 +468,7 @@ impl Executable for Cat {
                     Ok(bytes) => bytes,
                     Err(_) => {
                         writeln!(result, "cat: {}: file could not be opened", path.to_str()
-                            .expect("path is not valid unicode"));
+                            .expect("path is not valid unicode"))?;
 
                         return Err(StdErr { result, code: 1 });
                     }
@@ -441,11 +482,11 @@ impl Executable for Cat {
             }
             match String::from_utf8(file_vec) {
                 Ok(string) => {
-                    writeln!(result, "{}", string.as_str());
+                    writeln!(result, "{}", string.as_str())?;
                 },
                 Err(_) => {
                     writeln!(result, "cat: {}: file not valid UTF-8", path.to_str()
-                        .expect("path is not valid unicode"));
+                        .expect("path is not valid unicode"))?;
 
                     return Err(StdErr { result, code: 1 });
                 }
