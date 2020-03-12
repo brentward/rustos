@@ -3,65 +3,34 @@ use crate::console::kprintln;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    // kprintln!("          ________");
-    // kprintln!("      (( /========\\                                                    _ ._  _ , _ ._");
-    // kprintln!("      __/__________\\____________n_                                   (_ ' ( `  )_  .__)");
-    // kprintln!("  (( /              \\_____________]                                ( (  (    )   `)  ) _)");
-    // kprintln!("    /  =(*)=          \\                                           (__ (_   (_ . _) _) ,__)");
-    // kprintln!("    |_._._._._._._._._.|         !                                    `~~`\\ ' . /`~~`");
-    // kprintln!("(( / __________________ \\       =o                                         ;   ;");
-    // kprintln!("  | OOOOOOOOOOOOOOOOOOO0 |   =                                             /   \\");
-    // kprintln!("__________________________________________________________________________/_ __ \\_____________");
-    // kprintln!("-------------------------------------------- PANIC --------------------------------------------");
-    // kprintln!("          _ ._  _ , _ ._");
-    // kprintln!("        (_ ' ( `  )_  .__)");
-    // kprintln!("      ( (  (    )   `)  ) _)");
-    // kprintln!("     (__ (_   (_ . _) _) ,__)");
-    // kprintln!("         `~~`\\ ' . /`~~`");
-    // kprintln!("              ;   ;");
-    // kprintln!("              /   \\");
-    // kprintln!("┌────────────/_ __ \\────────────┐");
-    // kprintln!("│             PANIC             │");
-    // kprintln!("└───────────────────────────────┘");
-    // kprintln!("             \\|/");
-    // kprintln!("            .-*-         ");
-    // kprintln!("           / /|\\         ");
-    // kprintln!("          _L_            ");
-    // kprintln!("        ,\"   \".          ");
-    // kprintln!("    (\\ /  O O  \\ /)      ");
-    // kprintln!("     \\|    _    |/       ");
-    // kprintln!("       \\  (_)  /         ");
-    // kprintln!("       _/.___,\\_         ");
-    // kprintln!("      (_/     \\_)         ");
-    // kprintln!("┌───────────────────────┐");
-    // kprintln!("│    !!!  PANIC  !!!    │");
-    // kprintln!("└───────────────────────┘");
-    kprintln!("             . . .");
-    kprintln!("              \\|/");
-    kprintln!("            `--+--'");
-    kprintln!("              /|\\");
-    kprintln!("             ' | '");
-    kprintln!("               |");
-    kprintln!("               |");
-    kprintln!("           ,--'#`--.");
-    kprintln!("           |#######|");
-    kprintln!("        _.-'#######`-._");
-    kprintln!("     ,-'###############`-.");
-    kprintln!("   ,'#####################`,");
-    kprintln!("  /#########################\\");
-    kprintln!(" |###########################|");
-    kprintln!("|#############################|");
-    kprintln!("|#############################|");
-    kprintln!("|#############################|");
-    kprintln!("|#############################|");
-    kprintln!(" |###########################|");
-    kprintln!("  \\#########################/");
-    kprintln!("   `.#####################,'");
-    kprintln!("     `._###############_,'");
-    kprintln!("        `--..#####..--'");
-    kprintln!("┌─────────────────────────────┐");
-    kprintln!("│       !!!  PANIC  !!!       │");
-    kprintln!("└─────────────────────────────┘");
+    kprintln!(r#"                             __"#);
+    kprintln!(r#"                   _ ,___,-'",-=-."#);
+    kprintln!(r#"       __,-- _ _,-'_)_  (""`'-._\ `."#);
+    kprintln!(r#"    _,'  __ |,' ,-' __)  ,-     /. |"#);
+    kprintln!(r#"  ,'_,--'   |     -'  _)/         `\"#);
+    kprintln!(r#",','      ,'       ,-'_,`           :"#);
+    kprintln!(r#",'     ,-'       ,(,-(              :"#);
+    kprintln!(r#"     ,'       ,-' ,    _            ;"#);
+    kprintln!(r#"    /        ,-._/`---'            /"#);
+    kprintln!(r#"   /        (____)(----. )       ,'"#);
+    kprintln!(r#"  /         (      `.__,     /\ /,"#);
+    kprintln!(r#" :           ;-.___         /__\/|"#);
+    kprintln!(r#" |         ,'      `--.      -,\ |"#);
+    kprintln!(r#" :        /            \    .__/"#);
+    kprintln!(r#"  \      (__            \    |_"#);
+    kprintln!(r#"   \       ,`-, *       /   _|,\"#);
+    kprintln!(r#"    \    ,'   `-.     ,'_,-'    \"#);
+    kprintln!(r#"   (_\,-'    ,'\")--,'-'       __\"#);
+    kprintln!(r#"    \       /  // ,'|      ,--'  `-."#);
+    kprintln!(r#"     `-.    `-/ \'  |   _,'         `."#);
+    kprintln!(r#"        `-._ /      `--'/             \"#);
+    kprintln!(r#"-hrr-      ,'           |              \"#);
+    kprintln!(r#"          /             |               \"#);
+    kprintln!(r#"       ,-'              |               /"#);
+    kprintln!(r#"      /                 |             -'"#);
+    kprintln!("┌────────────────────────────────────────┐");
+    kprintln!("│             !!!  D'oh  !!!             │");
+    kprintln!("└────────────────────────────────────────┘");
     kprintln!("");
     match _info.location() {
         Some(location) => {
@@ -74,7 +43,7 @@ fn panic(_info: &PanicInfo) -> ! {
     kprintln!("");
     match _info.message() {
         Some(message) => kprintln!("{}", message),
-        None => kprintln!("Panic location cannot be determined"),
+        None => kprintln!("Panic message cannot be determined"),
     }
     loop {}
 }
