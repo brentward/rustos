@@ -12,7 +12,6 @@ use core::fmt::{self, Write as FmtWrite};
 
 use fat32::traits::FileSystem;
 use fat32::traits::{Dir, Entry, Metadata};
-use fat32::vfat::HumanReadableEntry;
 
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
@@ -181,11 +180,25 @@ impl From<fmt::Error> for StdErr {
     }
 }
 
-
 trait Executable {
     fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr>;
+
+    fn set_working_dir(path: &Path, cwd: &mut PathBuf) {
+        for dir in path.iter() {
+            if dir.to_str().unwrap() == "." {
+            } else if dir.to_str().unwrap() == ".." {
+                cwd.pop();
+            } else {
+                cwd.push(Path::new(dir))
+            }
+        }
+    }
 }
 
+// struct Echo<'a> {
+//     args: StackVec<'a, &'a str>,
+//     cwd: &'a mut PathBuf,
+// }
 struct Echo;
 
 impl Executable for Echo {
@@ -251,14 +264,7 @@ impl Executable for Cd {
             }
         }
 
-        for dir in path.iter() {
-            if dir.to_str().unwrap() == "." {
-            } else if dir.to_str().unwrap() == ".." {
-                working_dir.pop();
-            } else {
-                working_dir.push(Path::new(dir))
-            }
-        }
+        Cd::set_working_dir(&path, &mut working_dir);
 
         let entry = match FILESYSTEM.open(working_dir.as_path()) {
             Ok(entry) => entry,
@@ -291,29 +297,6 @@ struct Ls;
 
 impl Executable for Ls {
     fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
-        fn get_size(size: usize, human_redable: bool) -> String {
-            let mut result = String::new();
-            if human_redable {
-                match size {
-                    size@ 0..=1023 => {
-                        write!(result, "{} B", size.to_string());
-                    }
-                    size@ 1024..=1_048_575 => {
-                        write!(result, "{} KiB", (size / 1024).to_string());
-                    }
-                    size@ 1_048_576..=1_073_741_823 => {
-                        write!(result, "{} MiB", (size / 1_048_576).to_string());
-                    }
-                    size => {
-                        write!(result, "{} GiB", (size / 1_073_741_824).to_string());
-                    }
-                }
-            } else {
-                write!(result, "{}", size);
-            }
-            result
-        }
-
         let mut result = String::new();
         let mut option_end = cmd.args.len();
         let mut show_hidden = false;
@@ -367,14 +350,7 @@ impl Executable for Ls {
             }
         }
 
-        for dir in path.iter() {
-            if dir.to_str().unwrap() == "." {
-            } else if dir.to_str().unwrap() == ".." {
-                working_dir.pop();
-            } else {
-                working_dir.push(Path::new(dir))
-            }
-        }
+        Ls::set_working_dir(&path, &mut working_dir);
 
         let entry = match FILESYSTEM.open(working_dir.as_path()) {
             Ok(entry) => entry,
@@ -390,23 +366,31 @@ impl Executable for Ls {
                 let entries = dir.entries().unwrap().collect::<Vec<_>>();
                 for entry in entries {
                     if show_hidden || !entry.metadata().hidden() {
+                        let mut size = String::new();
                         if human_readable {
-                            let human_readable_entry = HumanReadableEntry { entry };
-                            write!(result, "{}", human_readable_entry)?;
+                            entry.write_human_size(&mut size)?;
                         } else {
-                            write!(result, "{}", entry)?;
+                            entry.write_size(&mut size)?;
                         }
+                        write!(result, "{}  {:<8}  {} \r\n",
+                               entry.metadata().to_string(),
+                               size,
+                               entry.display_name(),)?;
                     }
                 }
             }
             None => {
                 if show_hidden || !entry.metadata().hidden() {
+                    let mut size = String::new();
                     if human_readable {
-                        let human_readable_entry = HumanReadableEntry { entry };
-                        write!(result, "{}", human_readable_entry)?;
+                        entry.write_human_size(&mut size)?;
                     } else {
-                        write!(result, "{}", entry)?;
+                        entry.write_size(&mut size)?;
                     }
+                    write!(result, "{}  {:<8}  {} \r\n",
+                           entry.metadata().to_string(),
+                           size,
+                           entry.display_name(),)?;
                 }
             }
         }
@@ -431,14 +415,7 @@ impl Executable for Cat {
                 }
             }
 
-            for dir in path.iter() {
-                if dir.to_str().unwrap() == "." {
-                } else if dir.to_str().unwrap() == ".." {
-                    working_dir.pop();
-                } else {
-                    working_dir.push(Path::new(dir))
-                }
-            }
+            Cat::set_working_dir(&path, &mut working_dir);
 
             let entry = match FILESYSTEM.open(working_dir.as_path()) {
                 Ok(entry) => entry,
