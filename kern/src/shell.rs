@@ -93,6 +93,7 @@ const LF: u8 = b'\n';
 const BELL: u8 = 7;
 const BACK: u8 = 8;
 const DEL: u8 = 127;
+const MAX_LINE_LEN: usize = 80;
 
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// never returns.
@@ -182,23 +183,8 @@ impl From<fmt::Error> for StdErr {
 
 trait Executable {
     fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr>;
-
-    fn set_working_dir(path: &Path, cwd: &mut PathBuf) {
-        for dir in path.iter() {
-            if dir.to_str().unwrap() == "." {
-            } else if dir.to_str().unwrap() == ".." {
-                cwd.pop();
-            } else {
-                cwd.push(Path::new(dir))
-            }
-        }
-    }
 }
 
-// struct Echo<'a> {
-//     args: StackVec<'a, &'a str>,
-//     cwd: &'a mut PathBuf,
-// }
 struct Echo;
 
 impl Executable for Echo {
@@ -258,13 +244,8 @@ impl Executable for Cd {
         } else if cmd.args.len() == 2 {
             path = Path::new(cmd.args[1]);
         }
-        if path.is_absolute() {
-            while working_dir.pop() {
-                working_dir.pop();
-            }
-        }
 
-        Cd::set_working_dir(&path, &mut working_dir);
+        set_working_dir(&path, &mut working_dir);
 
         let entry = match FILESYSTEM.open(working_dir.as_path()) {
             Ok(entry) => entry,
@@ -301,12 +282,14 @@ impl Executable for Ls {
         let mut option_end = cmd.args.len();
         let mut show_hidden = false;
         let mut human_readable = false;
+        let mut long = false;
         if cmd.args.len() > 1 {
             for arg_index in 1..cmd.args.len() {
                 if cmd.args[arg_index].len() > 2 && &cmd.args[arg_index][..2] == "--" {
                     match &cmd.args[arg_index][2..] {
                         "all" => show_hidden = true,
                         "human-readable" => human_readable = true,
+                        "long" => long = true,
                         option => {
                             writeln!(result, "ls: invalid option: --{}", option)?;
 
@@ -318,6 +301,7 @@ impl Executable for Ls {
                         match arg {
                             'a' => show_hidden = true,
                             'h' => human_readable = true,
+                            'l' => long = true,
                             option => {
                                 writeln!(result, "ls: invalid option: -{}", option)?;
 
@@ -344,13 +328,7 @@ impl Executable for Ls {
 
         let mut working_dir = cwd.clone();
 
-        if path.is_absolute() {
-            while working_dir.pop() {
-                working_dir.pop();
-            }
-        }
-
-        Ls::set_working_dir(&path, &mut working_dir);
+        set_working_dir(&path, &mut working_dir);
 
         let entry = match FILESYSTEM.open(working_dir.as_path()) {
             Ok(entry) => entry,
@@ -364,33 +342,63 @@ impl Executable for Ls {
         match entry.as_dir() {
             Some(dir) => {
                 let entries = dir.entries().unwrap().collect::<Vec<_>>();
+                let length = entries.iter()
+                    .fold(0, |acc, entry| acc.max(entry.display_name().len())) + 2;
                 for entry in entries {
                     if show_hidden || !entry.metadata().hidden() {
+                        if long {
+                            let mut size = String::new();
+                            if human_readable {
+                                entry.write_human_size(&mut size)?;
+                            } else {
+                                entry.write_size(&mut size)?;
+                            }
+                            writeln!(result, "{}  {:<8}  {}",
+                                   entry.metadata().to_string(),
+                                   size,
+                                   entry.display_name(),)?;
+
+                        } else {
+                            if (result.len() % MAX_LINE_LEN) + length <= MAX_LINE_LEN {
+                                write!(
+                                    result,
+                                    "{:<width$}",
+                                    entry.display_name(),
+                                    width = length
+                                )?;
+                            } else {
+                                writeln!(result, "")?;
+                                write!(
+                                    result,
+                                    "{:<width$}",
+                                    entry.display_name(),
+                                    width = length
+                                )?;
+                            }
+                        }
+                    }
+                }
+                if !long {
+                    writeln!(result, "")?;
+                }
+            }
+            None => {
+                if show_hidden || !entry.metadata().hidden() {
+                    if long {
                         let mut size = String::new();
                         if human_readable {
                             entry.write_human_size(&mut size)?;
                         } else {
                             entry.write_size(&mut size)?;
                         }
-                        write!(result, "{}  {:<8}  {} \r\n",
-                               entry.metadata().to_string(),
-                               size,
-                               entry.display_name(),)?;
-                    }
-                }
-            }
-            None => {
-                if show_hidden || !entry.metadata().hidden() {
-                    let mut size = String::new();
-                    if human_readable {
-                        entry.write_human_size(&mut size)?;
+                        writeln!(result, "{}  {:<8}  {}",
+                                 entry.metadata().to_string(),
+                                 size,
+                                 entry.display_name(),)?;
+
                     } else {
-                        entry.write_size(&mut size)?;
+                        writeln!(result, "{}", entry.display_name(),)?
                     }
-                    write!(result, "{}  {:<8}  {} \r\n",
-                           entry.metadata().to_string(),
-                           size,
-                           entry.display_name(),)?;
                 }
             }
         }
@@ -409,13 +417,7 @@ impl Executable for Cat {
 
             let path = Path::new(&arg);
 
-            if path.is_absolute() {
-                while working_dir.pop() {
-                    working_dir.pop();
-                }
-            }
-
-            Cat::set_working_dir(&path, &mut working_dir);
+            set_working_dir(&path, &mut working_dir);
 
             let entry = match FILESYSTEM.open(working_dir.as_path()) {
                 Ok(entry) => entry,
@@ -471,5 +473,22 @@ impl Executable for Cat {
         }
 
         Ok(StdOut { result, code: 0 })
+    }
+}
+
+fn set_working_dir(path: &Path, cwd: &mut PathBuf) {
+    if path.is_absolute() {
+        while cwd.pop() {
+            cwd.pop();
+        }
+    }
+
+    for dir in path.iter() {
+        if dir.to_str().unwrap() == "." {
+        } else if dir.to_str().unwrap() == ".." {
+            cwd.pop();
+        } else {
+            cwd.push(Path::new(dir))
+        }
     }
 }
