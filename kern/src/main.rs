@@ -34,6 +34,7 @@ use fs::FileSystem;
 use process::GlobalScheduler;
 use traps::irq::Irq;
 use vm::VMManager;
+use aarch64;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
@@ -49,7 +50,10 @@ fn kmain() -> ! {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
     }
+    let current_el = unsafe { aarch64::current_el() };
     pi::timer::spin_sleep(Duration::from_millis(250));
+    kprintln!("Current Exception Level: {}", current_el);
+    aarch64::brk!(2);
     kprintln!("Welcome to BrentOS");
     shell::shell("> ");
 }

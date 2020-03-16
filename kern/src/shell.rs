@@ -192,12 +192,12 @@ impl Executable for Echo {
     fn exec(cmd: &Command, _cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
         let mut result = String::new();
         for &arg in cmd.args[1..].iter() {
-            write!(result, "{} ", arg);
+            write!(result, "{} ", arg)?;
         }
         if result.len() > 0 {
             result.pop();
         }
-        writeln!(result, "");
+        writeln!(result, "")?;
 
         Ok(StdOut { result, code: 0 })
     }
@@ -208,7 +208,7 @@ struct Unknown;
 impl Executable for Unknown {
     fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
         let mut result = String::new();
-        writeln!(result, "bwsh: command not found: {}", cmd.path());
+        writeln!(result, "bwsh: command not found: {}", cmd.path())?;
 
         Err(StdErr { result, code: 1 })
     }
@@ -220,11 +220,11 @@ impl Executable for Pwd {
     fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
         let mut result = String::new();
         if cmd.args.len() != 1 {
-            writeln!(result, "pwd: too many arguments");
+            writeln!(result, "pwd: too many arguments")?;
 
             Err(StdErr { result, code: 1 })
         } else {
-            writeln!(result, "{}", cwd.as_path().to_str().expect("path is not valid unicode"));
+            writeln!(result, "{}", cwd.as_path().to_str().expect("path is not valid unicode"))?;
 
             Ok(StdOut { result, code: 0 })
         }
