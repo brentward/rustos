@@ -50,12 +50,15 @@ fn kmain() -> ! {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
     }
-    let current_el = unsafe { aarch64::current_el() };
+    // let current_el = unsafe { aarch64::current_el() };
     pi::timer::spin_sleep(Duration::from_millis(250));
-    kprintln!("Current Exception Level: {}", current_el);
+    // kprintln!("Current Exception Level: {}", current_el);
     kprintln!("test is test");
     // pi::timer::spin_sleep(Duration::from_secs(1));
     aarch64::brk!(2);
+    // unsafe { asm!("brk 2" :::: "volatile"); }
+    kprintln!("Welcome to BrentOS");
+
     kprintln!("Welcome to BrentOS");
     shell::shell("> ");
 }

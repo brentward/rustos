@@ -65,34 +65,19 @@ context_restore:
 .global vectors
 vectors:
     HANDLER 0, 0
-    .balign 128
     HANDLER 0, 1
-    .balign 128
     HANDLER 0, 2
-    .balign 128
     HANDLER 0, 3
-    .balign 128
     HANDLER 1, 0
-    .balign 128
     HANDLER 1, 1
-    .balign 128
     HANDLER 1, 2
-    .balign 128
     HANDLER 1, 3
-    .balign 128
     HANDLER 2, 0
-    .balign 128
     HANDLER 2, 1
-    .balign 128
     HANDLER 2, 2
-    .balign 128
     HANDLER 2, 3
-    .balign 128
     HANDLER 3, 0
-    .balign 128
     HANDLER 3, 1
-    .balign 128
     HANDLER 3, 2
-    .balign 128
     HANDLER 3, 3
 

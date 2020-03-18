@@ -45,7 +45,7 @@ pub struct Info {
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
     kprintln!("were in handle_exception");
-    // kprintln!("Info {:#?} esr: {}", info, esr);
+    kprintln!("Info {:#?} esr: {}", info, esr);
     loop {
         aarch64::nop();
     }

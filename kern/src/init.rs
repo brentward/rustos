@@ -8,6 +8,8 @@ mod panic;
 
 use crate::kmain;
 use crate::param::*;
+use crate::console::kprintln;
+
 
 global_asm!(include_str!("init/vectors.s"));
 
@@ -85,7 +87,9 @@ unsafe fn switch_to_el1() {
         SCTLR_EL1.set(SCTLR_EL1::RES1);
 
         // set up exception handlers
-        VBAR_EL1.set(unsafe { vectors } as u64 );
+
+        VBAR_EL1.set(&vectors as *const u64 as u64);
+        // kprintln!("vectors: {}", vectors);
         // FIXME: load `vectors` addr into appropriate register (guide: 10.4)
 
         // change execution level to EL1 (ref: C5.2.19)
