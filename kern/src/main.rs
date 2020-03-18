@@ -53,6 +53,8 @@ fn kmain() -> ! {
     let current_el = unsafe { aarch64::current_el() };
     pi::timer::spin_sleep(Duration::from_millis(250));
     kprintln!("Current Exception Level: {}", current_el);
+    kprintln!("test is test");
+    // pi::timer::spin_sleep(Duration::from_secs(1));
     aarch64::brk!(2);
     kprintln!("Welcome to BrentOS");
     shell::shell("> ");

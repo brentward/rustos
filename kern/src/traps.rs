@@ -4,8 +4,11 @@ mod syscall;
 
 pub mod irq;
 pub use self::frame::TrapFrame;
+pub use crate::console;
 
 use pi::interrupt::{Controller, Interrupt};
+
+use crate::console::kprintln;
 
 use self::syndrome::Syndrome;
 use self::syscall::handle_syscall;
@@ -41,5 +44,10 @@ pub struct Info {
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
+    kprintln!("were in handle_exception");
+    // kprintln!("Info {:#?} esr: {}", info, esr);
+    loop {
+        aarch64::nop();
+    }
     unimplemented!("handle_exception");
 }
