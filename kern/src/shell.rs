@@ -13,6 +13,8 @@ use core::fmt::{self, Write as FmtWrite};
 use fat32::traits::FileSystem;
 use fat32::traits::{Dir, Entry, Metadata};
 
+use aarch64;
+
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
 use crate::FILESYSTEM;
@@ -97,7 +99,7 @@ const MAX_LINE_LEN: usize = 80;
 
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// never returns.
-pub fn shell(prefix: &str) -> ! {
+pub fn shell(prefix: &str) {
     let mut cwd = PathBuf::from("/");
     let mut error_level = 0u8;
     kprintln!("\r\nBrentward Shell (bwsh: 0.0.1a)");
@@ -141,6 +143,11 @@ pub fn shell(prefix: &str) -> ! {
                     "cd" => Cd::exec(&command, &mut cwd),
                     "ls" => Ls::exec(&command, &mut cwd),
                     "cat" => Cat::exec(&command, &mut cwd),
+                    "exit" => {
+                        kprintln!("Goodbye...");
+                        break
+                    },
+                    "brk" => Brk::exec(&command, &mut cwd),
                     "panic!" => panic!("called panic"),
                     _path => Unknown::exec(&command, &mut cwd),
                 };
@@ -472,6 +479,17 @@ impl Executable for Cat {
                 }
             }
         }
+
+        Ok(StdOut { result, code: 0 })
+    }
+}
+
+struct Brk;
+
+impl Executable for Brk {
+    fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+        let mut result = String::new();
+        aarch64::brk!(2);
 
         Ok(StdOut { result, code: 0 })
     }
