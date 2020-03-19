@@ -53,8 +53,9 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             match syndrome {
                 Syndrome::Brk(value) => {
                     kprintln!("BRK: {}", value);
-                    tf.elr += 4;
                     shell("!> ");
+                    tf.elr += 4;
+
                 }
                 _ => (),
             }

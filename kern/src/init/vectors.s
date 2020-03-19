@@ -30,27 +30,27 @@ context_save:
     stp q4, q5, [SP, #-32]!
     stp q2, q3, [SP, #-32]!
     stp q0, q1, [SP, #-32]!
-    mrs x0, TPIDR_EL0
+    mrs x2, TPIDR_EL0
     mrs x1, SP_EL0
+    stp x1, x2, [SP, #-16]!
     mrs x2, SPSR_EL1
-    mrs x3, ELR_EL1
-    stp x0, x1, [SP, #-16]!
-    stp x2, x3, [SP, #-16]!
+    mrs x1, ELR_EL1
+    stp x1, x2, [SP, #-16]!
     mov x0, x29
     mrs x1, ESR_EL1
-    add x2, SP, #16
-    str lr, [SP]
+    mov x2, SP
+    mov x28, lr
     bl handle_exception
-    ldr lr, [SP], #16
+    mov lr, x28
 
 .global context_restore
 context_restore:
-    ldp  x2, x3, [SP], #16
-    ldp  x0, x1, [SP], #16
-    msr TPIDR_EL0, x0
-    msr SP_EL0, x1
+    ldp  x1, x2, [SP], #16
+    msr ELR_EL1, x1
     msr SPSR_EL1, x2
-    msr ELR_EL1, x3
+    ldp  x1, x2, [SP], #16
+    msr SP_EL0, x1
+    msr TPIDR_EL0, x2
     ldp q0, q1, [SP], #32
     ldp q2, q3, [SP], #32
     ldp q4, q5, [SP], #32
