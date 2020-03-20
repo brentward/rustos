@@ -54,9 +54,5 @@ fn kmain() -> ! {
 }
 
 pub extern "C" fn run_shell() {
-    unsafe { asm!("brk 1" :::: "volatile"); }
-    unsafe { asm!("brk 2" :::: "volatile"); }
-    shell::shell("user0> ");
-    unsafe { asm!("brk 3" :::: "volatile"); }
-    loop { shell::shell("user1> "); }
+    loop { shell::shell("> "); }
 }

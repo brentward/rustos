@@ -497,9 +497,7 @@ impl Executable for Brk {
 
 fn set_working_dir(path: &Path, cwd: &mut PathBuf) {
     if path.is_absolute() {
-        while cwd.pop() {
-            cwd.pop();
-        }
+        while cwd.pop() { }
     }
 
     for dir in path.iter() {
