@@ -10,7 +10,7 @@ use crate::process::{Id, Process, State};
 use crate::traps::TrapFrame;
 use crate::VMM;
 use crate::shell;
-use crate::run_shell;
+// use crate::run_shell;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -181,4 +181,8 @@ pub extern "C" fn  test_user_process() -> ! {
                  : "volatile");
         }
     }
+}
+
+pub extern "C" fn run_shell() {
+    loop { shell::shell("user marker> "); }
 }

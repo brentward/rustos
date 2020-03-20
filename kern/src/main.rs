@@ -52,7 +52,3 @@ fn kmain() -> ! {
         SCHEDULER.start()
     }
 }
-
-pub extern "C" fn run_shell() {
-    loop { shell::shell("> "); }
-}
