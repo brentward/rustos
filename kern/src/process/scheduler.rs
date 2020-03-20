@@ -72,7 +72,7 @@ impl GlobalScheduler {
         process.context.elr = run_shell as u64;
         process.context.sp = process.stack.top().as_u64();
         process.context.spsr = 0b1_10100_0000;
-        let tf = process.context.clone();
+        let tf =  &*process.context;
         unsafe {
             asm!(
                 "mov SP, $0
@@ -184,5 +184,5 @@ pub extern "C" fn  test_user_process() -> ! {
 }
 
 pub extern "C" fn run_shell() {
-    loop { shell::shell("user marker> "); }
+    loop { shell::shell("> "); }
 }
