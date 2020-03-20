@@ -5,7 +5,7 @@ mod syscall;
 pub mod irq;
 pub use self::frame::TrapFrame;
 pub use crate::console;
-pub use crate::shell::shell;
+pub use crate::shell;
 
 use pi::interrupt::{Controller, Interrupt};
 
@@ -53,7 +53,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             match syndrome {
                 Syndrome::Brk(value) => {
                     kprintln!("BRK: {}", value);
-                    shell("!> ");
+                    shell::shell("!> ");
                     tf.elr += 4;
 
                 }

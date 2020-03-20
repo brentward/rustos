@@ -44,14 +44,19 @@ pub static IRQ: Irq = Irq::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
-
+    pi::timer::spin_sleep(Duration::from_millis(250));
+    kprintln!("Welcome to BrentOS");
     unsafe {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
+        SCHEDULER.start()
     }
-    pi::timer::spin_sleep(Duration::from_millis(250));
-    kprintln!("Welcome to BrentOS");
-    loop {
-        shell::shell("> ");
-    }
+}
+
+pub extern "C" fn run_shell() {
+    unsafe { asm!("brk 1" :::: "volatile"); }
+    unsafe { asm!("brk 2" :::: "volatile"); }
+    shell::shell("user0> ");
+    unsafe { asm!("brk 3" :::: "volatile"); }
+    loop { shell::shell("user1> "); }
 }

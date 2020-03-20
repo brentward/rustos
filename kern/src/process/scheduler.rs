@@ -9,6 +9,8 @@ use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
 use crate::process::{Id, Process, State};
 use crate::traps::TrapFrame;
 use crate::VMM;
+use crate::shell;
+use crate::run_shell;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -66,7 +68,24 @@ impl GlobalScheduler {
     /// Starts executing processes in user space using timer interrupt based
     /// preemptive scheduling. This method should not return under normal conditions.
     pub fn start(&self) -> ! {
-        unimplemented!("GlobalScheduler::start()")
+        let mut process = Process::new().expect("Process::new() failed");
+        process.context.elr = run_shell as u64;
+        process.context.sp = process.stack.top().as_u64();
+        process.context.spsr = 0b1_10100_0000;
+        let tf = process.context.clone();
+        unsafe {
+            asm!(
+                "mov SP, $0
+                 bl context_restore
+                 adr x0, _start
+                 mov SP, x0
+                 mov x0, xzr
+                 eret"
+                 :: "r"(tf)
+                 :: "volatile"
+            );
+        }
+        loop {}
     }
 
     /// Initializes the scheduler and add userspace processes to the Scheduler
@@ -163,4 +182,3 @@ pub extern "C" fn  test_user_process() -> ! {
         }
     }
 }
-
