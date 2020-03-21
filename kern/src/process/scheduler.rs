@@ -3,13 +3,17 @@ use alloc::collections::vec_deque::VecDeque;
 use core::fmt;
 
 use aarch64::*;
+use pi::interrupt;
+use pi::timer;
 
 use crate::mutex::Mutex;
 use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
 use crate::process::{Id, Process, State};
-use crate::traps::TrapFrame;
+use crate::traps::{TrapFrame, irq};
 use crate::VMM;
 use crate::shell;
+use crate::console::kprintln;
+use crate::IRQ;
 // use crate::run_shell;
 
 /// Process scheduler for the entire machine.
@@ -72,7 +76,16 @@ impl GlobalScheduler {
         process.context.elr = run_shell as u64;
         process.context.sp = process.stack.top().as_u64();
         process.context.spsr = 0b1_10100_0000;
-        let tf =  &*process.context;
+
+        let mut controller = interrupt::Controller::new();
+        controller.enable(interrupt::Interrupt::Timer1);
+        kprintln!("first tick in");
+        timer::tick_in(TICK);
+        IRQ.register(interrupt::Interrupt::Timer1, Box::new(|_tf|{
+            kprintln!("tick_in in registered Interrupt");
+            timer::tick_in(TICK);
+        }));
+        let tf = &*process.context;
         unsafe {
             asm!(
                 "mov SP, $0

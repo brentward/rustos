@@ -7,9 +7,11 @@ pub use self::frame::TrapFrame;
 pub use crate::console;
 pub use crate::shell;
 
+
 use pi::interrupt::{Controller, Interrupt};
 
 use crate::console::kprintln;
+use crate::IRQ;
 
 use self::syndrome::Syndrome;
 use self::syscall::handle_syscall;
@@ -60,9 +62,17 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 _ => (),
             }
         }
+        Kind::Irq => {
+            let mut controller = Controller::new();
+            for int in Interrupt::iter() {
+                if controller.is_pending(*int) {
+                    IRQ.invoke(*int, tf)
+                }
+
+            }
+
+
+        },
         _ => (),
     }
-    // loop {
-    //     aarch64::nop();
-    // }
 }
