@@ -32,6 +32,9 @@ struct Command<'a> {
 }
 
 impl<'a> Command<'a> {
+    const SEPARATOR: char = ' ';
+    const QUOTE: char = '"';
+    
     /// Parse a command from a string `s` using `buf` as storage for the
     /// arguments.
     ///
@@ -43,25 +46,23 @@ impl<'a> Command<'a> {
         let mut args = StackVec::new(buf);
         let mut arg_start = 0usize;
         let mut in_quote = false;
-        for (index, ch) in s.chars().enumerate() {
+        for (index, ch) in s.char_indices() {
             match ch {
-                ' ' => {
+                Command::SEPARATOR => {
                     if !in_quote {
                         if arg_start < index {
-                            args.push(&s[arg_start..index].trim_matches('"'))
+                            args.push(&s[arg_start..index]
+                                .trim_matches('"'))
                                 .map_err(|_| Error::TooManyArgs)?;
                         }
                         arg_start = index + 1;
                     }
                 },
-                '"' => {
-                    if in_quote {
-                        in_quote = false;
-                    } else {
-                        in_quote = true;
-                    }
+                Command::QUOTE => {
+                    in_quote = !in_quote;
                     if arg_start < index {
-                        args.push(&s[arg_start..index].trim_matches('"'))
+                        args.push(&s[arg_start..index]
+                            .trim_matches('"'))
                             .map_err(|_| Error::TooManyArgs)?;
                     }
                     arg_start = index + 1;
@@ -70,7 +71,8 @@ impl<'a> Command<'a> {
             }
         }
         if arg_start < s.len() {
-            args.push(&s[arg_start..].trim_matches('"'))
+            args.push(&s[arg_start..]
+                .trim_matches('"'))
                 .map_err(|_| Error::TooManyArgs)?;
         }
         // for arg in s.split(' ').filter(|a| !a.is_empty()) {
@@ -290,7 +292,7 @@ impl Executable for Ls {
         let mut option_end = cmd.args.len();
         let mut show_hidden = false;
         let mut human_readable = false;
-        let mut long = false;
+        let mut long = true;
         if cmd.args.len() > 1 {
             for arg_index in 1..cmd.args.len() {
                 if cmd.args[arg_index].len() > 2 && &cmd.args[arg_index][..2] == "--" {
