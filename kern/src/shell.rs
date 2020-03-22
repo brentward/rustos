@@ -34,7 +34,7 @@ struct Command<'a> {
 impl<'a> Command<'a> {
     const SEPARATOR: char = ' ';
     const QUOTE: char = '"';
-    
+
     /// Parse a command from a string `s` using `buf` as storage for the
     /// arguments.
     ///
