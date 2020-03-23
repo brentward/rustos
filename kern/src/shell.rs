@@ -9,11 +9,14 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::{self, Write as FmtWrite};
+use core::time::Duration;
 
 use fat32::traits::FileSystem;
 use fat32::traits::{Dir, Entry, Metadata};
 
 use aarch64;
+
+use kernel_api::{syscall, OsError, OsResult};
 
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
@@ -149,6 +152,7 @@ pub fn shell(prefix: &str) {
                         kprintln!("Goodbye...");
                         break
                     },
+                    "s" | "sleep" => Sleep::exec(&command, &mut cwd),
                     "brk" => Brk::exec(&command, &mut cwd),
                     "panic!" => panic!("called panic"),
                     _path => Unknown::exec(&command, &mut cwd),
@@ -492,6 +496,17 @@ impl Executable for Brk {
     fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
         let mut result = String::new();
         aarch64::brk!(2);
+
+        Ok(StdOut { result, code: 0 })
+    }
+}
+
+struct Sleep;
+
+impl Executable for Sleep {
+    fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+        let mut result = String::new();
+        kernel_api::syscall::sleep(Duration::from_secs(10));
 
         Ok(StdOut { result, code: 0 })
     }
