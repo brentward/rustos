@@ -102,7 +102,6 @@ impl Controller {
     /// Enables the interrupt `int`.
     pub fn enable(&mut self, int: Interrupt) {
         let index = int as usize;
-        // self.registers.enable.or_mask(1 << index);
         if index < 32 {
             self.registers.enable[0].or_mask(1 << index);
         } else {
@@ -113,7 +112,6 @@ impl Controller {
     /// Disables the interrupt `int`.
     pub fn disable(&mut self, int: Interrupt) {
         let index = int as usize;
-        // self.registers.disable.or_mask(1 << index);
         if index < 32 {
             self.registers.disable[0].or_mask(1 << index);
         } else {
@@ -124,7 +122,6 @@ impl Controller {
     /// Returns `true` if `int` is pending. Otherwise, returns `false`.
     pub fn is_pending(&self, int: Interrupt) -> bool {
         let index = int as usize;
-        // self.registers.pending.has_mask(1 << index)
         if index < 32 {
             self.registers.pending[0].has_mask(1 << index)
         } else {

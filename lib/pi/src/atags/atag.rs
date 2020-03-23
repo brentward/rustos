@@ -67,10 +67,8 @@ impl<'a> From<&'a raw::Cmd> for Atag {
     }
 }
 
-// FIXME: Implement `From<&raw::Atag> for `Atag`.
 impl From<&'static raw::Atag> for Atag {
     fn from(atag: &'static raw::Atag) -> Atag {
-        // FIXME: Complete the implementation below.
 
         unsafe {
             match (atag.tag, &atag.kind) {
