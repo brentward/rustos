@@ -25,9 +25,7 @@ pub mod process;
 pub mod traps;
 pub mod vm;
 
-use console::kprintln;
-use pi::timer;
-use core::time::Duration;
+use console::{kprintln, kprint};
 
 use allocator::Allocator;
 use fs::FileSystem;
@@ -44,13 +42,26 @@ pub static IRQ: Irq = Irq::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
-    pi::timer::spin_sleep(Duration::from_millis(250));
-    kprintln!("Welcome to BrentOS");
+    pi::timer::spin_sleep(core::time::Duration::from_millis(250));
     unsafe {
+        kprint!("Initializing ALLOCATOR... ");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
         ALLOCATOR.initialize();
+        kprintln!("[ok]");
+        kprint!("Initializing FILESYSTEM... ");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
         FILESYSTEM.initialize();
+        kprintln!("[ok]");
+        kprint!("Initializing IRQ... ");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
         IRQ.initialize();
+        kprintln!("[ok]");
+        kprint!("Initializing SCHEDULE... ");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
         SCHEDULER.initialize();
+        kprintln!("[ok]");
+        kprint!("Starting SCHEDULER... ");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
         SCHEDULER.start()
     }
 }

@@ -94,13 +94,13 @@ impl GlobalScheduler {
 
         self.add(process_0);
 
-        let mut process_1 = Process::new().expect("Process::new() failed");
-        process_1.context.elr = run_shell_2 as u64;
-        process_1.context.sp = process_1.stack.top().as_u64();
-        process_1.context.spsr = 0b1_10100_0000;
-
-        self.add(process_1);
-
+        // let mut process_1 = Process::new().expect("Process::new() failed");
+        // process_1.context.elr = run_blinky as u64;
+        // process_1.context.sp = process_1.stack.top().as_u64();
+        // process_1.context.spsr = 0b1_10100_0000;
+        //
+        // self.add(process_1);
+        //
         let mut controller = interrupt::Controller::new();
         controller.enable(interrupt::Interrupt::Timer1);
         timer::tick_in(TICK);

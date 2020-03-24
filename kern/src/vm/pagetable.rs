@@ -44,7 +44,7 @@ impl L2PageTable {
 
     /// Returns a `PhysicalAddr` of the pagetable.
     pub fn as_ptr(&self) -> PhysicalAddr {
-        PhysicalAddr::from(self.as_ptr())
+        PhysicalAddr::from(self as *const L2PageTable as usize)
     }
 }
 
@@ -91,7 +91,7 @@ impl L3PageTable {
 
     /// Returns a `PhysicalAddr` of the pagetable.
     pub fn as_ptr(&self) -> PhysicalAddr {
-        PhysicalAddr::from(self.as_ptr())
+        PhysicalAddr::from(self as *const L3PageTable as usize)
     }
 }
 
@@ -107,25 +107,44 @@ impl PageTable {
     /// Entries in L2PageTable should be initialized properly before return.
     fn new(perm: u64) -> Box<PageTable> {
         let mut l2_page_table = L2PageTable::new();
-        let mut l3_page_tables = [
+        let l3_page_tables = [
             L3PageTable::new(),
             L3PageTable::new(),
         ];
 
-        l2_page_table.entries[0].set(RawL2Entry::ADDR & l3_page_tables[0].as_ptr().as_u64());
-        l2_page_table.entries[0].set(RawL2Entry::AF & 0b1);
-        l2_page_table.entries[0].set(RawL2Entry::SH & EntrySh::ISh);
-        l2_page_table.entries[0].set(RawL2Entry::AP & EntryPerm::KERN_RW);
-        l2_page_table.entries[0].set(RawL2Entry::ATTR & EntryAttr::Mem);
-        l2_page_table.entries[0].set(RawL2Entry::TYPE & EntryType::Block);
-        l2_page_table.entries[0].set(RawL2Entry::VALID & EntryValid::Valid);
-        l2_page_table.entries[1].set(RawL2Entry::ADDR & l3_page_tables[1].as_ptr().as_u64());
-        l2_page_table.entries[1].set(RawL2Entry::AF & 0b1);
-        l2_page_table.entries[1].set(RawL2Entry::SH & EntrySh::ISh);
-        l2_page_table.entries[1].set(RawL2Entry::AP & EntryPerm::KERN_RW);
-        l2_page_table.entries[1].set(RawL2Entry::ATTR & EntryAttr::Mem);
-        l2_page_table.entries[1].set(RawL2Entry::TYPE & EntryType::Block);
-        l2_page_table.entries[1].set(RawL2Entry::VALID & EntryValid::Valid);
+        l2_page_table.entries[0].set(
+            RawL2Entry::ADDR & (l3_page_tables[0].as_ptr().as_u64() << 16)
+                | RawL2Entry::AF & 0b1 << 10
+                | RawL2Entry::SH & (EntrySh::ISh << 9)
+                | RawL2Entry::AP & (perm << 6)
+                | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
+                | RawL2Entry::TYPE & (EntryType::Block <<1)
+                | RawL2Entry::VALID & EntryValid::Valid
+        );
+        l2_page_table.entries[1].set(
+            RawL2Entry::ADDR & (l3_page_tables[1].as_ptr().as_u64() << 16)
+                | RawL2Entry::AF & 0b1 << 10
+                | RawL2Entry::SH & (EntrySh::ISh << 9)
+                | RawL2Entry::AP & (perm << 6)
+                | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
+                | RawL2Entry::TYPE & (EntryType::Block <<1)
+                | RawL2Entry::VALID & EntryValid::Valid
+        );
+
+        // l2_page_table.entries[0].set(RawL2Entry::ADDR & l3_page_tables[0].as_ptr().as_u64());
+        // l2_page_table.entries[0].set(RawL2Entry::AF & 0b1);
+        // l2_page_table.entries[0].set(RawL2Entry::SH & EntrySh::ISh);
+        // l2_page_table.entries[0].set(RawL2Entry::AP & perm);
+        // l2_page_table.entries[0].set(RawL2Entry::ATTR & EntryAttr::Mem);
+        // l2_page_table.entries[0].set(RawL2Entry::TYPE & EntryType::Block);
+        // l2_page_table.entries[0].set(RawL2Entry::VALID & EntryValid::Valid);
+        // l2_page_table.entries[1].set(RawL2Entry::ADDR & l3_page_tables[1].as_ptr().as_u64());
+        // l2_page_table.entries[1].set(RawL2Entry::AF & 0b1);
+        // l2_page_table.entries[1].set(RawL2Entry::SH & EntrySh::ISh);
+        // l2_page_table.entries[1].set(RawL2Entry::AP & perm);
+        // l2_page_table.entries[1].set(RawL2Entry::ATTR & EntryAttr::Mem);
+        // l2_page_table.entries[1].set(RawL2Entry::TYPE & EntryType::Block);
+        // l2_page_table.entries[1].set(RawL2Entry::VALID & EntryValid::Valid);
         Box::new(PageTable {
             l2: l2_page_table,
             l3: l3_page_tables,
@@ -211,6 +230,53 @@ impl KernPageTable {
     /// as address[47:16]. Refer to the definition of `RawL3Entry` in `vmsa.rs` for
     /// more details.
     pub fn new() -> KernPageTable {
+        // // let page_table = KernPageTable(PageTable::new(EntryPerm::KERN_RW));
+        // let mut page_table = PageTable::new(EntryPerm::KERN_RW);
+        // let mut mem_addr = 0x0000_0000usize;
+        // let (_, mem_end) = allocator::memory_map()
+        //     .expect("unexpected None from allocator::memory_map()");
+        //
+        // for l3_entry in page_table.into_iter() {
+        //     if mem_addr > mem_end {
+        //         break
+        //     }
+        //     let entry_attr = if mem_addr >= IO_BASE && mem_addr < IO_BASE_END {
+        //         EntryAttr::Dev
+        //     } else {
+        //         EntryAttr::Mem
+        //     };
+        //     l3_entry.0.set(
+        //         RawL2Entry::ADDR & ((mem_addr << 16) as u64)
+        //             | RawL2Entry::AF & 0b1 << 10
+        //             | RawL2Entry::SH & (EntrySh::ISh << 9)
+        //             | RawL2Entry::AP & (EntryPerm::KERN_RW << 6)
+        //             | RawL2Entry::ATTR & (entry_attr << 2)
+        //             | RawL2Entry::TYPE & (EntryType::Table <<1)
+        //             | RawL2Entry::VALID & EntryValid::Valid
+        //     );
+        //     mem_addr += PAGE_SIZE;
+        // }
+        // // let mut page_iter = page_table.into_iter();
+        // // for addr in (mem_start..mem_end).step_by(PAGE_SIZE) {
+        // //     let mut l3_entry = page_iter.next().expect("unexpected end to page table");
+        // //     // let mut page = unsafe { &mut *(addr as *mut Page) };
+        // //     let entry_attr = if addr >= IO_BASE && addr < IO_BASE_END {
+        // //         EntryAttr::Dev
+        // //     } else {
+        // //         EntryAttr::Mem
+        // //     };
+        // //     l3_entry.set(
+        // //         RawL2Entry::ADDR & (addr << 16)
+        // //             | RawL2Entry::AF & 0b1 << 10
+        // //             | RawL2Entry::SH & (EntrySh::ISh << 9)
+        // //             | RawL2Entry::AP & (EntryPerm::KERN_RW << 6)
+        // //             | RawL2Entry::ATTR & (entry_attr << 2)
+        // //             | RawL2Entry::TYPE & (EntryType::Table <<1)
+        // //             | RawL2Entry::VALID & EntryValid::Valid
+        // //     );
+        // //
+        // // }
+        // KernPageTable(page_table)
         unimplemented!("KernPageTable::new()")
     }
 }

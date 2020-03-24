@@ -21,6 +21,9 @@ use kernel_api::{syscall, OsError, OsResult};
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
 use crate::FILESYSTEM;
+use crate::SCHEDULER;
+use crate::process::Process;
+use pi::{timer, gpio};
 
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
@@ -154,6 +157,7 @@ pub fn shell(prefix: &str) {
                     },
                     "s" | "sleep" => Sleep::exec(&command, &mut cwd),
                     "brk" => Brk::exec(&command, &mut cwd),
+                    "blink" => Blink::exec(&command, &mut cwd),
                     "panic!" => panic!("called panic"),
                     _path => Unknown::exec(&command, &mut cwd),
                 };
@@ -493,19 +497,34 @@ impl Executable for Cat {
 struct Brk;
 
 impl Executable for Brk {
-    fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
-        let mut result = String::new();
+    fn exec(_cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+        let result = String::new();
         aarch64::brk!(2);
 
         Ok(StdOut { result, code: 0 })
     }
 }
 
+struct Blink;
+
+impl Executable for Blink {
+    fn exec(_cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+        let mut process_1 = Process::new().expect("Process::new() failed");
+        process_1.context.elr = run_blinky as u64;
+        process_1.context.sp = process_1.stack.top().as_u64();
+        process_1.context.spsr = 0b1_10100_0000;
+        SCHEDULER.add(process_1);
+        let result = String::new();
+        Ok(StdOut { result, code: 0 })
+
+    }
+}
+
 struct Sleep;
 
 impl Executable for Sleep {
-    fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
-        let mut result = String::new();
+    fn exec(_cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+        let result = String::new();
         kernel_api::syscall::sleep(Duration::from_secs(10));
 
         Ok(StdOut { result, code: 0 })
@@ -524,5 +543,15 @@ fn set_working_dir(path: &Path, cwd: &mut PathBuf) {
         } else {
             cwd.push(Path::new(dir))
         }
+    }
+}
+
+pub extern "C" fn run_blinky() {
+    let mut gpio16 = gpio::Gpio::new(16).into_output();
+    loop {
+        gpio16.set();
+        timer::spin_sleep(Duration::from_secs(2));
+        gpio16.clear();
+        timer::spin_sleep(Duration::from_secs(2));
     }
 }

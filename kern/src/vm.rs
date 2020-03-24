@@ -84,6 +84,7 @@ impl VMManager {
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.
     pub fn get_baddr(&self) -> PhysicalAddr {
-        unimplemented!();
+        let kern_page_table = self.0.lock();
+        kern_page_table.as_ref().unwrap().get_baddr()
     }
 }

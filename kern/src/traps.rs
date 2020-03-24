@@ -62,7 +62,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             }
         }
         Kind::Irq => {
-            let mut controller = Controller::new();
+            let controller = Controller::new();
             for int in Interrupt::iter() {
                 if controller.is_pending(*int) {
                     IRQ.invoke(*int, tf)
