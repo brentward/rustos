@@ -9,7 +9,7 @@ use shim::path::Path;
 pub use fat32::traits;
 use fat32::vfat::{Dir, Entry, File, VFat, VFatHandle};
 
-use self::sd::{Sd, wait_micros};
+use self::sd::Sd;
 use crate::mutex::Mutex;
 
 #[derive(Clone)]
@@ -61,25 +61,12 @@ impl FileSystem {
         let vfat = VFat::<PiVFatHandle>::from(block_device).expect("VFat::from() on SD card block device failed");
         *self.0.lock() = Some(vfat);
     }
-    //
-    // fn get_vfat_handle(&self) -> io::Result<Shared<VFat>> {
-    //     match *self.0.lock() {
-    //         Some(ref vfat) => Ok(vfat.clone()),
-    //         None => Err(io::Error::new(io::ErrorKind::NotConnected,
-    //                                    "Not initialized")),
-    //     }
-    // }
 }
 
-// FIXME: Implement `fat32::traits::FileSystem` for `&FileSystem`
 impl<'a> fat32::traits::FileSystem for &'a FileSystem {
     type File = File<PiVFatHandle>;
     type Dir = Dir<PiVFatHandle>;
     type Entry = Entry<PiVFatHandle>;
-    // type File = < &'a PiVFatHandle as fat32::traits::FileSystem >::File;
-    // type Dir = < &'a PiVFatHandle as fat32::traits::FileSystem >::Dir;
-    // type Entry = < &'a PiVFatHandle as fat32::traits::FileSystem >::Entry;
-
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
         let handle = match *self.0.lock() {

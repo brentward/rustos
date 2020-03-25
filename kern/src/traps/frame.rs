@@ -12,4 +12,3 @@ pub struct TrapFrame {
     pub x: [u64; 31],
     unused: u64,
 }
-

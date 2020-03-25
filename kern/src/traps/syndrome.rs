@@ -52,14 +52,14 @@ pub enum Syndrome {
 impl From<u32> for Syndrome {
     fn from(esr: u32) -> Syndrome {
         use self::Syndrome::*;
-        match esr >> 26 {
+        match (esr & ESR_EL1::EC as u32) >> 26 {
             0b000000 => Unknown,
             0b000001 => WfiWfe,
             0b000111 => SimdFp,
             0b001110 => IllegalExecutionState,
-            0b010001 | 0b010101 => Svc((esr & 0xFFFF) as u16),
-            0b010010 | 0b010110 => Hvc((esr & 0xFFFF) as u16),
-            0b010011 | 0b010111 => Smc((esr & 0xFFFF) as u16),
+            0b010001 | 0b010101 => Svc((esr & ESR_EL1::ISS_HSVC_IMM as u32) as u16),
+            0b010010 | 0b010110 => Hvc((esr & ESR_EL1::ISS_HSVC_IMM as u32) as u16),
+            0b010011 | 0b010111 => Smc((esr & ESR_EL1::ISS_HSVC_IMM as u32) as u16),
             0b011000 => MsrMrsSystem,
             0b100000 | 0b100001 => InstructionAbort {
                 kind: Fault::from(esr),
@@ -76,7 +76,7 @@ impl From<u32> for Syndrome {
             0b110000 | 0b110001 => Breakpoint,
             0b110010 | 0b110011 => Step,
             0b110100 | 0b110101 => Watchpoint,
-            0b111000 | 0b111100 => Brk((esr & 0xFFFF) as u16),
+            0b111000 | 0b111100 => Brk((esr & ESR_EL1::ISS_BRK_CMMT as u32) as u16),
             other_esr => Other(other_esr),
         }
     }

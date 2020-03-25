@@ -6,7 +6,6 @@ use stack_vec::StackVec;
 
 use pi::atags::Atags;
 use alloc::string::{String, ToString};
-use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::{self, Write as FmtWrite};
 use core::time::Duration;

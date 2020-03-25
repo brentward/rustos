@@ -90,7 +90,7 @@ impl GlobalScheduler {
         let mut process_0 = Process::new().expect("Process::new() failed");
         process_0.context.elr = run_shell as u64;
         process_0.context.sp = process_0.stack.top().as_u64();
-        process_0.context.spsr = 0b1_10100_0000;
+        process_0.context.spsr = process_0.context.spsr & SPSR_EL1::D & SPSR_EL1::A & SPSR_EL1::F;
 
         self.add(process_0);
 
