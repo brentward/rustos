@@ -15,7 +15,7 @@ use fat32::traits::{Dir, Entry, Metadata};
 
 use aarch64;
 
-use kernel_api::{syscall, OsError, OsResult};
+use kernel_api::syscall;
 
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
@@ -145,25 +145,30 @@ pub fn shell(prefix: &str) {
         match Command::parse(input_str, &mut args_buf) {
             Ok(command) => {
                 let exec_result = match command.path() {
-                    "echo" => Echo::exec(&command, &mut cwd),
-                    "pwd" => Pwd::exec(&command, &mut cwd),
-                    "cd" => Cd::exec(&command, &mut cwd),
-                    "ls" => Ls::exec(&command, &mut cwd),
-                    "cat" => Cat::exec(&command, &mut cwd),
+                    "echo" => Echo::new().exec(&command, &mut cwd),
+                    "pwd" => Pwd::new().exec(&command, &mut cwd),
+                    "cd" => Cd::new().exec(&command, &mut cwd),
+                    "ls" => Ls::new().exec(&command, &mut cwd),
+                    "ll" => {
+                        let mut ll_cmd = Ls::new();
+                        ll_cmd.set_long(true);
+                        ll_cmd.exec(&command, &mut cwd)
+                    }
+                    "cat" => Cat::new().exec(&command, &mut cwd),
                     "exit" => {
                         kprintln!("Goodbye...");
                         break
                     },
-                    "s" | "sleep" => Sleep::exec(&command, &mut cwd),
-                    "brk" => Brk::exec(&command, &mut cwd),
-                    "blink" => Blink::exec(&command, &mut cwd),
+                    "sleep" => Sleep::new().exec(&command, &mut cwd),
+                    "brk" => Brk::new().exec(&command, &mut cwd),
+                    "blink" => Blink::new().exec(&command, &mut cwd),
                     "panic!" => panic!("called panic"),
-                    _path => Unknown::exec(&command, &mut cwd),
+                    _path => Unknown::new().exec(&command, &mut cwd),
                 };
                 match exec_result {
                     Ok(std_out) => {
                         kprint!("{}", std_out.result);
-                        error_level = std_out.code;
+                        error_level = 0;
                     }
                     Err(std_err) => {
                         kprint!("{}", std_err.result);
@@ -179,19 +184,20 @@ pub fn shell(prefix: &str) {
     }
 }
 
+pub type StdResult = core::result::Result<StdOut, StdError>;
+
 pub struct StdOut {
     pub result: String,
-    pub code: u8
 }
 
-struct StdErr{
+struct StdError {
     pub result: String,
     pub code: u8
 }
 
-impl From<fmt::Error> for StdErr {
+impl From<fmt::Error> for StdError {
     fn from(_error: fmt::Error) -> Self {
-        StdErr {
+        StdError {
             result: String::from("Format error"),
             code: 1,
         }
@@ -199,13 +205,18 @@ impl From<fmt::Error> for StdErr {
 }
 
 trait Executable {
-    fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr>;
+    fn new() -> Self;
+    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult;
 }
 
 struct Echo;
 
 impl Executable for Echo {
-    fn exec(cmd: &Command, _cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
+    fn new() -> Echo {
+        Echo
+    }
+
+    fn exec(&mut self, cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
         for &arg in cmd.args[1..].iter() {
             write!(result, "{} ", arg)?;
@@ -215,34 +226,42 @@ impl Executable for Echo {
         }
         writeln!(result, "")?;
 
-        Ok(StdOut { result, code: 0 })
+        Ok(StdOut { result })
     }
 }
 
 struct Unknown;
 
 impl Executable for Unknown {
-    fn exec(cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+    fn new() -> Unknown {
+        Unknown
+    }
+
+    fn exec(&mut self, cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
         writeln!(result, "bwsh: command not found: {}", cmd.path())?;
 
-        Err(StdErr { result, code: 1 })
+        Err(StdError { result, code: 1 })
     }
 }
 
 struct Pwd;
 
 impl Executable for Pwd {
-    fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
+    fn new() -> Pwd {
+        Pwd
+    }
+
+    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
         if cmd.args.len() != 1 {
             writeln!(result, "pwd: too many arguments")?;
 
-            Err(StdErr { result, code: 1 })
+            Err(StdError { result, code: 1 })
         } else {
             writeln!(result, "{}", cwd.as_path().to_str().expect("path is not valid unicode"))?;
 
-            Ok(StdOut { result, code: 0 })
+            Ok(StdOut { result })
         }
     }
 }
@@ -250,14 +269,18 @@ impl Executable for Pwd {
 struct Cd;
 
 impl Executable for Cd {
-    fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
+    fn new() -> Cd {
+        Cd
+    }
+
+    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
         let mut path = Path::new("/");
         let mut working_dir = cwd.clone();
         if cmd.args.len() > 2 {
             writeln!(result, "cd: too many arguments")?;
 
-            return Err(StdErr { result, code: 1 });
+            return Err(StdError { result, code: 1 });
         } else if cmd.args.len() == 2 {
             path = Path::new(cmd.args[1]);
         }
@@ -269,7 +292,7 @@ impl Executable for Cd {
             Err(_) => {
                 writeln!(result, "cd: no such file or directory: {}", path.to_str().unwrap())?;
 
-                return Err(StdErr { result, code: 1 });
+                return Err(StdError { result, code: 1 });
             }
         };
 
@@ -280,49 +303,64 @@ impl Executable for Cd {
                 }
                 cwd.push(working_dir.as_path());
 
-                Ok(StdOut { result, code: 0 })
+                Ok(StdOut { result })
             }
             None => {
                 writeln!(result, "cd: not a directory: {}", path.to_str().unwrap())?;
 
-                Err(StdErr { result, code: 1 })
+                Err(StdError { result, code: 1 })
             }
         }
     }
 }
 
-struct Ls;
+struct Ls {
+    show_hidden: bool,
+    human_readable: bool,
+    long: bool,
+}
+
+impl Ls {
+    fn set_long(&mut self, long: bool) {
+        self.long = long;
+    }
+}
 
 impl Executable for Ls {
-    fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
+    fn new() -> Ls {
+        Ls {
+            show_hidden: false,
+            human_readable: false,
+            long: false,
+        }
+    }
+
+    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
         let mut option_end = cmd.args.len();
-        let mut show_hidden = false;
-        let mut human_readable = false;
-        let mut long = true;
         if cmd.args.len() > 1 {
             for arg_index in 1..cmd.args.len() {
                 if cmd.args[arg_index].len() > 2 && &cmd.args[arg_index][..2] == "--" {
                     match &cmd.args[arg_index][2..] {
-                        "all" => show_hidden = true,
-                        "human-readable" => human_readable = true,
-                        "long" => long = true,
+                        "all" => self.show_hidden = true,
+                        "human-readable" => self.human_readable = true,
+                        "long" => self.long = true,
                         option => {
                             writeln!(result, "ls: invalid option: --{}", option)?;
 
-                            return Err(StdErr { result, code: 1 });
+                            return Err(StdError { result, code: 1 });
                         }
                     }
                 } else if cmd.args[arg_index].len() > 1 && &cmd.args[arg_index][..1] == "-" {
                     for arg in cmd.args[arg_index][1..].chars() {
                         match arg {
-                            'a' => show_hidden = true,
-                            'h' => human_readable = true,
-                            'l' => long = true,
+                            'a' => self.show_hidden = true,
+                            'h' => self.human_readable = true,
+                            'l' => self.long = true,
                             option => {
                                 writeln!(result, "ls: invalid option: -{}", option)?;
 
-                                return Err(StdErr { result, code: 1 });
+                                return Err(StdError { result, code: 1 });
                             }
                         }
                     }
@@ -335,7 +373,7 @@ impl Executable for Ls {
         if cmd.args.len() > option_end + 1 {
             writeln!(result, "ls: too many arguments")?;
 
-            return Err(StdErr { result, code: 1 });
+            return Err(StdError { result, code: 1 });
         }
         let path = if cmd.args.len() > option_end {
             Path::new(cmd.args[option_end])
@@ -353,7 +391,7 @@ impl Executable for Ls {
                 writeln!(result, "ls: no such file or directory: {}", path.to_str()
                     .expect("path is not valid unicode"))?;
 
-                return Err(StdErr { result, code: 1 });
+                return Err(StdError { result, code: 1 });
             }
         };
         match entry.as_dir() {
@@ -362,10 +400,10 @@ impl Executable for Ls {
                 let length = entries.iter()
                     .fold(0, |acc, entry| acc.max(entry.display_name().len())) + 2;
                 for entry in entries {
-                    if show_hidden || !entry.metadata().hidden() {
-                        if long {
+                    if self.show_hidden || !entry.metadata().hidden() {
+                        if self.long {
                             let mut size = String::new();
-                            if human_readable {
+                            if self.human_readable {
                                 entry.write_human_size(&mut size)?;
                             } else {
                                 entry.write_size(&mut size)?;
@@ -395,15 +433,15 @@ impl Executable for Ls {
                         }
                     }
                 }
-                if !long {
+                if !self.long {
                     writeln!(result, "")?;
                 }
             }
             None => {
-                if show_hidden || !entry.metadata().hidden() {
-                    if long {
+                if self.show_hidden || !entry.metadata().hidden() {
+                    if self.long {
                         let mut size = String::new();
-                        if human_readable {
+                        if self.human_readable {
                             entry.write_human_size(&mut size)?;
                         } else {
                             entry.write_size(&mut size)?;
@@ -420,14 +458,18 @@ impl Executable for Ls {
             }
         }
 
-        Ok(StdOut { result, code: 0 })
+        Ok(StdOut { result })
     }
 }
 
 struct Cat;
 
 impl Executable for Cat {
-    fn exec(cmd: &Command, cwd: &mut PathBuf) ->Result<StdOut, StdErr> {
+    fn new() -> Cat {
+        Cat
+    }
+
+    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
         for &arg in cmd.args[1..].iter() {
             let mut working_dir = cwd.clone();
@@ -442,7 +484,7 @@ impl Executable for Cat {
                     writeln!(&mut result, "cat: {} no such fhe or directory", path.to_str()
                         .expect("path is not valid unicode"))?;
 
-                    return Err(StdErr { result, code: 1 });
+                    return Err(StdError { result, code: 1 });
                 }
             };
 
@@ -455,7 +497,7 @@ impl Executable for Cat {
                     writeln!(result, "cat: {}: is a directory", path.to_str()
                         .expect("path is not valid unicode"))?;
 
-                    return Err(StdErr { result, code: 1 });
+                    return Err(StdError { result, code: 1 });
                 }
             };
             while bytes_read < total_size {
@@ -466,7 +508,7 @@ impl Executable for Cat {
                         writeln!(result, "cat: {}: file could not be opened", path.to_str()
                             .expect("path is not valid unicode"))?;
 
-                        return Err(StdErr { result, code: 1 });
+                        return Err(StdError { result, code: 1 });
                     }
                 };
                 let _bytes_written = file_vec.write(&buf)
@@ -484,37 +526,45 @@ impl Executable for Cat {
                     writeln!(result, "cat: {}: file not valid UTF-8", path.to_str()
                         .expect("path is not valid unicode"))?;
 
-                    return Err(StdErr { result, code: 1 });
+                    return Err(StdError { result, code: 1 });
                 }
             }
         }
 
-        Ok(StdOut { result, code: 0 })
+        Ok(StdOut { result })
     }
 }
 
 struct Brk;
 
 impl Executable for Brk {
-    fn exec(_cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+    fn new() -> Brk {
+        Brk
+    }
+
+    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let result = String::new();
         aarch64::brk!(2);
 
-        Ok(StdOut { result, code: 0 })
+        Ok(StdOut { result })
     }
 }
 
 struct Blink;
 
 impl Executable for Blink {
-    fn exec(_cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+    fn new() -> Blink {
+        Blink
+    }
+
+    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let mut process_1 = Process::new().expect("Process::new() failed");
         process_1.context.elr = run_blinky as u64;
         process_1.context.sp = process_1.stack.top().as_u64();
         process_1.context.spsr = 0b1_10100_0000;
         SCHEDULER.add(process_1);
         let result = String::new();
-        Ok(StdOut { result, code: 0 })
+        Ok(StdOut { result })
 
     }
 }
@@ -522,11 +572,15 @@ impl Executable for Blink {
 struct Sleep;
 
 impl Executable for Sleep {
-    fn exec(_cmd: &Command, _cwd: &mut PathBuf) -> Result<StdOut, StdErr> {
+    fn new() -> Sleep {
+        Sleep
+    }
+
+    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let result = String::new();
         kernel_api::syscall::sleep(Duration::from_secs(10));
 
-        Ok(StdOut { result, code: 0 })
+        Ok(StdOut { result })
     }
 }
 

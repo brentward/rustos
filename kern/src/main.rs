@@ -42,26 +42,29 @@ pub static IRQ: Irq = Irq::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
-    pi::timer::spin_sleep(core::time::Duration::from_millis(250));
+    pi::timer::spin_sleep(core::time::Duration::from_millis(235));
     unsafe {
-        kprint!("Initializing ALLOCATOR... ");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
+        kprint!("{:.<30} ", "Initializing ALLOCATOR");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(320));
         ALLOCATOR.initialize();
         kprintln!("[ok]");
-        kprint!("Initializing FILESYSTEM... ");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
+        kprint!("{:.<30} ", "Initializing FILESYSTEM");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(128));
         FILESYSTEM.initialize();
         kprintln!("[ok]");
-        kprint!("Initializing IRQ... ");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
+        kprint!("{:.<30} ","Initializing IRQ");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(356));
         IRQ.initialize();
         kprintln!("[ok]");
-        kprint!("Initializing SCHEDULE... ");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
+        kprint!("{:.<30} ", "Initializing SCHEDULER");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(389));
         SCHEDULER.initialize();
         kprintln!("[ok]");
-        kprint!("Starting SCHEDULER... ");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(250));
+        kprint!("{:.<30} ", "Starting SCHEDULER");
+        pi::timer::spin_sleep(core::time::Duration::from_millis(400));
+        kprintln!("[ok]");
+        kprintln!("");
+        kprintln!("Welcome to BrentOS");
         SCHEDULER.start()
     }
 }
