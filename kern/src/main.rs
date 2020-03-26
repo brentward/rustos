@@ -42,27 +42,31 @@ pub static IRQ: Irq = Irq::uninitialized();
 
 #[no_mangle]
 fn kmain() -> ! {
-    pi::timer::spin_sleep(core::time::Duration::from_millis(235));
+    fn print_init_with_progress(msg: &str) {
+        kprint!("{}", msg);
+        let fake_random = (pi::timer::current_time().as_micros() & 0xFF) as u64 + 0xFF;
+        let align_to = 40 - msg.len() as u64;
+        for index in 0..align_to {
+            pi::timer::spin_sleep(core::time::Duration::from_millis(fake_random / align_to));
+            kprint!(".")
+        }
+    }
+    pi::timer::spin_sleep(core::time::Duration::from_millis(250));
     unsafe {
-        kprint!("{:.<30} ", "Initializing ALLOCATOR");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(320));
+        print_init_with_progress("Initializing ALLOCATOR");
         ALLOCATOR.initialize();
-        kprintln!("[ok]");
-        kprint!("{:.<30} ", "Initializing FILESYSTEM");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(128));
+        kprintln!(" [ok]");
+        print_init_with_progress("Initializing FILESYSTEM");
         FILESYSTEM.initialize();
-        kprintln!("[ok]");
-        kprint!("{:.<30} ","Initializing IRQ");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(356));
+        kprintln!(" [ok]");
+        print_init_with_progress("Initializing IRQ");
         IRQ.initialize();
-        kprintln!("[ok]");
-        kprint!("{:.<30} ", "Initializing SCHEDULER");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(389));
+        kprintln!(" [ok]");
+        print_init_with_progress("Initializing SCHEDULER");
         SCHEDULER.initialize();
-        kprintln!("[ok]");
-        kprint!("{:.<30} ", "Starting SCHEDULER");
-        pi::timer::spin_sleep(core::time::Duration::from_millis(400));
-        kprintln!("[ok]");
+        kprintln!(" [ok]");
+        print_init_with_progress("Starting SCHEDULER");
+        kprintln!(" [ok]");
         kprintln!("");
         kprintln!("Welcome to BrentOS");
         SCHEDULER.start()
