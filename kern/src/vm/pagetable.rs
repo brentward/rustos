@@ -5,6 +5,7 @@ use core::slice::Iter;
 use alloc::boxed::Box;
 use alloc::fmt;
 use core::alloc::{GlobalAlloc, Layout};
+use alloc::vec::Vec;
 
 use crate::allocator;
 use crate::param::*;
@@ -209,6 +210,8 @@ impl PageTable {
     }
 }
 
+// struct PageTableIter<'a>(Chain<Iter<'a, L3Entry>, Iter<'a, L3Entry>>);
+
 impl<'a> IntoIterator for &'a PageTable {
     type Item = &'a L3Entry;
     type IntoIter = Chain<Iter<'a, L3Entry>, Iter<'a, L3Entry>>;
@@ -231,12 +234,12 @@ impl KernPageTable {
     /// more details.
     pub fn new() -> KernPageTable {
         // // let page_table = KernPageTable(PageTable::new(EntryPerm::KERN_RW));
-        // let mut page_table = PageTable::new(EntryPerm::KERN_RW);
-        // let mut mem_addr = 0x0000_0000usize;
-        // let (_, mem_end) = allocator::memory_map()
-        //     .expect("unexpected None from allocator::memory_map()");
-        //
-        // for l3_entry in page_table.into_iter() {
+        let mut page_table = PageTable::new(EntryPerm::KERN_RW);
+        let mem_start = 0x0000_0000usize;
+        let (_, mem_end) = allocator::memory_map()
+            .expect("unexpected None from allocator::memory_map()");
+
+        // for l3_entry in &*page_table {
         //     if mem_addr > mem_end {
         //         break
         //     }
@@ -256,28 +259,26 @@ impl KernPageTable {
         //     );
         //     mem_addr += PAGE_SIZE;
         // }
-        // // let mut page_iter = page_table.into_iter();
-        // // for addr in (mem_start..mem_end).step_by(PAGE_SIZE) {
-        // //     let mut l3_entry = page_iter.next().expect("unexpected end to page table");
-        // //     // let mut page = unsafe { &mut *(addr as *mut Page) };
-        // //     let entry_attr = if addr >= IO_BASE && addr < IO_BASE_END {
-        // //         EntryAttr::Dev
-        // //     } else {
-        // //         EntryAttr::Mem
-        // //     };
-        // //     l3_entry.set(
-        // //         RawL2Entry::ADDR & (addr << 16)
-        // //             | RawL2Entry::AF & 0b1 << 10
-        // //             | RawL2Entry::SH & (EntrySh::ISh << 9)
-        // //             | RawL2Entry::AP & (EntryPerm::KERN_RW << 6)
-        // //             | RawL2Entry::ATTR & (entry_attr << 2)
-        // //             | RawL2Entry::TYPE & (EntryType::Table <<1)
-        // //             | RawL2Entry::VALID & EntryValid::Valid
-        // //     );
-        // //
-        // // }
-        // KernPageTable(page_table)
-        unimplemented!("KernPageTable::new()")
+        for addr in (mem_start..mem_end).step_by(PAGE_SIZE) {
+            let entry_attr = if addr >= IO_BASE && addr < IO_BASE_END {
+                EntryAttr::Dev
+            } else {
+                EntryAttr::Mem
+            };
+
+            let raw_l3_entry = RawL3Entry::new(
+                RawL2Entry::ADDR & (addr << 16) as u64
+                    | RawL2Entry::AF & 0b1 << 10
+                    | RawL2Entry::SH & (EntrySh::ISh << 9)
+                    | RawL2Entry::AP & (EntryPerm::KERN_RW << 6)
+                    | RawL2Entry::ATTR & (entry_attr << 2)
+                    | RawL2Entry::TYPE & (EntryType::Table <<1)
+                    | RawL2Entry::VALID & EntryValid::Valid
+            );
+            page_table.set_entry(VirtualAddr::from(addr), raw_l3_entry);
+
+        }
+        KernPageTable(page_table)
     }
 }
 
