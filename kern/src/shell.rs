@@ -145,25 +145,86 @@ pub fn shell(prefix: &str) {
         match Command::parse(input_str, &mut args_buf) {
             Ok(command) => {
                 let exec_result = match command.path() {
-                    "echo" => Echo::new().exec(&command, &mut cwd),
-                    "pwd" => Pwd::new().exec(&command, &mut cwd),
-                    "cd" => Cd::new().exec(&command, &mut cwd),
-                    "ls" => Ls::new().exec(&command, &mut cwd),
+                    "echo" => {
+                        match Echo::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    "pwd" => {
+                        match Pwd::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    "cd" => {
+                        match  Cd::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    "ls" =>{
+                        match Ls::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
                     "ll" => {
-                        let mut ll_cmd = Ls::new();
-                        ll_cmd.set_long(true);
-                        ll_cmd.exec(&command, &mut cwd)
-                    }
-                    "cat" => Cat::new().exec(&command, &mut cwd),
+                        match Ls::new(Some("l")) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    // "ll2" => {
+                    //     let mut ll_cmd = Ls::from(Some("l"))?;
+                    //     ll_cmd.set_long(true);
+                    //     ll_cmd.exec(&command, &mut cwd)
+                    // }
+                    "cat" => {
+                        match Cat::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
                     "exit" => {
                         kprintln!("Goodbye...");
                         break
                     },
-                    "sleep" => Sleep::new().exec(&command, &mut cwd),
-                    "brk" => Brk::new().exec(&command, &mut cwd),
-                    "blink" => Blink::new().exec(&command, &mut cwd),
+                    "sleep" => {
+                        match Sleep::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    "brk" => {
+                        match Brk::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    "blink" => {
+                        match Blink::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
                     "panic!" => panic!("called panic"),
-                    _path => Unknown::new().exec(&command, &mut cwd),
+                    _path => {
+                        match Unknown::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
                 };
                 match exec_result {
                     Ok(std_out) => {
@@ -184,7 +245,15 @@ pub fn shell(prefix: &str) {
     }
 }
 
-pub type StdResult = core::result::Result<StdOut, StdError>;
+pub type StdResult = Result<StdOut, StdError>;
+
+// impl From<StdError> for StdResult {
+//     fn from(error: StdError) -> StdResult {
+//         Err(error)
+//     }
+// }
+
+pub type ExecutableResult<T: Executable> = Result<T, StdError>;
 
 pub struct StdOut {
     pub result: String,
@@ -204,16 +273,16 @@ impl From<fmt::Error> for StdError {
     }
 }
 
-trait Executable {
-    fn new() -> Self;
+trait Executable: core::marker::Sized {
+    fn new(params: Option<&str>) -> ExecutableResult<Self>;
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult;
 }
 
 struct Echo;
 
 impl Executable for Echo {
-    fn new() -> Echo {
-        Echo
+    fn new(_params: Option<&str> ) -> ExecutableResult<Echo> {
+        Ok(Echo)
     }
 
     fn exec(&mut self, cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
@@ -233,8 +302,8 @@ impl Executable for Echo {
 struct Unknown;
 
 impl Executable for Unknown {
-    fn new() -> Unknown {
-        Unknown
+    fn new(_params: Option<&str>) -> ExecutableResult<Unknown> {
+        Ok(Unknown)
     }
 
     fn exec(&mut self, cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
@@ -248,8 +317,8 @@ impl Executable for Unknown {
 struct Pwd;
 
 impl Executable for Pwd {
-    fn new() -> Pwd {
-        Pwd
+    fn new(_params: Option<&str>) -> ExecutableResult<Pwd> {
+        Ok(Pwd)
     }
 
     fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
@@ -269,8 +338,8 @@ impl Executable for Pwd {
 struct Cd;
 
 impl Executable for Cd {
-    fn new() -> Cd {
-        Cd
+    fn new(_params: Option<&str>) -> ExecutableResult<Cd> {
+        Ok(Cd)
     }
 
     fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
@@ -327,11 +396,39 @@ impl Ls {
 }
 
 impl Executable for Ls {
-    fn new() -> Ls {
-        Ls {
-            show_hidden: false,
-            human_readable: false,
-            long: false,
+    fn new(params: Option<&str>) -> ExecutableResult<Ls> {
+        match params {
+            Some(params) => {
+                let mut show_hidden = false;
+                let mut human_readable = false;
+                let mut long = false;
+                for ch in params.chars() {
+                    match ch {
+                        'a' => show_hidden = true,
+                        'h' => human_readable = true,
+                        'l' => long = true,
+                        param => {
+                            let mut result = String::new();
+                            writeln!(result, "ls: invalid param: {}", param);
+
+                            return Err(StdError {
+                                result,
+                                code: 1,
+                            })
+                        },
+                    }
+                }
+                Ok(Ls {
+                    show_hidden,
+                    human_readable,
+                    long,
+                })
+            }
+            None => Ok(Ls {
+                show_hidden: false,
+                human_readable: false,
+                long: false,
+            }),
         }
     }
 
@@ -465,8 +562,8 @@ impl Executable for Ls {
 struct Cat;
 
 impl Executable for Cat {
-    fn new() -> Cat {
-        Cat
+    fn new(_params: Option<&str>) -> ExecutableResult<Cat> {
+        Ok(Cat)
     }
 
     fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
@@ -538,8 +635,8 @@ impl Executable for Cat {
 struct Brk;
 
 impl Executable for Brk {
-    fn new() -> Brk {
-        Brk
+    fn new(_params: Option<&str>) -> ExecutableResult<Brk> {
+        Ok(Brk)
     }
 
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
@@ -553,8 +650,8 @@ impl Executable for Brk {
 struct Blink;
 
 impl Executable for Blink {
-    fn new() -> Blink {
-        Blink
+    fn new(_params: Option<&str>) -> ExecutableResult<Blink> {
+        Ok(Blink)
     }
 
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
@@ -572,8 +669,8 @@ impl Executable for Blink {
 struct Sleep;
 
 impl Executable for Sleep {
-    fn new() -> Sleep {
-        Sleep
+    fn new(_params: Option<&str>) -> ExecutableResult<Sleep> {
+        Ok(Sleep)
     }
 
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
