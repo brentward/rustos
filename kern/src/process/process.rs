@@ -22,7 +22,7 @@ pub struct Process {
     /// The memory allocation used for the process's stack.
     pub stack: Stack,
     /// The page table describing the Virtual Memory of the process
-    // pub vmap: Box<UserPageTable>,
+    pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
 }
@@ -38,9 +38,11 @@ impl Process {
             Some(stack) => stack,
             None => return Err(OsError::NoMemory),
         };
+        let vmap = Box::new(UserPageTable::new());
         Ok(Process {
             context: Box::new(TrapFrame::default()),
             stack,
+            vmap,
             state: State::Ready,
         })
     }

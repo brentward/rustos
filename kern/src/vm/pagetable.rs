@@ -1,6 +1,7 @@
 use core::iter::Chain;
-use core::ops::{Deref, DerefMut, BitAnd};
+use core::ops::{Deref, DerefMut, BitAnd, Sub};
 use core::slice::Iter;
+use core::slice::from_raw_parts_mut;
 
 use alloc::boxed::Box;
 use alloc::fmt;
@@ -67,14 +68,13 @@ impl L3Entry {
     /// if valid. Otherwise, return `None`.
     fn get_page_addr(&self) -> Option<PhysicalAddr> {
         if self.is_valid() {
-            Some(PhysicalAddr::from(self.0.get_value(RawL3Entry::ADDR)))
+            Some(PhysicalAddr::from(self.0.get_masked(RawL3Entry::ADDR)))
         } else {
             None
         }
     }
 }
 
-// #[derive(Copy, Clone)]
 #[repr(C)]
 #[repr(align(65536))]
 pub struct L3PageTable {
@@ -96,6 +96,7 @@ impl L3PageTable {
     }
 }
 
+#[derive(Debug)]
 #[repr(C)]
 #[repr(align(65536))]
 pub struct PageTable {
@@ -113,39 +114,41 @@ impl PageTable {
             L3PageTable::new(),
         ];
 
-        l2_page_table.entries[0].set(
-            RawL2Entry::ADDR & (l3_page_tables[0].as_ptr().as_u64() << 16)
-                | RawL2Entry::AF & 0b1 << 10
-                | RawL2Entry::SH & (EntrySh::ISh << 9)
-                | RawL2Entry::AP & (perm << 6)
-                | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
-                | RawL2Entry::TYPE & (EntryType::Block <<1)
-                | RawL2Entry::VALID & EntryValid::Valid
-        );
-        l2_page_table.entries[1].set(
-            RawL2Entry::ADDR & (l3_page_tables[1].as_ptr().as_u64() << 16)
-                | RawL2Entry::AF & 0b1 << 10
-                | RawL2Entry::SH & (EntrySh::ISh << 9)
-                | RawL2Entry::AP & (perm << 6)
-                | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
-                | RawL2Entry::TYPE & (EntryType::Block <<1)
-                | RawL2Entry::VALID & EntryValid::Valid
-        );
+        l2_page_table.entries[0].set_masked(l3_page_tables[0].as_ptr().as_u64() << 16, RawL2Entry::ADDR);
+        l2_page_table.entries[0].set_masked(0b1 << 10, RawL2Entry::AF);
+        l2_page_table.entries[0].set_masked(EntrySh::ISh << 9, RawL2Entry::SH);
+        l2_page_table.entries[0].set_masked(perm << 6, RawL2Entry::AP);
+        l2_page_table.entries[0].set_masked(EntryAttr::Mem << 2, RawL2Entry::ATTR);
+        l2_page_table.entries[0].set_masked(EntryType::Block <<1, RawL2Entry::TYPE);
+        l2_page_table.entries[0].set_masked(EntryValid::Valid, RawL2Entry::VALID);
 
-        // l2_page_table.entries[0].set(RawL2Entry::ADDR & l3_page_tables[0].as_ptr().as_u64());
-        // l2_page_table.entries[0].set(RawL2Entry::AF & 0b1);
-        // l2_page_table.entries[0].set(RawL2Entry::SH & EntrySh::ISh);
-        // l2_page_table.entries[0].set(RawL2Entry::AP & perm);
-        // l2_page_table.entries[0].set(RawL2Entry::ATTR & EntryAttr::Mem);
-        // l2_page_table.entries[0].set(RawL2Entry::TYPE & EntryType::Block);
-        // l2_page_table.entries[0].set(RawL2Entry::VALID & EntryValid::Valid);
-        // l2_page_table.entries[1].set(RawL2Entry::ADDR & l3_page_tables[1].as_ptr().as_u64());
-        // l2_page_table.entries[1].set(RawL2Entry::AF & 0b1);
-        // l2_page_table.entries[1].set(RawL2Entry::SH & EntrySh::ISh);
-        // l2_page_table.entries[1].set(RawL2Entry::AP & perm);
-        // l2_page_table.entries[1].set(RawL2Entry::ATTR & EntryAttr::Mem);
-        // l2_page_table.entries[1].set(RawL2Entry::TYPE & EntryType::Block);
-        // l2_page_table.entries[1].set(RawL2Entry::VALID & EntryValid::Valid);
+        l2_page_table.entries[1].set_masked(l3_page_tables[1].as_ptr().as_u64(), RawL2Entry::ADDR);
+        l2_page_table.entries[1].set_masked(0b1 << 10, RawL2Entry::AF);
+        l2_page_table.entries[1].set_masked(EntrySh::ISh << 9, RawL2Entry::SH);
+        l2_page_table.entries[1].set_masked(perm << 6, RawL2Entry::AP);
+        l2_page_table.entries[1].set_masked(EntryAttr::Mem << 2, RawL2Entry::ATTR);
+        l2_page_table.entries[1].set_masked(EntryType::Block <<1, RawL2Entry::TYPE);
+        l2_page_table.entries[1].set_masked(EntryValid::Valid, RawL2Entry::VALID);
+
+        // l2_page_table.entries[0].set(
+        //     RawL2Entry::ADDR & (l3_page_tables[0].as_ptr().as_u64() << 16)
+        //         | RawL2Entry::AF & 0b1 << 10
+        //         | RawL2Entry::SH & (EntrySh::ISh << 9)
+        //         | RawL2Entry::AP & (perm << 6)
+        //         | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
+        //         | RawL2Entry::TYPE & (EntryType::Block <<1)
+        //         | RawL2Entry::VALID & EntryValid::Valid
+        // );
+        // l2_page_table.entries[1].set(
+        //     RawL2Entry::ADDR & (l3_page_tables[1].as_ptr().as_u64() << 16)
+        //         | RawL2Entry::AF & 0b1 << 10
+        //         | RawL2Entry::SH & (EntrySh::ISh << 9)
+        //         | RawL2Entry::AP & (perm << 6)
+        //         | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
+        //         | RawL2Entry::TYPE & (EntryType::Block <<1)
+        //         | RawL2Entry::VALID & EntryValid::Valid
+        // );
+
         Box::new(PageTable {
             l2: l2_page_table,
             l3: l3_page_tables,
@@ -162,8 +165,8 @@ impl PageTable {
     /// Panics if the virtual address is not properly aligned to page size.
     /// Panics if extracted L2index exceeds the number of L3PageTable.
     fn locate(va: VirtualAddr) -> (usize, usize) {
-        let l2_index = va.bitand(VirtualAddr::from(0b11usize << 29)).as_usize();
-        let l3_index = va.bitand(VirtualAddr::from(0b1_1111_1111_1111usize << 16)).as_usize();
+        let l2_index = va.bitand(VirtualAddr::from(0b11usize << 29)).as_usize() >> 29;
+        let l3_index = va.bitand(VirtualAddr::from(0b1_1111_1111_1111usize << 16)).as_usize() >> 16;
         (l2_index, l3_index)
     }
 
@@ -233,43 +236,22 @@ impl KernPageTable {
     /// as address[47:16]. Refer to the definition of `RawL3Entry` in `vmsa.rs` for
     /// more details.
     pub fn new() -> KernPageTable {
-        // // let page_table = KernPageTable(PageTable::new(EntryPerm::KERN_RW));
         let mut page_table = PageTable::new(EntryPerm::KERN_RW);
         let mem_start = 0x0000_0000usize;
         let (_, mem_end) = allocator::memory_map()
             .expect("unexpected None from allocator::memory_map()");
 
-        // for l3_entry in &*page_table {
-        //     if mem_addr > mem_end {
-        //         break
-        //     }
-        //     let entry_attr = if mem_addr >= IO_BASE && mem_addr < IO_BASE_END {
-        //         EntryAttr::Dev
-        //     } else {
-        //         EntryAttr::Mem
-        //     };
-        //     l3_entry.0.set(
-        //         RawL2Entry::ADDR & ((mem_addr << 16) as u64)
-        //             | RawL2Entry::AF & 0b1 << 10
-        //             | RawL2Entry::SH & (EntrySh::ISh << 9)
-        //             | RawL2Entry::AP & (EntryPerm::KERN_RW << 6)
-        //             | RawL2Entry::ATTR & (entry_attr << 2)
-        //             | RawL2Entry::TYPE & (EntryType::Table <<1)
-        //             | RawL2Entry::VALID & EntryValid::Valid
-        //     );
-        //     mem_addr += PAGE_SIZE;
-        // }
         for addr in (mem_start..mem_end).step_by(PAGE_SIZE) {
-            let entry_attr = if addr >= IO_BASE && addr < IO_BASE_END {
-                EntryAttr::Dev
+            let (entry_attr, entry_sh) = if addr >= IO_BASE && addr < IO_BASE_END {
+                (EntryAttr::Dev, EntrySh::OSh)
             } else {
-                EntryAttr::Mem
+                (EntryAttr::Mem, EntrySh::ISh)
             };
 
             let raw_l3_entry = RawL3Entry::new(
-                RawL2Entry::ADDR & (addr << 16) as u64
+                RawL2Entry::ADDR & (addr) as u64
                     | RawL2Entry::AF & 0b1 << 10
-                    | RawL2Entry::SH & (EntrySh::ISh << 9)
+                    | RawL2Entry::SH & (entry_sh << 8)
                     | RawL2Entry::AP & (EntryPerm::KERN_RW << 6)
                     | RawL2Entry::ATTR & (entry_attr << 2)
                     | RawL2Entry::TYPE & (EntryType::Table <<1)
@@ -288,13 +270,14 @@ pub enum PagePerm {
     RWX,
 }
 
+#[derive(Debug)]
 pub struct UserPageTable(Box<PageTable>);
 
 impl UserPageTable {
     /// Returns a new `UserPageTable` containing a `PageTable` created with
     /// `USER_RW` permission.
     pub fn new() -> UserPageTable {
-        unimplemented!("UserPageTable::new()")
+        UserPageTable(PageTable::new(EntryPerm::USER_RW))
     }
 
     /// Allocates a page and set an L3 entry translates given virtual address to the
@@ -308,7 +291,35 @@ impl UserPageTable {
     /// TODO. use Result<T> and make it failurable
     /// TODO. use perm properly
     pub fn alloc(&mut self, va: VirtualAddr, _perm: PagePerm) -> &mut [u8] {
-        unimplemented!("alloc()");
+        if va.as_usize() < USER_IMG_BASE {
+            panic!("UserPageTable::alloc() called with VirtualAddr lower than {}", USER_IMG_BASE);
+        }
+        let va_locate = va.sub(VirtualAddr::from(USER_IMG_BASE));
+        let (l2_index, l3_index) = PageTable::locate(va_locate);
+        let l2_entry = self.l2.entries[l2_index];
+        let l3_addr = l2_entry.get_value(RawL2Entry::ADDR);
+        let l3_page_table = if self.l3[0].as_ptr().as_u64() == l3_addr {
+            &self.l3[0]
+        } else if self.l3[1].as_ptr().as_u64() == l3_addr {
+            &self.l3[1]
+        } else {
+            panic!("Unexpected failure to find L3PageTable in PageTable")
+        };
+        let mut l3_entry = l3_page_table.entries[l3_index];
+        if l3_entry.is_valid() {
+            panic!("VirtualAddr is already allocated")
+        }
+        let page_ptr = unsafe { ALLOCATOR.alloc(Page::layout()) };
+        l3_entry.0.set_masked(page_ptr as u64, RawL3Entry::ADDR);
+        l3_entry.0.set_masked(0b1 << 10, RawL3Entry::AF);
+        l3_entry.0.set_masked(EntrySh::ISh << 9, RawL3Entry::SH);
+        l3_entry.0.set_masked(EntryPerm::USER_RW, RawL3Entry::AP);
+        l3_entry.0.set_masked(EntryAttr::Mem << 2, RawL3Entry::ATTR);
+        l3_entry.0.set_masked(EntryType::Table <<1, RawL3Entry::TYPE);
+        l3_entry.0.set_masked(EntryValid::Valid, RawL3Entry::VALID);
+
+        let mut page = unsafe { from_raw_parts_mut(page_ptr, PAGE_SIZE)} ;
+        page
     }
 }
 
@@ -337,6 +348,33 @@ impl DerefMut for KernPageTable {
 impl DerefMut for UserPageTable {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl Drop for UserPageTable {
+    fn drop(&mut self) {
+        for entry in &*self.0 {
+            if entry.is_valid() {
+                let mut pa = PhysicalAddr::from(entry.0.get_masked(RawL3Entry::ADDR));
+                unsafe { ALLOCATOR.dealloc(pa.as_mut_ptr(), Page::layout()) };
+            }
+        }
+    }
+}
+
+impl fmt::Debug for L2PageTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("L2PageTable")
+            .field("entries", &"<entry table>")
+            .finish()
+    }
+}
+
+impl fmt::Debug for L3PageTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("L3PageTable")
+            .field("entries", &"<entry table>")
+            .finish()
     }
 }
 

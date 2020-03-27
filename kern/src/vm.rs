@@ -26,7 +26,9 @@ impl VMManager {
     /// The caller should assure that the method is invoked only once during the kernel
     /// initialization.
     pub fn initialize(&self) {
-        unimplemented!();
+        let mut kern_page_table = self.0.lock().as_ref();
+
+        kern_page_table = Some(&KernPageTable::new());
     }
 
     /// Set up the virtual memory manager.
