@@ -142,7 +142,8 @@ impl PageTable {
         // page_table.l2.entries[0].set(entry_0_value);
         // page_table.l2.entries[1].set(entry_1_value);
 
-        page_table.l2.entries[0].set_value(page_table.l3[0].as_ptr().as_u64(), RawL2Entry::ADDR);
+        // page_table.l2.entries[0].set_value(page_table.l3[0].as_ptr().as_u64(), RawL2Entry::ADDR);
+        page_table.l2.entries[0].set_masked(page_table.l3[0].as_ptr().as_u64(), RawL2Entry::ADDR);
         // page_table.l2.entries[0].set_bit(RawL2Entry::AF);
         page_table.l2.entries[0].set_value(EntrySh::ISh, RawL2Entry::SH);
         page_table.l2.entries[0].set_value(perm, RawL2Entry::AP);
@@ -150,7 +151,8 @@ impl PageTable {
         page_table.l2.entries[0].set_value(EntryType::Table, RawL2Entry::TYPE);
         page_table.l2.entries[0].set_value(EntryValid::Valid, RawL2Entry::VALID);
 
-        page_table.l2.entries[1].set_value(page_table.l3[1].as_ptr().as_u64(), RawL2Entry::ADDR);
+        // page_table.l2.entries[1].set_value(page_table.l3[1].as_ptr().as_u64(), RawL2Entry::ADDR);
+        page_table.l2.entries[1].set_masked(page_table.l3[1].as_ptr().as_u64(), RawL2Entry::ADDR);
         // page_table.l2.entries[1].set_bit(RawL2Entry::AF);
         page_table.l2.entries[1].set_value(EntrySh::ISh, RawL2Entry::SH);
         page_table.l2.entries[1].set_value(perm, RawL2Entry::AP);
@@ -204,9 +206,15 @@ impl PageTable {
     /// Panics if the virtual address is not properly aligned to page size.
     /// Panics if extracted L2index exceeds the number of L3PageTable.
     fn locate(va: VirtualAddr) -> (usize, usize) {
+        if !allocator::util::has_alignment(va.as_usize(), Page::SIZE) {
+            panic!("VirtualAddr: {} is not aligned to page size: {}", va.as_usize(), Page::SIZE);
+        }
         // let l2_index = va.bitand(VirtualAddr::from(0b1usize << 29)).as_usize() >> 29;
         // let l3_index = va.bitand(VirtualAddr::from(0x1FFFusize << 16)).as_usize() >> 16;
         let l2_index = (va.as_usize() & 0b1usize << 29) >> 29;
+        if l2_index >= 2 {
+            panic!("L2 Index: {} from VirtualAddr: {} is greater than 2", l2_index, va.as_usize());
+        }
         let l3_index = (va.as_usize() & 0x1FFFusize << 16) >> 16;
         (l2_index, l3_index)
     }
@@ -246,7 +254,8 @@ impl PageTable {
     pub fn set_entry(&mut self, va: VirtualAddr, entry: RawL3Entry) -> &mut Self {
         let (l2_index, l3_index) = PageTable::locate(va);
         let l2_entry = self.l2.entries[l2_index];
-        let l3_addr = l2_entry.get_value(RawL2Entry::ADDR) as u64;
+        // let l3_addr = l2_entry.get_value(RawL2Entry::ADDR) as u64;
+        let l3_addr = l2_entry.get_masked(RawL2Entry::ADDR) as u64;
         // let page_table_ptr = l3_address as *mut L3PageTable;
         // let mut page_table = unsafe {
         //     page_table_ptr.as_mut().expect("L3Page table failed to unwrap")
@@ -254,9 +263,11 @@ impl PageTable {
         // let mut l3_entry = page_table.entries[l3_index];
         // l3_entry.0 = entry;
 
-        if self.l3[0].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
+        // if self.l3[0].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
+        if self.l3[0].as_ptr().as_u64() == l3_addr {
             self.l3[0].entries[l3_index].0.set(entry.get())
-        } else if self.l3[1].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
+        // } else if self.l3[1].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
+        } else if self.l3[1].as_ptr().as_u64() == l3_addr {
             self.l3[1].entries[l3_index].0.set(entry.get())
         } else {
             panic!("Unexpected failure to find L3PageTable in PageTable::set_entry()")
@@ -304,7 +315,7 @@ impl KernPageTable {
     /// more details.
     pub fn new() -> KernPageTable {
         let mut page_table = PageTable::new(EntryPerm::KERN_RW);
-        let mut addr = 0u64;
+        let mut addr = 0x0000_0000u64;
         let (_, mem_end) = allocator::memory_map()
             .expect("unexpected None from allocator::memory_map()");
 
@@ -589,15 +600,14 @@ impl fmt::Debug for L3PageTable {
     }
 }
 
-pub mod entry_mask {
-    pub const ADDR: u64 = 0xFFFFFFFF << 16;
-    pub const AF: u64 = 0b1 << 10;
-    pub const SH: u64 = 0b11 << 8;
-    pub const AP: u64 = 0b11 << 6;
-    pub const ATTR: u64 = 0b111 << 2;
-    pub const TYPE: u64 = 0b1 << 1;
-    pub const VALID: u64 = 0b1;
-}
-
+// pub mod entry_mask {
+//     pub const ADDR: u64 = 0xFFFFFFFF << 16;
+//     pub const AF: u64 = 0b1 << 10;
+//     pub const SH: u64 = 0b11 << 8;
+//     pub const AP: u64 = 0b11 << 6;
+//     pub const ATTR: u64 = 0b111 << 2;
+//     pub const TYPE: u64 = 0b1 << 1;
+//     pub const VALID: u64 = 0b1;
+// }
 // FIXME: Implement `Drop` for `UserPageTable`.
 // FIXME: Implement `fmt::Debug` as you need.

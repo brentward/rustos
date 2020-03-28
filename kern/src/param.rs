@@ -13,7 +13,7 @@ pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const USER_MASK_BITS: usize = 34;
 pub const KERNEL_MASK_BITS: usize = 32;
 
-pub const USER_IMG_BASE: usize = 0xffff_ffff_c000_0000;
+pub const USER_IMG_BASE: usize = 0xFFFF_FFFF_C000_0000;
 const_assert_eq!(
     USER_IMG_BASE,
     ((1 << USER_MASK_BITS) - 1) << (64 - USER_MASK_BITS)
@@ -21,7 +21,7 @@ const_assert_eq!(
 pub const USER_STACK_BASE: usize = core::usize::MAX & PAGE_MASK; 
 pub const USER_MAX_VM_SIZE: usize = 0x4000_0000;
 const_assert_eq!(USER_IMG_BASE.wrapping_add(USER_MAX_VM_SIZE), 0);
-pub const KERN_STACK_BASE: usize = 0x80_000;
+pub const KERN_STACK_BASE: usize = 0x8_0000;
 
 /// The `tick` time.
 // FIXME: When you're ready, change this to something more reasonable.

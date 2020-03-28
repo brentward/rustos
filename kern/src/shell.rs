@@ -247,13 +247,7 @@ pub fn shell(prefix: &str) {
 
 pub type StdResult = Result<StdOut, StdError>;
 
-// impl From<StdError> for StdResult {
-//     fn from(error: StdError) -> StdResult {
-//         Err(error)
-//     }
-// }
-
-pub type ExecutableResult<T: Executable> = Result<T, StdError>;
+pub type ExecutableResult<T> = Result<T, StdError>;
 
 pub struct StdOut {
     pub result: String,
@@ -409,7 +403,7 @@ impl Executable for Ls {
                         'l' => long = true,
                         param => {
                             let mut result = String::new();
-                            writeln!(result, "ls: invalid param: {}", param);
+                            writeln!(result, "ls: invalid param: {}", param)?;
 
                             return Err(StdError {
                                 result,

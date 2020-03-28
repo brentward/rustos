@@ -48,6 +48,7 @@ impl VMManager {
             assert!(ID_AA64MMFR0_EL1.get_value(ID_AA64MMFR0_EL1::TGran64) == 0);
 
             let ips = ID_AA64MMFR0_EL1.get_value(ID_AA64MMFR0_EL1::PARange);
+            kprintln!("1");
 
             // (ref. D7.2.70: Memory Attribute Indirection Register)
             MAIR_EL1.set(
@@ -55,6 +56,7 @@ impl VMManager {
                 (0x04 <<  8) |// AttrIdx=1: device, nGnRE (must be OSH too)
                 (0x44 << 16), // AttrIdx=2: non cacheable
             );
+            kprintln!("2");
             // (ref. D7.2.91: Translation Control Register)
             TCR_EL1.set(
                 (0b00 << 37) |// TBI=0, no tagging
@@ -72,17 +74,25 @@ impl VMManager {
                 (0b0  <<  7) |// EPD0 enables lower half
                 ((KERNEL_MASK_BITS as u64) << 0), // T0SZ=32 (4GB)
             );
+            kprintln!("3");
             isb();
+            kprintln!("4");
 
             TTBR0_EL1.set(baddr);
             TTBR1_EL1.set(baddr);
+            kprintln!("5");
 
             asm!("dsb ish");
+            kprintln!("6");
             isb();
+            kprintln!("7");
 
             SCTLR_EL1.set(SCTLR_EL1.get() | SCTLR_EL1::I | SCTLR_EL1::C | SCTLR_EL1::M);
+            kprintln!("8");
             asm!("dsb sy");
+            kprintln!("9");
             isb();
+            kprintln!("10");
         }
         kprintln!("out of unsafe");
 
