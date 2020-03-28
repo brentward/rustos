@@ -3,6 +3,7 @@ use crate::console::kprintln;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    kprintln!("");
     kprintln!(r#"                             __"#);
     kprintln!(r#"                   _ ,___,-'",-=-."#);
     kprintln!(r#"       __,-- _ _,-'_)_  (""`'-._\ `."#);

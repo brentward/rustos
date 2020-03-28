@@ -26,9 +26,9 @@ impl VMManager {
     /// The caller should assure that the method is invoked only once during the kernel
     /// initialization.
     pub fn initialize(&self) {
-        let mut kern_page_table = self.0.lock().as_ref();
+        *self.0.lock() = Some(KernPageTable::new());
 
-        kern_page_table = Some(&KernPageTable::new());
+        self.setup();
     }
 
     /// Set up the virtual memory manager.
@@ -41,6 +41,8 @@ impl VMManager {
     pub fn setup(&self) {
         let kern_page_table = self.0.lock();
         let baddr = kern_page_table.as_ref().unwrap().get_baddr().as_u64();
+        kprintln!("baddr: {}", baddr);
+        kprintln!("kern_page_table: {:#?}", kern_page_table.as_ref().unwrap());
 
         unsafe {
             assert!(ID_AA64MMFR0_EL1.get_value(ID_AA64MMFR0_EL1::TGran64) == 0);
@@ -82,6 +84,8 @@ impl VMManager {
             asm!("dsb sy");
             isb();
         }
+        kprintln!("out of unsafe");
+
     }
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.
