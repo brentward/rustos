@@ -47,7 +47,20 @@ pub fn exit() -> ! {
 }
 
 pub fn write(b: u8) {
-    unimplemented!("write()");
+    if !b.is_ascii() {
+        panic!("{} is not valid ascii", b)
+    }
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              svc $2
+              mov $1, x7"
+             : "=r"(ecode)
+             : "r"(b), "i"(NR_WRITE)
+             : "x0", "x7"
+             : "volatile");
+    }
 }
 
 pub fn getpid() -> u64 {
