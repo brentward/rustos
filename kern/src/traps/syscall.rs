@@ -101,6 +101,6 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         3 => sys_exit(tf),
         4 => sys_write(tf.x[0] as u8, tf),
         5 => sys_getpid(tf),
-        _ => (),
+        _ => tf.x[7] = 1,
     }
 }

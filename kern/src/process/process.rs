@@ -3,12 +3,17 @@ use shim::io;
 use shim::path::Path;
 use core::mem;
 
+use fat32::traits::FileSystem;
+use fat32::traits::{Dir, Entry, Metadata};
+
 use aarch64;
 
 use crate::param::*;
 use crate::process::{Stack, State};
 use crate::traps::TrapFrame;
 use crate::vm::*;
+use crate::FILESYSTEM;
+
 use kernel_api::{OsError, OsResult};
 
 /// Type alias for the type of a process ID.
@@ -60,8 +65,14 @@ impl Process {
         use crate::VMM;
 
         let mut p = Process::do_load(pn)?;
-
-        //FIXME: Set trapframe for the process.
+        p.context.sp = Process::get_stack_top().as_u64();
+        p.context.elr = Process::get_image_base().as_u64();
+        p.context.ttbr0 = VMM.get_baddr().as_u64();
+        p.context.tpidr = p.vmap.get_baddr().as_u64();
+        p.context.spsr = p.context.spsr |
+            aarch64::SPSR_EL1::D |
+            aarch64::SPSR_EL1::A |
+            aarch64::SPSR_EL1::F;
 
         Ok(p)
     }
@@ -70,30 +81,60 @@ impl Process {
     /// Allocates one page for stack with read/write permission, and N pages with read/write/execute
     /// permission to load file's contents.
     fn do_load<P: AsRef<Path>>(pn: P) -> OsResult<Process> {
-        unimplemented!();
+        use io::{Write, Read};
+        use core::ops::AddAssign;
+
+        let mut p = Process::new()?;
+        let stack_page = p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
+        let pn = pn.as_ref();
+        let entry = FILESYSTEM.open(pn)?;
+
+        // let mut file_vec = Vec::new();
+        // let mut bytes_read = 0usize;
+        // let total_size = entry.size();
+        let mut file = match entry.into_file() {
+            Some(file) => file,
+            None => return Err(OsError::IoErrorInvalidData)
+        };
+        let mut current_address = Process::get_image_base();
+        loop {
+            let mut buf = p.vmap.alloc(current_address, PagePerm::RWX);
+            let bytes = file.read(buf)?;
+            if bytes == 0 {
+                break;
+            }
+            current_address.add_assign(VirtualAddr::from(Page::SIZE));
+            // let _bytes_written = file_vec.write(&buf)
+            //     .expect("failed to write to vector");
+            // bytes_read += bytes;
+        }
+         Ok(p)
+        // while file_vec.len() > bytes_read {
+        //     file_vec.pop();
+        // }
     }
 
     /// Returns the highest `VirtualAddr` that is supported by this system.
     pub fn get_max_va() -> VirtualAddr {
-        unimplemented!();
+        VirtualAddr::from(USER_IMG_BASE + USER_MAX_VM_SIZE)
     }
 
     /// Returns the `VirtualAddr` represents the base address of the user
     /// memory space.
     pub fn get_image_base() -> VirtualAddr {
-        unimplemented!();
+        VirtualAddr::from(USER_IMG_BASE)
     }
 
     /// Returns the `VirtualAddr` represents the base address of the user
     /// process's stack.
     pub fn get_stack_base() -> VirtualAddr {
-        unimplemented!();
+        VirtualAddr::from(USER_STACK_BASE - Page::SIZE)
     }
 
     /// Returns the `VirtualAddr` represents the top of the user process's
     /// stack.
     pub fn get_stack_top() -> VirtualAddr {
-        unimplemented!();
+        VirtualAddr::from(USER_STACK_BASE - Stack::ALIGN)
     }
 
     /// Returns `true` if this process is ready to be scheduled.

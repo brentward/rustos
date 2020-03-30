@@ -6,7 +6,6 @@ use core::slice::from_raw_parts_mut;
 use alloc::boxed::Box;
 use alloc::fmt;
 use core::alloc::{GlobalAlloc, Layout};
-use alloc::vec::Vec;
 
 use crate::allocator;
 use crate::param::*;

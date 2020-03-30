@@ -300,6 +300,25 @@ pub extern "C" fn  test_user_process() -> ! {
     }
 }
 
+pub extern "C" fn  test_user_brk() -> ! {
+    loop {
+        let ms = 10000u64;
+        let error: u64;
+        let elapsed_ms: u64;
+
+        unsafe {
+            asm!("mov x0, $2
+              brk 1
+              mov $0, x0
+              mov $1, x7"
+                 : "=r"(elapsed_ms), "=r"(error)
+                 : "r"(ms)
+                 : "x0", "x7"
+                 : "volatile");
+        }
+    }
+}
+
 pub extern "C" fn run_shell() {
     loop { shell::shell("> "); }
 }
