@@ -3,7 +3,8 @@ use core::fmt;
 #[repr(C)]
 #[derive(Default, Copy, Clone, Debug)]
 pub struct TrapFrame {
-    pub ttbr: [u64; 2],
+    pub ttbr0: u64,
+    pub ttbr1: u64,
     pub elr: u64,
     pub spsr: u64,
     pub sp: u64,

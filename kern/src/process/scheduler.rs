@@ -88,13 +88,39 @@ impl GlobalScheduler {
         *self.0.lock() = Some(Scheduler::new());
 
         let mut process_0 = Process::new().expect("Process::new() failed");
-        process_0.context.elr = run_shell as u64;
+        // process_0.context.elr = run_shell as u64;
         process_0.context.sp = process_0.stack.top().as_u64();
-        process_0.context.spsr = process_0.context.spsr & SPSR_EL1::D & SPSR_EL1::A & SPSR_EL1::F;
-        process_0.context.ttbr[0] = VMM.get_baddr().as_u64();
-        process_0.context.ttbr[1] = process_0.vmap.get_baddr().as_u64();
+        process_0.context.spsr = process_0.context.spsr | SPSR_EL1::D | SPSR_EL1::A | SPSR_EL1::F;
+        process_0.context.ttbr0 = VMM.get_baddr().as_u64();
+        process_0.context.ttbr1 = process_0.vmap.get_baddr().as_u64();
+
+        self.test_phase_3(&mut process_0);
+
+        process_0.context.elr = USER_IMG_BASE as u64;
+
+        // let mut process_1 = Process::new().expect("Process::new() failed");
+        // process_1.context.sp = process_1.stack.top().as_u64();
+        // process_1.context.spsr = process_1.context.spsr | SPSR_EL1::D | SPSR_EL1::A | SPSR_EL1::F;
+        // process_1.context.ttbr0 = VMM.get_baddr().as_u64();
+        // process_1.context.ttbr1 = process_1.vmap.get_baddr().as_u64();
+        //
+        // self.test_phase_3(&mut process_1);
+        //
+        // process_1.context.elr = USER_IMG_BASE as u64;
+        //
+        // let mut process_2 = Process::new().expect("Process::new() failed");
+        // process_2.context.sp = process_2.stack.top().as_u64();
+        // process_2.context.spsr = process_2.context.spsr | SPSR_EL1::D | SPSR_EL1::A | SPSR_EL1::F;
+        // process_2.context.ttbr0 = VMM.get_baddr().as_u64();
+        // process_2.context.ttbr1 = process_2.vmap.get_baddr().as_u64();
+        //
+        // self.test_phase_3(&mut process_2);
+        //
+        // process_2.context.elr = USER_IMG_BASE as u64;
 
         self.add(process_0);
+        // self.add(process_1);
+        // self.add(process_2);
 
         // let mut process_1 = Process::new().expect("Process::new() failed");
         // process_1.context.elr = run_blinky as u64;
@@ -131,18 +157,18 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    // pub fn test_phase_3(&self, proc: &mut Process){
-    //     use crate::vm::{VirtualAddr, PagePerm};
-    //
-    //     let mut page = proc.vmap.alloc(
-    //         VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
-    //
-    //     let text = unsafe {
-    //         core::slice::from_raw_parts(test_user_process as *const u8, 24)
-    //     };
-    //
-    //     page[0..24].copy_from_slice(text);
-    // }
+    pub fn test_phase_3(&self, proc: &mut Process){
+        use crate::vm::{VirtualAddr, PagePerm};
+
+        let mut page = proc.vmap.alloc(
+            VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
+
+        let text = unsafe {
+            core::slice::from_raw_parts(test_user_process as *const u8, 24)
+        };
+
+        page[0..24].copy_from_slice(text);
+    }
 }
 
 #[derive(Debug)]
@@ -257,7 +283,7 @@ impl Scheduler {
 
 pub extern "C" fn  test_user_process() -> ! {
     loop {
-        let ms = 10000;
+        let ms = 10000u64;
         let error: u64;
         let elapsed_ms: u64;
 

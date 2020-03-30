@@ -61,7 +61,7 @@ impl L3Entry {
 
     /// Returns `true` if the L3Entry is valid and `false` otherwise.
     fn is_valid(&self) -> bool {
-        self.0.get_masked(RawL3Entry::VALID) == 1
+        self.0.get_value(RawL3Entry::VALID) == EntryValid::Valid
     }
 
     /// Extracts `ADDR` field of the L3Entry and returns as a `PhysicalAddr`
@@ -116,84 +116,22 @@ impl PageTable {
             ],
         });
 
-        // let mut l2_page_table = L2PageTable::new();
-        // let l3_page_tables = [
-        //     L3PageTable::new(),
-        //     L3PageTable::new(),
-        // ];
-
-        // let entry_0_addr = page_table.l3[0].as_ptr().as_ptr() as u64;
-        // let entry_1_addr = page_table.l3[0].as_ptr().as_ptr() as u64;
-
-
-        // let entry_0_value = page_table.l3[0].as_ptr().as_u64() << 16
-        //     | EntrySh::ISh << 8
-        //     | perm << 6
-        //     | EntryAttr::Mem << 2
-        //     | EntryType::Block << 1
-        //     | EntryValid::Valid;
-        // let entry_1_value = page_table.l3[1].as_ptr().as_u64() << 16
-        //     | EntrySh::ISh << 8
-        //     | perm << 6
-        //     | EntryAttr::Mem << 2
-        //     | EntryType::Block << 1
-        //     | EntryValid::Valid;
-        //
-        // page_table.l2.entries[0].set(entry_0_value);
-        // page_table.l2.entries[1].set(entry_1_value);
-
-        // page_table.l2.entries[0].set_value(page_table.l3[0].as_ptr().as_u64(), RawL2Entry::ADDR);
         page_table.l2.entries[0].set_masked(page_table.l3[0].as_ptr().as_u64(), RawL2Entry::ADDR);
         // page_table.l2.entries[0].set_bit(RawL2Entry::AF);
-        page_table.l2.entries[0].set_value(EntrySh::ISh, RawL2Entry::SH);
-        page_table.l2.entries[0].set_value(perm, RawL2Entry::AP);
-        page_table.l2.entries[0].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
+        // page_table.l2.entries[0].set_value(EntrySh::ISh, RawL2Entry::SH);
+        // page_table.l2.entries[0].set_value(perm, RawL2Entry::AP);
+        // page_table.l2.entries[0].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
         page_table.l2.entries[0].set_value(EntryType::Table, RawL2Entry::TYPE);
         page_table.l2.entries[0].set_value(EntryValid::Valid, RawL2Entry::VALID);
 
-        // page_table.l2.entries[1].set_value(page_table.l3[1].as_ptr().as_u64(), RawL2Entry::ADDR);
         page_table.l2.entries[1].set_masked(page_table.l3[1].as_ptr().as_u64(), RawL2Entry::ADDR);
         // page_table.l2.entries[1].set_bit(RawL2Entry::AF);
-        page_table.l2.entries[1].set_value(EntrySh::ISh, RawL2Entry::SH);
-        page_table.l2.entries[1].set_value(perm, RawL2Entry::AP);
-        page_table.l2.entries[1].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
+        // page_table.l2.entries[1].set_value(EntrySh::ISh, RawL2Entry::SH);
+        // page_table.l2.entries[1].set_value(perm, RawL2Entry::AP);
+        // page_table.l2.entries[1].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
         page_table.l2.entries[1].set_value(EntryType::Table, RawL2Entry::TYPE);
         page_table.l2.entries[1].set_value(EntryValid::Valid, RawL2Entry::VALID);
 
-        // l2_page_table.entries[0].set_masked(l3_page_tables[0].as_ptr().as_u64() << 16, RawL2Entry::ADDR);
-        // l2_page_table.entries[0].set_masked(0b1 << 10, RawL2Entry::AF);
-        // l2_page_table.entries[0].set_masked(EntrySh::ISh << 9, RawL2Entry::SH);
-        // l2_page_table.entries[0].set_masked(perm << 6, RawL2Entry::AP);
-        // l2_page_table.entries[0].set_masked(EntryAttr::Mem << 2, RawL2Entry::ATTR);
-        // l2_page_table.entries[0].set_masked(EntryType::Block <<1, RawL2Entry::TYPE);
-        // l2_page_table.entries[0].set_masked(EntryValid::Valid, RawL2Entry::VALID);
-        //
-        // l2_page_table.entries[1].set_masked(l3_page_tables[1].as_ptr().as_u64(), RawL2Entry::ADDR);
-        // l2_page_table.entries[1].set_masked(0b1 << 10, RawL2Entry::AF);
-        // l2_page_table.entries[1].set_masked(EntrySh::ISh << 9, RawL2Entry::SH);
-        // l2_page_table.entries[1].set_masked(perm << 6, RawL2Entry::AP);
-        // l2_page_table.entries[1].set_masked(EntryAttr::Mem << 2, RawL2Entry::ATTR);
-        // l2_page_table.entries[1].set_masked(EntryType::Block <<1, RawL2Entry::TYPE);
-        // l2_page_table.entries[1].set_masked(EntryValid::Valid, RawL2Entry::VALID);
-
-        // l2_page_table.entries[0].set(
-        //     RawL2Entry::ADDR & (l3_page_tables[0].as_ptr().as_u64() << 16)
-        //         | RawL2Entry::AF & 0b1 << 10
-        //         | RawL2Entry::SH & (EntrySh::ISh << 9)
-        //         | RawL2Entry::AP & (perm << 6)
-        //         | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
-        //         | RawL2Entry::TYPE & (EntryType::Block <<1)
-        //         | RawL2Entry::VALID & EntryValid::Valid
-        // );
-        // l2_page_table.entries[1].set(
-        //     RawL2Entry::ADDR & (l3_page_tables[1].as_ptr().as_u64() << 16)
-        //         | RawL2Entry::AF & 0b1 << 10
-        //         | RawL2Entry::SH & (EntrySh::ISh << 9)
-        //         | RawL2Entry::AP & (perm << 6)
-        //         | RawL2Entry::ATTR & (EntryAttr::Mem << 2)
-        //         | RawL2Entry::TYPE & (EntryType::Block <<1)
-        //         | RawL2Entry::VALID & EntryValid::Valid
-        // );
         page_table
     }
 
@@ -209,13 +147,17 @@ impl PageTable {
         if !allocator::util::has_alignment(va.as_usize(), Page::SIZE) {
             panic!("VirtualAddr: {} is not aligned to page size: {}", va.as_usize(), Page::SIZE);
         }
-        // let l2_index = va.bitand(VirtualAddr::from(0b1usize << 29)).as_usize() >> 29;
-        // let l3_index = va.bitand(VirtualAddr::from(0x1FFFusize << 16)).as_usize() >> 16;
-        let l2_index = (va.as_usize() & 0b1usize << 29) >> 29;
+        let l2_index = va.bitand(VirtualAddr::from(0b1usize << 29)).as_usize() >> 29;
+        let l3_index = va.bitand(VirtualAddr::from(0x1FFFusize << 16)).as_usize() >> 16;
+        // let l2_index = (va.as_usize() & 0b1usize << 29) >> 29;
         if l2_index >= 2 {
-            panic!("L2 Index: {} from VirtualAddr: {} is greater than 2", l2_index, va.as_usize());
+            panic!(
+                "L2 Index: {} from VirtualAddr: {} is greater than L3PageTable count: 2",
+                l2_index,
+                va.as_usize()
+            );
         }
-        let l3_index = (va.as_usize() & 0x1FFFusize << 16) >> 16;
+        // let l3_index = (va.as_usize() & 0x1FFFusize << 16) >> 16;
         (l2_index, l3_index)
     }
 
@@ -224,23 +166,16 @@ impl PageTable {
     pub fn is_valid(&self, va: VirtualAddr) -> bool {
         let (l2_index, l3_index) = PageTable::locate(va);
         let l2_entry = self.l2.entries[l2_index];
-        let l3_addr = l2_entry.get_value(RawL2Entry::ADDR) as u64;
+        // TODO: Make l3_addr usize
+        let l3_addr = l2_entry.get_masked(RawL2Entry::ADDR);
 
-        if self.l3[0].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
+        if self.l3[0].as_ptr().as_u64() == l3_addr {
             return self.l3[0].entries[l3_index].is_valid()
-        } else if self.l3[1].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
+        } else if self.l3[1].as_ptr().as_u64() == l3_addr {
             return self.l3[1].entries[l3_index].is_valid()
         } else {
-            panic!("Unexpected failure to find L3PageTable in PageTable::set_entry()")
+            panic!("Unexpected failure to find L3PageTable in PageTable::is_valid()")
         }
-
-        // for page_table in self.l3.iter() {
-        //     if page_table.as_ptr().as_u64() & 0xFFFFFFFF == l3_address {
-        //         let l3_entry = page_table.entries[l3_index];
-        //         return l3_entry.is_valid()
-        //     }
-        // }
-        // false
     }
 
     /// Returns `true` if the L3entry indicated by the given virtual address is invalid.
@@ -254,34 +189,16 @@ impl PageTable {
     pub fn set_entry(&mut self, va: VirtualAddr, entry: RawL3Entry) -> &mut Self {
         let (l2_index, l3_index) = PageTable::locate(va);
         let l2_entry = self.l2.entries[l2_index];
-        // let l3_addr = l2_entry.get_value(RawL2Entry::ADDR) as u64;
-        let l3_addr = l2_entry.get_masked(RawL2Entry::ADDR) as u64;
-        // let page_table_ptr = l3_address as *mut L3PageTable;
-        // let mut page_table = unsafe {
-        //     page_table_ptr.as_mut().expect("L3Page table failed to unwrap")
-        // };
-        // let mut l3_entry = page_table.entries[l3_index];
-        // l3_entry.0 = entry;
+        let l3_addr = l2_entry.get_masked(RawL2Entry::ADDR);
 
-        // if self.l3[0].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
         if self.l3[0].as_ptr().as_u64() == l3_addr {
             self.l3[0].entries[l3_index].0.set(entry.get())
-        // } else if self.l3[1].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
         } else if self.l3[1].as_ptr().as_u64() == l3_addr {
             self.l3[1].entries[l3_index].0.set(entry.get())
         } else {
             panic!("Unexpected failure to find L3PageTable in PageTable::set_entry()")
         };
-        // let mut l3_entry = page_table.entries[l3_index];
-        // l3_entry.0.set(entry.get());
 
-
-        // for page_table in self.l3.iter_mut() {
-        //     if page_table.as_ptr().as_u64() == l3_address {
-        //         let mut l3_entry = page_table.entries[l3_index];
-        //         l3_entry.0 = entry;
-        //     }
-        // }
         self
     }
 
@@ -315,72 +232,37 @@ impl KernPageTable {
     /// more details.
     pub fn new() -> KernPageTable {
         let mut page_table = PageTable::new(EntryPerm::KERN_RW);
-        let mut addr = 0x0000_0000u64;
+        let mem_start = 0x0000_0000usize;
         let (_, mem_end) = allocator::memory_map()
             .expect("unexpected None from allocator::memory_map()");
 
-        // for ref mut entry in &*page_table {
-        //     if addr < mem_end {
-        //         break
-        //     }
-        //     let (entry_attr, entry_sh) = if addr >= IO_BASE && addr < IO_BASE_END {
-        //         (EntryAttr::Dev, EntrySh::OSh)
-        //     } else {
-        //         (EntryAttr::Mem, EntrySh::ISh)
-        //     };
-        //     let entry_value = (RawL2Entry::ADDR) & (addr << 16) as u64
-        //         | 0b1 << 10
-        //         | entry_sh << 8
-        //         | EntryPerm::KERN_RW << 6
-        //         | entry_attr << 2
-        //         | EntryType::Table <<1
-        //         | EntryValid::Valid;
-        //     entry.0.set(entry_value);
-        //
-        // }
-        //
-        //
-        loop {
-            if addr >= mem_end as u64 {
-                break
-            }
+        for addr in (mem_start..IO_BASE_END).step_by(Page::SIZE) {
             let mut raw_l3_entry = RawL3Entry::new(0);
-            raw_l3_entry.set_masked(addr, RawL3Entry::ADDR);
-            // raw_l3_entry.set_bit(RawL3Entry::AF);
-            raw_l3_entry.set_value(EntrySh::ISh, RawL3Entry::SH);
-            raw_l3_entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
-            raw_l3_entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
-            raw_l3_entry.set_value(EntryType::Table, RawL3Entry::TYPE);
-            raw_l3_entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
+            raw_l3_entry.set_masked(addr as u64, RawL3Entry::ADDR);
 
-
-            // let raw_l3_entry = RawL3Entry::new(
-            //     (RawL3Entry::ADDR & addr << 16)
-            //         | entry_sh << 8
-            //         | EntryPerm::KERN_RW << 6
-            //         | entry_attr << 2
-            //         | EntryType::Table <<1
-            //         | EntryValid::Valid
-            // );
-            page_table.set_entry(VirtualAddr::from(addr), raw_l3_entry);
-            addr += PAGE_SIZE as u64;
-        }
-        addr = IO_BASE as u64;
-        loop {
-            if addr >= IO_BASE_END as u64 {
-                break
+            if addr < mem_end {
+                raw_l3_entry.set_bit(RawL3Entry::AF);
+                raw_l3_entry.set_value(EntrySh::ISh, RawL3Entry::SH);
+                raw_l3_entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
+                raw_l3_entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
+                raw_l3_entry.set_value(PageType::Page, RawL3Entry::TYPE);
+                raw_l3_entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
+            } else if addr >= IO_BASE && addr < IO_BASE_END {
+                raw_l3_entry.set_bit(RawL3Entry::AF);
+                raw_l3_entry.set_value(EntrySh::OSh, RawL3Entry::SH);
+                raw_l3_entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
+                raw_l3_entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
+                raw_l3_entry.set_value(PageType::Page, RawL3Entry::TYPE);
+                raw_l3_entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
+            } else {
+                raw_l3_entry.set_value(EntrySh::ISh, RawL3Entry::SH);
+                raw_l3_entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
+                raw_l3_entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
+                raw_l3_entry.set_value(PageType::Page, RawL3Entry::TYPE);
+                raw_l3_entry.set_value(EntryValid::Invalid, RawL3Entry::VALID);
             }
-            let mut raw_l3_entry = RawL3Entry::new(0);
-            raw_l3_entry.set_masked(addr, RawL3Entry::ADDR);
-            // raw_l3_entry.set_bit(RawL3Entry::AF);
-            raw_l3_entry.set_value(EntrySh::OSh, RawL3Entry::SH);
-            raw_l3_entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
-            raw_l3_entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
-            raw_l3_entry.set_value(EntryType::Table, RawL3Entry::TYPE);
-            raw_l3_entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
 
             page_table.set_entry(VirtualAddr::from(addr), raw_l3_entry);
-            addr += PAGE_SIZE as u64;
         }
         KernPageTable(page_table)
     }
@@ -416,83 +298,25 @@ impl UserPageTable {
         if va.as_usize() < USER_IMG_BASE {
             panic!("UserPageTable::alloc() called with VirtualAddr lower than {}", USER_IMG_BASE);
         }
-        // let va_locate = va.sub(VirtualAddr::from(USER_IMG_BASE));
-        let va_locate = VirtualAddr::from(va.as_u64() - USER_IMG_BASE as u64);
+
+        let va_locate = va.sub(VirtualAddr::from(USER_IMG_BASE));
+        // let va_locate = VirtualAddr::from(va.as_u64() - USER_IMG_BASE as u64);
         if self.is_valid(va_locate) {
             panic!("VirtualAddr already allocated");
         }
-        // let (l2_index, l3_index) = PageTable::locate(va_locate);
-        // let l2_entry = self.l2.entries[l2_index];
-        // let l3_addr = l2_entry.get_value(RawL2Entry::ADDR);
-        // let page_table_ptr = l3_addr as *mut L3PageTable;
-        // let mut l3_page_table = unsafe {
-        //     page_table_ptr.as_mut().expect("L3Page table failed to unwrap")
-        // };
+
         let page_ptr = unsafe { ALLOCATOR.alloc(Page::layout()) };
+
         let mut raw_l3_entry = RawL3Entry::new(0);
         raw_l3_entry.set_masked(page_ptr as u64, RawL3Entry::ADDR);
-        // raw_l3_entry.set_bit(RawL3Entry::AF);
+        raw_l3_entry.set_bit(RawL3Entry::AF);
         raw_l3_entry.set_value(EntrySh::ISh, RawL3Entry::SH);
         raw_l3_entry.set_value(EntryPerm::USER_RW, RawL3Entry::AP);
         raw_l3_entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
-        raw_l3_entry.set_value(EntryType::Table, RawL3Entry::TYPE);
+        raw_l3_entry.set_value(PageType::Page, RawL3Entry::TYPE);
         raw_l3_entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
 
         self.set_entry(va_locate, raw_l3_entry);
-
-        // if self.l3[0].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
-        //     // &mut self.l3[0]
-        //     if self.l3[0].entries[l3_index].is_valid() {
-        //         panic!("VirtualAddr is already allocated")
-        //     }
-        //     self.l3[0].entries[l3_index].0.set_masked(page_ptr as u64, RawL3Entry::ADDR);
-        //     self.l3[0].entries[l3_index].0.set_value(EntrySh::ISh, RawL3Entry::SH);
-        //     self.l3[0].entries[l3_index].0.set_value(EntryPerm::USER_RW, RawL3Entry::AP);
-        //     self.l3[0].entries[l3_index].0.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
-        //     self.l3[0].entries[l3_index].0.set_value(EntryType::Table, RawL3Entry::TYPE);
-        //     self.l3[0].entries[l3_index].0.set_value(EntryValid::Valid, RawL3Entry::VALID);
-        // } else if self.l3[1].as_ptr().as_u64() & 0xFFFFFFFF == l3_addr {
-        //     // &mut self.l3[1]
-        //     if self.l3[0].entries[l3_index].is_valid() {
-        //         panic!("VirtualAddr is already allocated")
-        //     }
-        //     self.l3[1].entries[l3_index].0.set_masked(page_ptr as u64, RawL3Entry::ADDR);
-        //     self.l3[1].entries[l3_index].0.set_value(EntrySh::ISh, RawL3Entry::SH);
-        //     self.l3[1].entries[l3_index].0.set_value(EntryPerm::USER_RW, RawL3Entry::AP);
-        //     self.l3[1].entries[l3_index].0.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
-        //     self.l3[1].entries[l3_index].0.set_value(EntryType::Table, RawL3Entry::TYPE);
-        //     self.l3[1].entries[l3_index].0.set_value(EntryValid::Valid, RawL3Entry::VALID);
-        // } else {
-        //     panic!("Unexpected failure to find L3PageTable in UserPageTable::alloc()")
-        // };
-        // let mut l3_entry = l3_page_table.entries[l3_index];
-        // if l3_entry.is_valid() {
-        //     panic!("VirtualAddr is already allocated")
-        // }
-
-        // let entry_value = (((page_ptr as u64) << 16) as u64 & 0xFFFFFFFF << 16)
-        //     | 0b1 << 10
-        //     | EntrySh::ISh << 8
-        //     | EntryPerm::USER_RW << 6
-        //     | EntryAttr::Mem << 2
-        //     | EntryType::Table << 1
-        //     | EntryValid::Valid;
-        //
-        // l3_entry.0.set(entry_value);
-        // l3_entry.0.set_masked(page_ptr as u64, RawL3Entry::ADDR);
-        // l3_entry.0.set_value(EntrySh::ISh, RawL3Entry::SH);
-        // l3_entry.0.set_value(EntryPerm::USER_RW, RawL3Entry::AP);
-        // l3_entry.0.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
-        // l3_entry.0.set_value(EntryType::Block, RawL3Entry::TYPE);
-        // l3_entry.0.set_value(EntryValid::Valid, RawL3Entry::VALID);
-
-        // l3_entry.0.set_masked(page_ptr as u64, RawL3Entry::ADDR);
-        // l3_entry.0.set_masked(0b1 << 10, RawL3Entry::AF);
-        // l3_entry.0.set_masked(EntrySh::ISh << 9, RawL3Entry::SH);
-        // l3_entry.0.set_masked(EntryPerm::USER_RW, RawL3Entry::AP);
-        // l3_entry.0.set_masked(EntryAttr::Mem << 2, RawL3Entry::ATTR);
-        // l3_entry.0.set_masked(EntryType::Table <<1, RawL3Entry::TYPE);
-        // l3_entry.0.set_masked(EntryValid::Valid, RawL3Entry::VALID);
 
         let mut page = unsafe { from_raw_parts_mut(page_ptr, PAGE_SIZE)} ;
         page
@@ -540,11 +364,17 @@ impl Drop for UserPageTable {
 
 impl fmt::Debug for L2PageTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use alloc::string::String;
+        use core::fmt::Write;
+
+        let mut baddr = String::new();
+        write!(baddr, "{:x}", &self.as_ptr().as_u64())?;
+
         f.debug_struct("L2PageTable")
-            .field("baddr", &self.as_ptr().as_u64())
-            .field("entries", &"<entry table>")
-            .field("entry_0", &self.entries[0].get())
-            .field("entry_1", &self.entries[1].get())
+            .field("baddr", &baddr)
+            .field("entries.len()", &self.entries.len())
+            .field("entry_0", &self.entries[0])
+            .field("entry_1", &self.entries[1])
 
             .finish()
     }
@@ -552,62 +382,28 @@ impl fmt::Debug for L2PageTable {
 
 impl fmt::Debug for L3PageTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use alloc::string::String;
+        use core::fmt::Write;
+
+        let mut baddr = String::new();
+        write!(baddr, "{:x}", &self.as_ptr().as_u64())?;
+
         f.debug_struct("L3PageTable")
-            .field("baddr", &self.as_ptr().as_u64())
-            .field("entries", &"<entry table>")
-            .field("entry_0", &self.entries[0].0.get())
-            .field("entry_1", &self.entries[1].0.get())
-            .field("entry_2", &self.entries[2].0.get())
-            .field("entry_3", &self.entries[3].0.get())
-            .field("entry_4", &self.entries[4].0.get())
-            .field("entry_5", &self.entries[5].0.get())
-            .field("entry_6", &self.entries[6].0.get())
-            .field("entry_7", &self.entries[7].0.get())
-            .field("entry_7935", &self.entries[7935].0.get())
-            .field("entry_7936", &self.entries[7936].0.get())
-            .field("entry_7937", &self.entries[7937].0.get())
-            .field("entry_8191", &self.entries[8191].0.get())
-            // .field("entry_8", &self.entries[8].0.get())
-            // .field("entry_9", &self.entries[9].0.get())
-            // .field("entry_10", &self.entries[10].0.get())
-            // .field("entry_11", &self.entries[11].0.get())
-            // .field("entry_12", &self.entries[12].0.get())
-            // .field("entry_13", &self.entries[13].0.get())
-            // .field("entry_14", &self.entries[14].0.get())
-            // .field("entry_15", &self.entries[15].0.get())
-            // .field("entry_16", &self.entries[16].0.get())
-            // .field("entry_17", &self.entries[17].0.get())
-            // .field("entry_18", &self.entries[18].0.get())
-            // .field("entry_19", &self.entries[19].0.get())
-            // .field("entry_20", &self.entries[20].0.get())
-            // .field("entry_21", &self.entries[21].0.get())
-            // .field("entry_22", &self.entries[22].0.get())
-            // .field("entry_23", &self.entries[23].0.get())
-            // .field("entry_24", &self.entries[24].0.get())
-            // .field("entry_25", &self.entries[25].0.get())
-            // .field("entry_26", &self.entries[26].0.get())
-            // .field("entry_27", &self.entries[27].0.get())
-            // .field("entry_28", &self.entries[28].0.get())
-            // .field("entry_29", &self.entries[29].0.get())
-            // .field("entry_30", &self.entries[30].0.get())
-            // .field("entry_31", &self.entries[31].0.get())
-            // .field("entry_32", &self.entries[32].0.get())
-            // .field("entry_33", &self.entries[33].0.get())
-            // .field("entry_34", &self.entries[34].0.get())
-            // .field("entry_35", &self.entries[35].0.get())
+            .field("baddr", &baddr)
+            .field("entries.len()", &self.entries.len())
+            .field("entry_0", &self.entries[0].0)
+            .field("entry_1", &self.entries[1].0)
+            .field("entry_2", &self.entries[2].0)
+            .field("entry_3", &self.entries[3].0)
+            .field("entry_4", &self.entries[4].0)
+            .field("entry_5", &self.entries[5].0)
+            .field("entry_6", &self.entries[6].0)
+            .field("entry_7", &self.entries[7].0)
+            .field("entry_7935", &self.entries[7935].0)
+            .field("entry_7936", &self.entries[7936].0)
+            .field("entry_7937", &self.entries[7937].0)
+            .field("entry_8191", &self.entries[8191].0)
 
             .finish()
     }
 }
-
-// pub mod entry_mask {
-//     pub const ADDR: u64 = 0xFFFFFFFF << 16;
-//     pub const AF: u64 = 0b1 << 10;
-//     pub const SH: u64 = 0b11 << 8;
-//     pub const AP: u64 = 0b11 << 6;
-//     pub const ATTR: u64 = 0b111 << 2;
-//     pub const TYPE: u64 = 0b1 << 1;
-//     pub const VALID: u64 = 0b1;
-// }
-// FIXME: Implement `Drop` for `UserPageTable`.
-// FIXME: Implement `fmt::Debug` as you need.

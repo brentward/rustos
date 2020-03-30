@@ -47,9 +47,6 @@ pub struct Info {
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-    console::kprintln!("info: {:?}", info);
-    console::kprintln!("kind: {:?}", info.kind);
-    console::kprintln!("esr: {:?}", esr);
 
     match info.kind {
 

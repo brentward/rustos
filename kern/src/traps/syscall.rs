@@ -63,12 +63,12 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 ///
 /// It only returns the usual status value.
 pub fn sys_write(b: u8, tf: &mut TrapFrame) {
-    use crate::console::kprintln;
+    use crate::console::kprint;
 
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         if b.is_ascii() {
             let ch = b as char;
-            kprintln!("{}", ch);
+            kprint!("{}", ch);
             p.context.x[7] = 0;
         } else {
             p.context.x[7] = 70;
