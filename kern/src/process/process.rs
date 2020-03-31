@@ -4,7 +4,7 @@ use shim::path::Path;
 use core::mem;
 
 use fat32::traits::FileSystem;
-use fat32::traits::{Dir, Entry, Metadata};
+use fat32::traits::Entry;
 
 use aarch64;
 
@@ -68,7 +68,7 @@ impl Process {
         p.context.sp = Process::get_stack_top().as_u64();
         p.context.elr = Process::get_image_base().as_u64();
         p.context.ttbr0 = VMM.get_baddr().as_u64();
-        p.context.tpidr = p.vmap.get_baddr().as_u64();
+        p.context.ttbr1 = p.vmap.get_baddr().as_u64();
         p.context.spsr = p.context.spsr |
             aarch64::SPSR_EL1::D |
             aarch64::SPSR_EL1::A |
@@ -85,38 +85,31 @@ impl Process {
         use core::ops::AddAssign;
 
         let mut p = Process::new()?;
-        let stack_page = p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
+        let _stack_page = p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
         let pn = pn.as_ref();
         let entry = FILESYSTEM.open(pn)?;
 
-        // let mut file_vec = Vec::new();
-        // let mut bytes_read = 0usize;
-        // let total_size = entry.size();
         let mut file = match entry.into_file() {
             Some(file) => file,
             None => return Err(OsError::IoErrorInvalidData)
         };
+
         let mut current_address = Process::get_image_base();
+
         loop {
-            let mut buf = p.vmap.alloc(current_address, PagePerm::RWX);
+            let buf = p.vmap.alloc(current_address, PagePerm::RWX);
             let bytes = file.read(buf)?;
             if bytes == 0 {
                 break;
             }
             current_address.add_assign(VirtualAddr::from(Page::SIZE));
-            // let _bytes_written = file_vec.write(&buf)
-            //     .expect("failed to write to vector");
-            // bytes_read += bytes;
         }
          Ok(p)
-        // while file_vec.len() > bytes_read {
-        //     file_vec.pop();
-        // }
     }
 
     /// Returns the highest `VirtualAddr` that is supported by this system.
     pub fn get_max_va() -> VirtualAddr {
-        VirtualAddr::from(USER_IMG_BASE + USER_MAX_VM_SIZE)
+        VirtualAddr::from(USER_IMG_BASE + (USER_MAX_VM_SIZE - 16))
     }
 
     /// Returns the `VirtualAddr` represents the base address of the user
@@ -128,13 +121,13 @@ impl Process {
     /// Returns the `VirtualAddr` represents the base address of the user
     /// process's stack.
     pub fn get_stack_base() -> VirtualAddr {
-        VirtualAddr::from(USER_STACK_BASE - Page::SIZE)
+        VirtualAddr::from(USER_STACK_BASE)
     }
 
     /// Returns the `VirtualAddr` represents the top of the user process's
     /// stack.
     pub fn get_stack_top() -> VirtualAddr {
-        VirtualAddr::from(USER_STACK_BASE - Stack::ALIGN)
+        VirtualAddr::from(USER_STACK_BASE + (Page::SIZE - 16))
     }
 
     /// Returns `true` if this process is ready to be scheduled.

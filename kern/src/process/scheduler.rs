@@ -1,16 +1,15 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use core::fmt;
-use core::time::Duration;
 
 use aarch64::*;
-use pi::{interrupt, timer, gpio};
+use pi::{interrupt, timer};
 
 use crate::mutex::Mutex;
 use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
 use crate::process::{Id, Process, State};
 use crate::traps::{TrapFrame, irq};
-use crate::{VMM, IRQ, SCHEDULER, shell};
+use crate::{VMM, IRQ, SCHEDULER};
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -87,62 +86,27 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Scheduler::new());
 
-        let mut process_0 = Process::new().expect("Process::new() failed");
-        // process_0.context.elr = run_shell as u64;
-        process_0.context.sp = process_0.stack.top().as_u64();
-        process_0.context.spsr = process_0.context.spsr | SPSR_EL1::D | SPSR_EL1::A | SPSR_EL1::F;
-        process_0.context.ttbr0 = VMM.get_baddr().as_u64();
-        process_0.context.ttbr1 = process_0.vmap.get_baddr().as_u64();
-
-        self.test_phase_3(&mut process_0);
-
-        process_0.context.elr = USER_IMG_BASE as u64;
-
-        // let mut process_1 = Process::new().expect("Process::new() failed");
-        // process_1.context.sp = process_1.stack.top().as_u64();
-        // process_1.context.spsr = process_1.context.spsr | SPSR_EL1::D | SPSR_EL1::A | SPSR_EL1::F;
-        // process_1.context.ttbr0 = VMM.get_baddr().as_u64();
-        // process_1.context.ttbr1 = process_1.vmap.get_baddr().as_u64();
-        //
-        // self.test_phase_3(&mut process_1);
-        //
-        // process_1.context.elr = USER_IMG_BASE as u64;
-        //
-        // let mut process_2 = Process::new().expect("Process::new() failed");
-        // process_2.context.sp = process_2.stack.top().as_u64();
-        // process_2.context.spsr = process_2.context.spsr | SPSR_EL1::D | SPSR_EL1::A | SPSR_EL1::F;
-        // process_2.context.ttbr0 = VMM.get_baddr().as_u64();
-        // process_2.context.ttbr1 = process_2.vmap.get_baddr().as_u64();
-        //
-        // self.test_phase_3(&mut process_2);
-        //
-        // process_2.context.elr = USER_IMG_BASE as u64;
+        let process_0 = match Process::load("/fib_new.bin") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        };
+        let process_1 = match Process::load("/fib_loop.bin") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_2 = match Process::load("/fib_loop.bin") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_3 = match Process::load("/fib_loop.bin") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
 
         self.add(process_0);
-        // self.add(process_1);
-        // self.add(process_2);
-
-        // let mut process_1 = Process::new().expect("Process::new() failed");
-        // process_1.context.elr = run_blinky as u64;
-        // process_1.context.sp = process_1.stack.top().as_u64();
-        // process_1.context.spsr = 0b1_10100_0000;
-        // process_1.context.ttbr[0] = VMM.get_baddr().as_u64();
-        // process_1.context.ttbr[1] = process_1.vmap.get_baddr().as_u64();
-        //
-        // self.test_phase_3(&mut process_1);
-        //
-        // self.add(process_1);
-        //
-        // let mut process_2 = Process::new().expect("Process::new() failed");
-        // process_2.context.elr = run_shell_2 as u64;
-        // process_2.context.sp = process_2.stack.top().as_u64();
-        // process_2.context.spsr = 0b1_10100_0000;
-        // process_2.context.ttbr[0] = VMM.get_baddr().as_u64();
-        // process_2.context.ttbr[1] = process_2.vmap.get_baddr().as_u64();
-        //
-        // self.test_phase_3(&mut process_2);
-        //
-        // self.add(process_2);
+        self.add(process_1);
+        self.add(process_2);
+        self.add(process_3);
 
         let mut controller = interrupt::Controller::new();
         controller.enable(interrupt::Interrupt::Timer1);
@@ -157,18 +121,18 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    pub fn test_phase_3(&self, proc: &mut Process){
-        use crate::vm::{VirtualAddr, PagePerm};
-
-        let mut page = proc.vmap.alloc(
-            VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
-
-        let text = unsafe {
-            core::slice::from_raw_parts(test_user_process as *const u8, 24)
-        };
-
-        page[0..24].copy_from_slice(text);
-    }
+    // pub fn test_phase_3(&self, proc: &mut Process){
+    //     use crate::vm::{VirtualAddr, PagePerm};
+    //
+    //     let mut page = proc.vmap.alloc(
+    //         VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
+    //
+    //     let text = unsafe {
+    //         core::slice::from_raw_parts(test_user_process as *const u8, 24)
+    //     };
+    //
+    //     page[0..24].copy_from_slice(text);
+    // }
 }
 
 #[derive(Debug)]
@@ -278,61 +242,5 @@ impl Scheduler {
         } else {
             None
         }
-    }
-}
-
-pub extern "C" fn  test_user_process() -> ! {
-    loop {
-        let ms = 10000u64;
-        let error: u64;
-        let elapsed_ms: u64;
-
-        unsafe {
-            asm!("mov x0, $2
-              svc 1
-              mov $0, x0
-              mov $1, x7"
-                 : "=r"(elapsed_ms), "=r"(error)
-                 : "r"(ms)
-                 : "x0", "x7"
-                 : "volatile");
-        }
-    }
-}
-
-pub extern "C" fn  test_user_brk() -> ! {
-    loop {
-        let ms = 10000u64;
-        let error: u64;
-        let elapsed_ms: u64;
-
-        unsafe {
-            asm!("mov x0, $2
-              brk 1
-              mov $0, x0
-              mov $1, x7"
-                 : "=r"(elapsed_ms), "=r"(error)
-                 : "r"(ms)
-                 : "x0", "x7"
-                 : "volatile");
-        }
-    }
-}
-
-pub extern "C" fn run_shell() {
-    loop { shell::shell("> "); }
-}
-
-pub extern "C" fn run_shell_2() {
-    loop { shell::shell("2 > "); }
-}
-
-pub extern "C" fn run_blinky() {
-    let mut gpio16 = gpio::Gpio::new(16).into_output();
-    loop {
-        gpio16.set();
-        timer::spin_sleep(Duration::from_secs(2));
-        gpio16.clear();
-        timer::spin_sleep(Duration::from_secs(2));
     }
 }

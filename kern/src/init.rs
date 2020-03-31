@@ -99,6 +99,7 @@ unsafe fn switch_to_el1() {
             | SPSR_EL2::A,
         );
 
+        // eret to itself, expecting current_el() == 1 this time.
         ELR_EL2.set(switch_to_el1 as u64);
         asm::eret();
     }

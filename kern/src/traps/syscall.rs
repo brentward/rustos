@@ -54,7 +54,7 @@ pub fn sys_time(tf: &mut TrapFrame) {
 ///
 /// This system call does not take paramer and does not return any value.
 pub fn sys_exit(tf: &mut TrapFrame) {
-    SCHEDULER.kill(tf);
+    let _pid_option = SCHEDULER.kill(tf);
 }
 
 /// Write to console.

@@ -317,7 +317,7 @@ impl UserPageTable {
 
         self.set_entry(va_locate, raw_l3_entry);
 
-        let mut page = unsafe { from_raw_parts_mut(page_ptr, PAGE_SIZE)} ;
+        let page = unsafe { from_raw_parts_mut(page_ptr, PAGE_SIZE)} ;
         page
     }
 }

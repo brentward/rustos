@@ -15,8 +15,6 @@ use fat32::traits::{Dir, Entry, Metadata};
 
 use aarch64;
 
-use kernel_api::syscall;
-
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
 use crate::FILESYSTEM;
@@ -253,7 +251,7 @@ pub struct StdOut {
     pub result: String,
 }
 
-struct StdError {
+pub struct StdError {
     pub result: String,
     pub code: u8
 }
@@ -381,12 +379,6 @@ struct Ls {
     show_hidden: bool,
     human_readable: bool,
     long: bool,
-}
-
-impl Ls {
-    fn set_long(&mut self, long: bool) {
-        self.long = long;
-    }
 }
 
 impl Executable for Ls {
