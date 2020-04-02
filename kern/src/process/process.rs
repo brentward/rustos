@@ -1,10 +1,13 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
+use alloc::vec;
 use shim::io;
 use shim::path::Path;
 use core::mem;
 
 use fat32::traits::FileSystem;
 use fat32::traits::Entry;
+use fat32::vfat::Entry as EntryStruct;
 
 use aarch64;
 
@@ -13,6 +16,7 @@ use crate::process::{Stack, State};
 use crate::traps::TrapFrame;
 use crate::vm::*;
 use crate::FILESYSTEM;
+use crate::fs::PiVFatHandle;
 
 use kernel_api::{OsError, OsResult};
 
@@ -30,6 +34,10 @@ pub struct Process {
     pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
+    /// The list of open file handles.
+    pub files: Vec<(Id, Box<EntryStruct<PiVFatHandle>>)>,
+    /// The last file ID
+    pub last_file_id: Option<Id>,
 }
 
 impl Process {
@@ -49,6 +57,8 @@ impl Process {
             stack,
             vmap,
             state: State::Ready,
+            files: vec![],
+            last_file_id: Some(0),
         })
     }
 
@@ -86,8 +96,8 @@ impl Process {
 
         let mut p = Process::new()?;
         let _stack_page = p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
-        let pn = pn.as_ref();
-        let entry = FILESYSTEM.open(pn)?;
+        let path = pn.as_ref();
+        let entry = FILESYSTEM.open(path)?;
 
         let mut file = match entry.into_file() {
             Some(file) => file,

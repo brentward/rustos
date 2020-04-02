@@ -11,12 +11,13 @@ use crate::allocator::LocalAlloc;
 ///   bin 0 (2^3 bytes)    : handles allocations in (0, 2^3]
 ///   bin 1 (2^4 bytes)    : handles allocations in (2^3, 2^4]
 ///   ...
-///   bin 29 (2^22 bytes): handles allocations in (2^31, 2^32]
+///   bin 29 (2^32 bytes): handles allocations in (2^31, 2^32]
 ///   
 ///   map_to_bin(size) -> k
 ///
 
-const BLOCK_SIZE_COUNT: usize = mem::size_of::<usize>() * 8 - 3;
+const VMM_MAX_ADDR_BITS: usize= 32;
+const BIN_COUNT_MAX: usize = VMM_MAX_ADDR_BITS - 3;
 
 // #[derive(Debug)]
 pub struct Allocator {
@@ -26,7 +27,7 @@ pub struct Allocator {
     bin_count: usize,
     current: usize,
     end: usize,
-    bins: [LinkedList; BLOCK_SIZE_COUNT],
+    bins: [LinkedList; BIN_COUNT_MAX],
 }
 
 impl Allocator {
@@ -37,7 +38,7 @@ impl Allocator {
         let total_mem = end - current;
         let max_block_size = 1 << (mem::size_of::<usize>() * 8 - total_mem.leading_zeros() as usize - 1);
         let bin_count = (max_block_size as u64).trailing_zeros() as usize - 2;
-        let bins = [LinkedList::new(); BLOCK_SIZE_COUNT];
+        let bins = [LinkedList::new(); BIN_COUNT_MAX];
         // let mut bins = [LinkedList::new(); BLOCK_SIZE_COUNT];
         let fragmentation = 0;
         // let current = align_up(current, max_block_size);
@@ -86,63 +87,63 @@ impl Allocator {
         panic!("layout will cause memory address overflow");
     }
 
-    fn split_push_return(&mut self,
-                         option: Option<*mut usize>,
-                         index: usize,
-                         layout: &Layout) -> Option<*mut usize> {
-        match option {
-            Some(addr) => {
-                let (low, high) = unsafe {
-                    split_addr(addr, Allocator::bin_size(index))
-                };
-                let low_align = align_up(low as usize, layout.align());
-                let high_align = align_up(high as usize, layout.align());
-                let closest = if low_align - low as usize <= high_align - high as usize {
-                    unsafe {
-                        self.bins[index].push(high);
-                        low
-                    }
-                } else {
-                    unsafe {
-                        self.bins[index].push(low);
-                        high
-                    }
-                };
-                Some(closest)
-            }
-            None => None
-
-        }
-    }
-
-    /// Pops an item from the list containing block sises one larger than
-    /// `index`, splits it in half and checks for the half closest alignment
-    /// to the `layout` and returns it as `Some(*mut usize)` while pushing the other
-    /// into the list at `index`. If none are above it will search up the
-    /// list recursively. `None` will be returned if none of the lists have members.
-    ///
-    /// The effect of this that all lists between `index` and the next highest list
-    /// with that is not empty will get 1 item if `Some` is returned and no change
-    /// if `None is returned.
-    fn populate_from_above(&mut self, index: usize, layout: &Layout) -> Option<*mut usize> {
-        if index < self.bin_count {
-            if self.bins[index + 1].is_empty() {
-                let option = self.populate_from_above(index + 1, layout);
-                match self.split_push_return(option, index, layout) {
-                    None => None,
-                    some => some,
-                }
-            } else {
-                let option = self.bins[index + 1].pop();
-                match self.split_push_return(option, index, layout) {
-                    None => None,
-                    some => some,
-                }
-            }
-        } else {
-            None
-        }
-    }
+    // fn split_push_return(&mut self,
+    //                      option: Option<*mut usize>,
+    //                      index: usize,
+    //                      layout: &Layout) -> Option<*mut usize> {
+    //     match option {
+    //         Some(addr) => {
+    //             let (low, high) = unsafe {
+    //                 split_addr(addr, Allocator::bin_size(index))
+    //             };
+    //             let low_align = align_up(low as usize, layout.align());
+    //             let high_align = align_up(high as usize, layout.align());
+    //             let closest = if low_align - low as usize <= high_align - high as usize {
+    //                 unsafe {
+    //                     self.bins[index].push(high);
+    //                     low
+    //                 }
+    //             } else {
+    //                 unsafe {
+    //                     self.bins[index].push(low);
+    //                     high
+    //                 }
+    //             };
+    //             Some(closest)
+    //         }
+    //         None => None
+    //
+    //     }
+    // }
+    //
+    // /// Pops an item from the list containing block sises one larger than
+    // /// `index`, splits it in half and checks for the half closest alignment
+    // /// to the `layout` and returns it as `Some(*mut usize)` while pushing the other
+    // /// into the list at `index`. If none are above it will search up the
+    // /// list recursively. `None` will be returned if none of the lists have members.
+    // ///
+    // /// The effect of this that all lists between `index` and the next highest list
+    // /// with that is not empty will get 1 item if `Some` is returned and no change
+    // /// if `None is returned.
+    // fn populate_from_above(&mut self, index: usize, layout: &Layout) -> Option<*mut usize> {
+    //     if index < self.bin_count {
+    //         if self.bins[index + 1].is_empty() {
+    //             let option = self.populate_from_above(index + 1, layout);
+    //             match self.split_push_return(option, index, layout) {
+    //                 None => None,
+    //                 some => some,
+    //             }
+    //         } else {
+    //             let option = self.bins[index + 1].pop();
+    //             match self.split_push_return(option, index, layout) {
+    //                 None => None,
+    //                 some => some,
+    //             }
+    //         }
+    //     } else {
+    //         None
+    //     }
+    // }
 }
 
 impl LocalAlloc for Allocator {
@@ -175,24 +176,31 @@ impl LocalAlloc for Allocator {
             }
         }
         let aligned_addr = align_up(self.current, Allocator::bin_size(index));
-        match self.populate_from_above(index, &layout) {
-            Some(addr) => {
-                if has_alignment(addr as usize, layout.align()) {
-                    addr as *mut u8
-                } else {
-                    core::ptr::null_mut()
-                }
-            },
-            None => {
-                if aligned_addr + Allocator::bin_size(index) > self.end {
-                    core::ptr::null_mut()
-                } else {
-                    self.fragmentation += aligned_addr - self.current;
-                    self.current = aligned_addr + Allocator::bin_size(index);
-                    aligned_addr as *mut u8
-                }
-            }
+        if aligned_addr + Allocator::bin_size(index) > self.end {
+            core::ptr::null_mut()
+        } else {
+            self.fragmentation += aligned_addr - self.current;
+            self.current = aligned_addr + Allocator::bin_size(index);
+            aligned_addr as *mut u8
         }
+        // match self.populate_from_above(index, &layout) {
+        //     Some(addr) => {
+        //         if has_alignment(addr as usize, layout.align()) {
+        //             addr as *mut u8
+        //         } else {
+        //             core::ptr::null_mut()
+        //         }
+        //     },
+        //     None => {
+        //         if aligned_addr + Allocator::bin_size(index) > self.end {
+        //             core::ptr::null_mut()
+        //         } else {
+        //             self.fragmentation += aligned_addr - self.current;
+        //             self.current = aligned_addr + Allocator::bin_size(index);
+        //             aligned_addr as *mut u8
+        //         }
+        //     }
+        // }
     }
 
     /// Deallocates the memory referenced by `ptr`.

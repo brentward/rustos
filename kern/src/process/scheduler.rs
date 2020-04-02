@@ -10,6 +10,7 @@ use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
 use crate::process::{Id, Process, State};
 use crate::traps::{TrapFrame, irq};
 use crate::{VMM, IRQ, SCHEDULER};
+use crate::shell;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -52,6 +53,8 @@ impl GlobalScheduler {
             let rtn = self.critical(|scheduler| scheduler.switch_to(tf));
             if let Some(id) = rtn {
                 return id;
+            } else {
+                aarch64::brk!(1)
             }
             aarch64::wfe();
         }
@@ -86,27 +89,27 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Scheduler::new());
 
-        let process_0 = match Process::load("/fib_new.bin") {
+        let process_0 = match Process::load("/sleep_exit.bin") {
             Ok(process) => process,
             Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
         };
-        let process_1 = match Process::load("/fib_loop.bin") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
-        };
-        let process_2 = match Process::load("/fib_loop.bin") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
-        };
-        let process_3 = match Process::load("/fib_loop.bin") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
-        };
+        // let process_1 = match Process::load("/sleep_exit.bin") {
+        //     Ok(process) => process,
+        //     Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        // };
+        // let process_2 = match Process::load("/sleep_exit.bin") {
+        //     Ok(process) => process,
+        //     Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        // };
+        // let process_3 = match Process::load("/sleep_exit.bin") {
+        //     Ok(process) => process,
+        //     Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        // };
 
         self.add(process_0);
-        self.add(process_1);
-        self.add(process_2);
-        self.add(process_3);
+        // self.add(process_1);
+        // self.add(process_2);
+        // self.add(process_3);
 
         let mut controller = interrupt::Controller::new();
         controller.enable(interrupt::Interrupt::Timer1);

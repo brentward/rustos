@@ -217,9 +217,13 @@ pub fn shell(prefix: &str) {
                     },
                     "panic!" => panic!("called panic"),
                     _path => {
-                        match Unknown::new(None) {
-                            Ok(ref mut executable) => executable
-                                .exec(&command, &mut cwd),
+                        match BinFile::new(None) {
+                            Ok(ref mut executable) => {
+                                match executable.exec(&command, &mut cwd) {
+                                    Ok(foo) => break,
+                                    Err(e) => Err(e),
+                                }
+                            }
                             Err(e) => Err(e),
                         }
                     },
@@ -291,18 +295,49 @@ impl Executable for Echo {
     }
 }
 
-struct Unknown;
+struct BinFile;
 
-impl Executable for Unknown {
-    fn new(_params: Option<&str>) -> ExecutableResult<Unknown> {
-        Ok(Unknown)
+impl Executable for BinFile {
+    fn new(_params: Option<&str>) -> ExecutableResult<BinFile> {
+        Ok(BinFile)
     }
 
-    fn exec(&mut self, cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
+    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
-        writeln!(result, "bwsh: command not found: {}", cmd.path())?;
 
-        Err(StdError { result, code: 1 })
+        let mut working_dir = cwd.clone();
+
+        let path = Path::new(cmd.path());
+
+        set_working_dir(&path, &mut working_dir);
+
+        let entry = match FILESYSTEM.open(working_dir.as_path()) {
+            Ok(entry) => entry,
+            Err(_) => {
+                writeln!(result, "bwsh: {}: command not found", cmd.path())?;
+
+                return Err(StdError { result, code: 1 })
+            }
+        };
+
+        if entry.is_file() {
+            let p = match Process::load(working_dir.as_path()) {
+                Ok(process) => process,
+                Err(e) => {
+                    writeln!(result, "bwsh: error running command: {:#?}", e)?;
+
+                    return Err(StdError { result, code: 1 })
+                }
+            };
+            SCHEDULER.add(p);
+
+        } else {
+            writeln!(result, "bwsh: {}: is a directory", cmd.path())?;
+
+            return Err(StdError { result, code: 1 })
+        }
+
+        Ok(StdOut { result })
     }
 }
 
@@ -617,6 +652,7 @@ impl Executable for Cat {
         Ok(StdOut { result })
     }
 }
+
 
 struct Brk;
 

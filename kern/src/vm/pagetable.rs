@@ -206,6 +206,23 @@ impl PageTable {
     pub fn get_baddr(&self) -> PhysicalAddr {
         self.l2.as_ptr()
     }
+
+    /// Extracts `ADDR` field of RawL3Entry for the L2Entry indicated by the given VirtualAddress
+    /// `va` and returns as a `PhysicalAddr` if valid. Otherwise, return `None`.
+    pub fn get_entry_pa(&self, va: VirtualAddr) -> Option<PhysicalAddr> {
+        let (l2_index, l3_index) = PageTable::locate(va.bitand(VirtualAddr::from(!0xFFFFu64)));
+        let l2_entry = self.l2.entries[l2_index];
+        let l3_addr = l2_entry.get_masked(RawL2Entry::ADDR);
+
+        if self.l3[0].as_ptr().as_u64() == l3_addr {
+            self.l3[0].entries[l3_index].get_page_addr()
+        } else if self.l3[1].as_ptr().as_u64() == l3_addr {
+            self.l3[1].entries[l3_index].get_page_addr()
+        } else {
+            panic!("Unexpected failure to find L3PageTable in PageTable::set_entry()")
+        }
+    }
+
 }
 
 impl<'a> IntoIterator for &'a PageTable {
@@ -319,6 +336,11 @@ impl UserPageTable {
 
         let page = unsafe { from_raw_parts_mut(page_ptr, PAGE_SIZE)} ;
         page
+    }
+
+    pub fn get_pa(&self, va: VirtualAddr) -> Option<PhysicalAddr> {
+        let va_locate = va.sub(VirtualAddr::from(USER_IMG_BASE));
+        self.get_entry_pa(va_locate)
     }
 }
 

@@ -76,7 +76,7 @@ pub fn write(b: u8) {
               mov $1, x7"
              : "=r"(ecode)
              : "r"(b), "i"(NR_WRITE)
-             : "x0", "x7"
+             : "x7"
              : "volatile");
     }
 }
@@ -96,6 +96,32 @@ pub fn getpid() -> u64 {
     }
 
     pid
+}
+
+pub fn open(path: &str) -> OsResult<u64> {
+
+    if !path.is_ascii() {
+        panic!("Path: {} is not valid ascii", path)
+    }
+    let path_ptr = path.as_ptr() as u64;
+    let path_len = path.len() as u64;
+    let mut ecode: u64;
+    let mut fid: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              svc $4
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(fid), "=r"(ecode)
+             : "r"(path_ptr), "r"(path_len) "i"(NR_OPEN)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, fid)
+
 }
 
 

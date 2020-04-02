@@ -1,10 +1,18 @@
 use alloc::boxed::Box;
 use core::time::Duration;
+use core::slice;
+use core::str;
+use core::ops::BitOr;
+use shim::path::PathBuf;
+
+use fat32::traits::FileSystem;
 
 use crate::console::CONSOLE;
 use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::SCHEDULER;
+use crate::FILESYSTEM;
+use crate::vm::{PageTable, VirtualAddr, PhysicalAddr};
 use kernel_api::*;
 use pi::timer;
 
@@ -22,7 +30,7 @@ pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
         let current_time = timer::current_time();
         if current_time >= end_time {
             p.context.x[0] = (current_time - start_time).as_millis() as u64;
-            p.context.x[7] = 0;
+            p.context.x[7] = 1;
             true
         } else {
             false
@@ -45,7 +53,7 @@ pub fn sys_time(tf: &mut TrapFrame) {
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         p.context.x[0] = seconds;
         p.context.x[1] = nanoseconds;
-        p.context.x[7] = 0;
+        p.context.x[7] = 1;
         true
     })), tf);
 }
@@ -69,7 +77,7 @@ pub fn sys_write(b: u8, tf: &mut TrapFrame) {
         if b.is_ascii() {
             let ch = b as char;
             kprint!("{}", ch);
-            p.context.x[7] = 0;
+            p.context.x[7] = 1;
         } else {
             p.context.x[7] = 70;
         }
@@ -87,10 +95,66 @@ pub fn sys_getpid(tf: &mut TrapFrame) {
     let pid = tf.tpidr;
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         p.context.x[0] = pid;
-        p.context.x[7] = 0;
+        p.context.x[7] = 1;
         true
     })), tf);
 }
+
+pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
+    use crate::console::kprintln;
+
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        match p.last_file_id {
+            Some(fid) => {
+                let path_pa =  match p.vmap.get_pa(VirtualAddr::from(path_ptr)) {
+                    Some(pa) => pa.bitor(PhysicalAddr::from(path_ptr & 0xFFFF)),
+                    None => {
+                        p.context.x[7] = 104;
+                        return true
+                    }
+                };
+
+                let path_slice =  unsafe {
+                    slice::from_raw_parts(path_pa.as_ptr(), path_len)
+                };
+
+                let path = match str::from_utf8(path_slice) {
+                    Ok(path) => path,
+                    Err(_e) => {
+                        p.context.x[7] = 50;
+                        return true
+                    }
+                };
+
+                let path_buf = PathBuf::from(path);
+
+                let entry = match FILESYSTEM.open(path_buf.as_path()) {
+                    Ok(entry) => entry,
+                    Err(_) => {
+                        p.context.x[7] = 10;
+                        return true
+                    }
+                };
+
+                p.last_file_id = fid.checked_add(1);
+                p.files.push((fid, Box::new(entry)));
+
+
+                p.context.x[0] = fid;
+                p.context.x[7] = 1;
+
+                true
+
+            }
+            None => {
+                p.context.x[7] = 101;
+                return true
+            }
+        }
+    })), tf);
+}
+
+
 
 pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
     use crate::console::kprintln;
@@ -101,6 +165,7 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         3 => sys_exit(tf),
         4 => sys_write(tf.x[0] as u8, tf),
         5 => sys_getpid(tf),
+        6 => sys_open(tf.x[0] as u64, tf.x[1] as usize, tf),
         _ => tf.x[7] = 1,
     }
 }
