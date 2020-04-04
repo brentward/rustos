@@ -1,5 +1,9 @@
+#![feature(optin_builtin_traits)]
 #![feature(asm)]
 #![no_std]
+
+pub mod allocator;
+pub mod mutex;
 
 use core::fmt;
 
@@ -80,3 +84,4 @@ pub const NR_EXIT: usize = 3;
 pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
 pub const NR_OPEN: usize = 6;
+pub const NR_SBRK: usize = 7;

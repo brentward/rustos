@@ -39,18 +39,16 @@ pub fn sleep(span: Duration) -> OsResult<Duration> {
 }
 
 pub fn time() -> Duration {
-    let mut ecode: u64 = 0;
     let mut elapsed_s: u64 = 0;
     let mut fractional_ns: u64 = 0;
 
     unsafe {
-        asm!("svc $3
+        asm!("svc $2
               mov $0, x0
-              mov $1, x1
-              mov $2, x7"
-             : "=r"(elapsed_s), "=r"(fractional_ns), "=r"(ecode)
+              mov $1, x1"
+             : "=r"(elapsed_s), "=r"(fractional_ns)
              : "i"(NR_TIME)
-             : "x0", "x1", "x7"
+             : "x0", "x1"
              : "volatile");
     }
 
@@ -71,13 +69,10 @@ pub fn write(b: u8) {
     let mut ecode: u64;
 
     unsafe {
-        asm!("mov x0, $1
-              svc $2
-              mov $1, x7"
-             : "=r"(ecode)
-             : "r"(b), "i"(NR_WRITE)
-             : "x7"
-             : "volatile");
+        asm!("mov x0, $0
+              svc $1"
+             :: "r"(b), "i"(NR_WRITE)
+             :: "volatile");
     }
 }
 
@@ -86,12 +81,11 @@ pub fn getpid() -> u64 {
     let mut pid: u64;
 
     unsafe {
-        asm!("svc $2
-              mov $0, x0
-              mov $1, x7"
-             : "=r"(pid), "=r"(ecode)
+        asm!("svc $1
+              mov $0, x0"
+             : "=r"(pid)
              : "i"(NR_GETPID)
-             : "x0", "x7"
+             : "x0"
              : "volatile");
     }
 
@@ -124,6 +118,23 @@ pub fn open(path: &str) -> OsResult<u64> {
 
 }
 
+pub fn sbrk(size: u64) -> OsResult<*mut u8> {
+    let mut ecode: u64;
+    let mut ptr: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              svc $3
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(ptr), "=r"(ecode)
+             : "r"(size), "i"(NR_SBRK)
+             : "x0", "x7"
+             : "volatile");
+    }
+    let ptr = ptr as *mut u8;
+    err_or!(ecode, ptr)
+}
 
 struct Console;
 
