@@ -1,5 +1,5 @@
 use core::iter::Chain;
-use core::ops::{Deref, DerefMut, BitAnd, Sub};
+use core::ops::{Deref, DerefMut, BitAnd, Sub, BitOr};
 use core::slice::Iter;
 use core::slice::from_raw_parts_mut;
 
@@ -210,7 +210,7 @@ impl PageTable {
     /// Extracts `ADDR` field of RawL3Entry for the L2Entry indicated by the given VirtualAddress
     /// `va` and returns as a `PhysicalAddr` if valid. Otherwise, return `None`.
     pub fn get_entry_pa(&self, va: VirtualAddr) -> Option<PhysicalAddr> {
-        let (l2_index, l3_index) = PageTable::locate(va.bitand(VirtualAddr::from(!0xFFFFu64)));
+        let (l2_index, l3_index) = PageTable::locate(va.bitand(VirtualAddr::from(!0xFFFF)));
         let l2_entry = self.l2.entries[l2_index];
         let l3_addr = l2_entry.get_masked(RawL2Entry::ADDR);
 
@@ -340,7 +340,11 @@ impl UserPageTable {
 
     pub fn get_pa(&self, va: VirtualAddr) -> Option<PhysicalAddr> {
         let va_locate = va.sub(VirtualAddr::from(USER_IMG_BASE));
-        self.get_entry_pa(va_locate)
+        match self.get_entry_pa(va_locate) {
+            Some(pa) => Some(pa.bitor(PhysicalAddr::from(
+                va.bitand(VirtualAddr::from(0xFFFF)).as_u64()))),
+            None => None,
+        }
     }
 }
 

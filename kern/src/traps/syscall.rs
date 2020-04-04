@@ -2,7 +2,8 @@ use alloc::boxed::Box;
 use core::time::Duration;
 use core::slice;
 use core::str;
-use core::ops::BitOr;
+use core::ops::{Add, AddAssign, BitAnd, BitOr, Sub, SubAssign};
+
 use shim::path::PathBuf;
 
 use fat32::traits::FileSystem;
@@ -12,7 +13,7 @@ use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::SCHEDULER;
 use crate::FILESYSTEM;
-use crate::vm::{PageTable, VirtualAddr, PhysicalAddr};
+use crate::vm::{PageTable, VirtualAddr, PhysicalAddr, PagePerm, Page};
 use kernel_api::*;
 use pi::timer;
 
@@ -53,7 +54,6 @@ pub fn sys_time(tf: &mut TrapFrame) {
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         p.context.x[0] = seconds;
         p.context.x[1] = nanoseconds;
-        p.context.x[7] = 1;
         true
     })), tf);
 }
@@ -77,9 +77,6 @@ pub fn sys_write(b: u8, tf: &mut TrapFrame) {
         if b.is_ascii() {
             let ch = b as char;
             kprint!("{}", ch);
-            p.context.x[7] = 1;
-        } else {
-            p.context.x[7] = 70;
         }
         true
     })), tf);
@@ -95,7 +92,6 @@ pub fn sys_getpid(tf: &mut TrapFrame) {
     let pid = tf.tpidr;
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         p.context.x[0] = pid;
-        p.context.x[7] = 1;
         true
     })), tf);
 }
@@ -107,7 +103,7 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
         match p.last_file_id {
             Some(fid) => {
                 let path_pa =  match p.vmap.get_pa(VirtualAddr::from(path_ptr)) {
-                    Some(pa) => pa.bitor(PhysicalAddr::from(path_ptr & 0xFFFF)),
+                    Some(pa) => pa,
                     None => {
                         p.context.x[7] = 104;
                         return true
@@ -126,6 +122,7 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
                     }
                 };
 
+                kprintln!("String pointer read from user memory: {}", path);
                 let path_buf = PathBuf::from(path);
 
                 let entry = match FILESYSTEM.open(path_buf.as_path()) {
@@ -154,7 +151,24 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
     })), tf);
 }
 
-
+pub fn sys_sbrk(size: u64, tf: &mut TrapFrame)  {
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        let next_heap_ptr = p.heap_ptr.add(VirtualAddr::from(size));
+        while p.next_heap_page.as_u64() < next_heap_ptr.as_u64() {
+            let next_heap_page = p.next_heap_page.add(VirtualAddr::from(Page::SIZE));
+            if next_heap_page.as_u64() >= p.stack_base.as_u64() {
+                p.context.x[7] = 30;
+                return true
+            }
+            let _heap_page = p.vmap.alloc(p.next_heap_page, PagePerm::RW);
+            p.next_heap_page = next_heap_page;
+        }
+        p.context.x[0] = p.heap_ptr.as_u64();
+        p.context.x[7] = 1;
+        p.heap_ptr = next_heap_ptr;
+        true
+    })), tf);
+}
 
 pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
     use crate::console::kprintln;
@@ -166,6 +180,7 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         4 => sys_write(tf.x[0] as u8, tf),
         5 => sys_getpid(tf),
         6 => sys_open(tf.x[0] as u64, tf.x[1] as usize, tf),
+        7 => sys_sbrk(tf.x[0] as u64, tf),
         _ => tf.x[7] = 1,
     }
 }

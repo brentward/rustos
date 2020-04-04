@@ -4,6 +4,8 @@ use alloc::vec;
 use shim::io;
 use shim::path::Path;
 use core::mem;
+use core::ops::{AddAssign, Add};
+
 
 use fat32::traits::FileSystem;
 use fat32::traits::Entry;
@@ -38,6 +40,9 @@ pub struct Process {
     pub files: Vec<(Id, Box<EntryStruct<PiVFatHandle>>)>,
     /// The last file ID
     pub last_file_id: Option<Id>,
+    pub stack_base: VirtualAddr,
+    pub heap_ptr: VirtualAddr,
+    pub next_heap_page: VirtualAddr,
 }
 
 impl Process {
@@ -59,6 +64,9 @@ impl Process {
             state: State::Ready,
             files: vec![],
             last_file_id: Some(0),
+            stack_base: Process::get_stack_base(),
+            heap_ptr: Process::get_heap_base(),
+            next_heap_page: Process::get_heap_base().add(VirtualAddr::from(Page::SIZE))
         })
     }
 
@@ -92,10 +100,11 @@ impl Process {
     /// permission to load file's contents.
     fn do_load<P: AsRef<Path>>(pn: P) -> OsResult<Process> {
         use io::{Write, Read};
-        use core::ops::AddAssign;
 
         let mut p = Process::new()?;
         let _stack_page = p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
+        let _heap_page = p.vmap.alloc(Process::get_heap_base(), PagePerm::RW);
+
         let path = pn.as_ref();
         let entry = FILESYSTEM.open(path)?;
 
@@ -140,6 +149,10 @@ impl Process {
         VirtualAddr::from(USER_STACK_BASE + (Page::SIZE - 16))
     }
 
+    pub fn get_heap_base() -> VirtualAddr {
+        VirtualAddr::from(USER_HEAP_BASE)
+    }
+
     /// Returns `true` if this process is ready to be scheduled.
     ///
     /// This functions returns `true` only if one of the following holds:
@@ -161,7 +174,10 @@ impl Process {
                 let mut current_state = mem::replace(&mut self.state, State::Ready);
                 let current_ready =  match current_state {
                     State::Waiting(ref mut event_pol_fn) => event_pol_fn(self),
-                    _ => panic!("unexpected match in current_state"),
+                    _ => panic!(
+                        "self.state in Process::ready() is unexpectedly not State::Waiting. \
+                        Should not happen under normal conditions"
+                    ),
                 };
                 if !current_ready {
                     self.state = current_state;

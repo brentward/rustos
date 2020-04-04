@@ -178,11 +178,6 @@ pub fn shell(prefix: &str) {
                             Err(e) => Err(e),
                         }
                     },
-                    // "ll2" => {
-                    //     let mut ll_cmd = Ls::from(Some("l"))?;
-                    //     ll_cmd.set_long(true);
-                    //     ll_cmd.exec(&command, &mut cwd)
-                    // }
                     "cat" => {
                         match Cat::new(None) {
                             Ok(ref mut executable) => executable

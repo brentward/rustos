@@ -7,7 +7,6 @@ pub use self::frame::TrapFrame;
 pub use crate::console;
 pub use crate::shell;
 
-
 use pi::interrupt::{Controller, Interrupt};
 
 use crate::console::kprintln;
@@ -47,16 +46,13 @@ pub struct Info {
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-
     match info.kind {
-
         Kind::Synchronous => {
             let syndrome = Syndrome::from(esr);
             match syndrome {
                 Syndrome::Brk(brk) => {
                     shell::shell("$ ");
                     tf.elr += 4;
-
                 }
                 Syndrome::Svc(num) => handle_syscall(num, tf),
                 _ => (),
@@ -68,10 +64,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 if controller.is_pending(*int) {
                     IRQ.invoke(*int, tf)
                 }
-
             }
-
-
         }
         _ => (),
     }
