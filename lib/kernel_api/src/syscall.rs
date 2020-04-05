@@ -109,13 +109,35 @@ pub fn open(path: &str) -> OsResult<u64> {
               mov $0, x0
               mov $1, x7"
              : "=r"(fid), "=r"(ecode)
-             : "r"(path_ptr), "r"(path_len) "i"(NR_OPEN)
+             : "r"(path_ptr), "r"(path_len), "i"(NR_OPEN)
              : "x0", "x7"
              : "volatile");
     }
 
     err_or!(ecode, fid)
 
+}
+
+pub fn read(fd: u64, buf: &mut [u8]) -> OsResult<usize> {
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut bytes: usize;
+    let count = buf.len();
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              svc $5
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(bytes), "=r"(ecode)
+             : "r"(fd), "r"(buf_ptr), "r"(count), "i"(NR_READ)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, bytes)
 }
 
 pub fn sbrk(size: u64) -> OsResult<*mut u8> {

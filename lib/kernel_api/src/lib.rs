@@ -26,6 +26,7 @@ pub enum OsError {
     BadAddress = 50,
     FileExists = 60,
     InvalidArgument = 70,
+    IsDirectory = 80,
 
     IoError = 101,
     IoErrorEof = 102,
@@ -50,6 +51,7 @@ impl core::convert::From<u64> for OsError {
             50 => OsError::BadAddress,
             60 => OsError::FileExists,
             70 => OsError::InvalidArgument,
+            80 => OsError::IsDirectory,
 
             101 => OsError::IoError,
             102 => OsError::IoErrorEof,
@@ -85,3 +87,4 @@ pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
 pub const NR_OPEN: usize = 6;
 pub const NR_SBRK: usize = 7;
+pub const NR_READ: usize = 8;
