@@ -215,7 +215,7 @@ pub fn shell(prefix: &str) {
                         match BinFile::new(None) {
                             Ok(ref mut executable) => {
                                 match executable.exec(&command, &mut cwd) {
-                                    Ok(foo) => break,
+                                    Ok(_) => break,
                                     Err(e) => Err(e),
                                 }
                             }

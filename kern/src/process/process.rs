@@ -25,6 +25,12 @@ use kernel_api::{OsError, OsResult};
 /// Type alias for the type of a process ID.
 pub type Id = u64;
 
+#[derive(Debug)]
+pub struct FileDescriptor {
+    pub id: Id,
+    pub entry: Box<EntryStruct<PiVFatHandle>>,
+}
+
 /// A structure that represents the complete state of a process.
 #[derive(Debug)]
 pub struct Process {
@@ -37,7 +43,7 @@ pub struct Process {
     /// The scheduling state of the process.
     pub state: State,
     /// The list of open file handles.
-    pub files: Vec<(Id, Box<EntryStruct<PiVFatHandle>>)>,
+    pub files: Vec<FileDescriptor>,
     /// The last file ID
     pub last_file_id: Option<Id>,
     pub stack_base: VirtualAddr,

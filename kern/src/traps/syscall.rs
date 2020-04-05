@@ -6,10 +6,11 @@ use core::ops::{Add, AddAssign, BitAnd, BitOr, Sub, SubAssign};
 
 use shim::path::PathBuf;
 
-use fat32::traits::FileSystem;
+use fat32::traits::{FileSystem, Entry};
+use fat32::vfat::Entry as EntryEnum;
 
 use crate::console::CONSOLE;
-use crate::process::State;
+use crate::process::{State, FileDescriptor};
 use crate::traps::TrapFrame;
 use crate::SCHEDULER;
 use crate::FILESYSTEM;
@@ -73,7 +74,7 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 pub fn sys_write(b: u8, tf: &mut TrapFrame) {
     use crate::console::kprint;
 
-    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+    SCHEDULER.switch(State::Waiting(Box::new(move |_p| {
         if b.is_ascii() {
             let ch = b as char;
             kprint!("{}", ch);
@@ -102,17 +103,14 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         match p.last_file_id {
             Some(fid) => {
-                let path_pa =  match p.vmap.get_pa(VirtualAddr::from(path_ptr)) {
-                    Some(pa) => pa,
-                    None => {
+                let path_slice = unsafe { match p.vmap
+                    .get_slice_at_va(VirtualAddr::from(path_ptr), path_len) {
+                    Ok(slice) => slice,
+                    Err(_) => {
                         p.context.x[7] = 104;
                         return true
                     }
-                };
-
-                let path_slice =  unsafe {
-                    slice::from_raw_parts(path_pa.as_ptr(), path_len)
-                };
+                }};
 
                 let path = match str::from_utf8(path_slice) {
                     Ok(path) => path,
@@ -122,7 +120,6 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
                     }
                 };
 
-                kprintln!("String pointer read from user memory: {}", path);
                 let path_buf = PathBuf::from(path);
 
                 let entry = match FILESYSTEM.open(path_buf.as_path()) {
@@ -134,8 +131,7 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
                 };
 
                 p.last_file_id = fid.checked_add(1);
-                p.files.push((fid, Box::new(entry)));
-
+                p.files.push(FileDescriptor { id: fid, entry: Box::new(entry) });
 
                 p.context.x[0] = fid;
                 p.context.x[7] = 1;
@@ -148,6 +144,66 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
                 return true
             }
         }
+    })), tf);
+}
+
+pub fn sys_read(fd: u64, buf_ptr: u64, len: usize, tf: &mut TrapFrame) {
+    use crate::console::kprintln;
+    use shim::io::Read;
+
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        let mut buf_slice = unsafe { match p.vmap
+            .get_mut_slice_at_va(VirtualAddr::from(buf_ptr), len) {
+            Ok(slice) => slice,
+            Err(_) => {
+                p.context.x[7] = 104;
+                return true
+            }
+        }};
+        let mut fd_index = p.files.len();
+
+        for (index, file_descriptor) in (&p.files).iter().enumerate() {
+            if file_descriptor.id == fd {
+                fd_index = index;
+                break;
+            }
+        }
+        if fd_index < p.files.len() {
+            let file_descriptor =  p.files.remove(fd_index);
+            if file_descriptor.entry.is_file() {
+                let mut file =  match file_descriptor.entry.into_file() {
+                    Some(file) => file,
+                    None => {
+                        p.context.x[7] = 0;
+                        return true
+                    }
+                };
+                let bytes = match file.read(&mut buf_slice) {
+                    Ok(bytes) => bytes,
+                    Err(_) => {
+                        p.context.x[7] = 101;
+                        return true
+                    }
+                };
+                p.files.push(FileDescriptor {
+                    id: file_descriptor.id.clone(),
+                    entry: Box::new(EntryEnum::File(file)),
+                });
+                p.context.x[0] = bytes as u64;
+                p.context.x[7] = 1;
+                true
+
+
+            } else {
+                p.context.x[7] = 80;
+                true
+            }
+
+        } else {
+            p.context.x[7] = 101;
+            true
+        }
+
     })), tf);
 }
 
@@ -170,6 +226,13 @@ pub fn sys_sbrk(size: u64, tf: &mut TrapFrame)  {
     })), tf);
 }
 
+pub fn sys_unknown(tf: &mut TrapFrame)  {
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        p.context.x[7] = 0;
+        true
+    })), tf);
+}
+
 pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
     use crate::console::kprintln;
 
@@ -181,6 +244,8 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         5 => sys_getpid(tf),
         6 => sys_open(tf.x[0] as u64, tf.x[1] as usize, tf),
         7 => sys_sbrk(tf.x[0] as u64, tf),
-        _ => tf.x[7] = 1,
+        8 => sys_read(tf.x[0] as u64, tf.x[1] as u64, tf.x[2] as usize, tf),
+
+        _ => sys_unknown(tf),
     }
 }

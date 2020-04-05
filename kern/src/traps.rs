@@ -50,7 +50,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
         Kind::Synchronous => {
             let syndrome = Syndrome::from(esr);
             match syndrome {
-                Syndrome::Brk(brk) => {
+                Syndrome::Brk(_brk) => {
                     shell::shell("$ ");
                     tf.elr += 4;
                 }

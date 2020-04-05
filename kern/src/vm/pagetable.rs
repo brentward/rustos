@@ -1,7 +1,7 @@
 use core::iter::Chain;
 use core::ops::{Deref, DerefMut, BitAnd, Sub, BitOr};
 use core::slice::Iter;
-use core::slice::from_raw_parts_mut;
+use core::slice::{from_raw_parts_mut, from_raw_parts};
 
 use alloc::boxed::Box;
 use alloc::fmt;
@@ -338,6 +338,8 @@ impl UserPageTable {
         page
     }
 
+    /// Gets a PhysicalAddr at the VirtualAddr given by `va`. Returns None
+    /// if the given VirtualAddr is not valid
     pub fn get_pa(&self, va: VirtualAddr) -> Option<PhysicalAddr> {
         let va_locate = va.sub(VirtualAddr::from(USER_IMG_BASE));
         match self.get_entry_pa(va_locate) {
@@ -346,6 +348,49 @@ impl UserPageTable {
             None => None,
         }
     }
+
+    /// Gets a slice of u8 values of length `len` located at the VirtualAddr given by `va`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that a slice of u8 values of length `len` exists at
+    /// VirtualAddr `va`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if given `va` is not valid.
+    pub unsafe fn get_slice_at_va(&self, va: VirtualAddr, len: usize) -> Result<&[u8], ()> {
+        let ptr_pa =  match self.get_pa(VirtualAddr::from(va)) {
+            Some(pa) => pa,
+            None => return Err(()),
+        };
+
+        Ok(unsafe {
+            from_raw_parts(ptr_pa.as_ptr(), len)
+        })
+    }
+
+    /// Gets a mutable slice of u8 values of length `len` located at the VirtualAddr given by `va`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that a slice of u8 values of length `len` exists at
+    /// VirtualAddr `va`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if given `va` is not valid.
+    pub unsafe fn get_mut_slice_at_va(&self, va: VirtualAddr, len: usize) -> Result<&mut [u8], ()> {
+        let mut ptr_pa =  match self.get_pa(VirtualAddr::from(va)) {
+            Some(pa) => pa,
+            None => return Err(()),
+        };
+
+        Ok(unsafe {
+            from_raw_parts_mut(ptr_pa.as_mut_ptr(), len)
+        })
+    }
+
 }
 
 impl Deref for KernPageTable {
