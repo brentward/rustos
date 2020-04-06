@@ -9,7 +9,7 @@ use core::ops::{AddAssign, Add};
 
 use fat32::traits::FileSystem;
 use fat32::traits::Entry;
-use fat32::vfat::Entry as EntryStruct;
+use fat32::vfat::{File, Dir, Entry as EntryEnum};
 
 use aarch64;
 
@@ -19,17 +19,27 @@ use crate::traps::TrapFrame;
 use crate::vm::*;
 use crate::FILESYSTEM;
 use crate::fs::PiVFatHandle;
+use crate::console::{Console, CONSOLE};
 
 use kernel_api::{OsError, OsResult};
 
 /// Type alias for the type of a process ID.
 pub type Id = u64;
 
+/// Type alias for the type of a File Descriptor
+pub type Fd = usize;
+
 #[derive(Debug)]
-pub struct FileDescriptor {
-    pub id: Id,
-    pub entry: Box<EntryStruct<PiVFatHandle>>,
+pub enum FdEntry {
+    Console,
+    Entry(Box<EntryEnum<PiVFatHandle>>),
 }
+
+// #[derive(Debug)]
+// pub struct FileDescription {
+//     pub fd: Fd,
+//     pub entry: FdEntry,
+// }
 
 /// A structure that represents the complete state of a process.
 #[derive(Debug)]
@@ -43,9 +53,9 @@ pub struct Process {
     /// The scheduling state of the process.
     pub state: State,
     /// The list of open file handles.
-    pub files: Vec<FileDescriptor>,
+    pub files: Vec<Option<FdEntry>>,
     /// The last file ID
-    pub last_file_id: Option<Id>,
+    pub unused_file_descriptors: Vec<usize>,
     pub stack_base: VirtualAddr,
     pub heap_ptr: VirtualAddr,
     pub next_heap_page: VirtualAddr,
@@ -63,13 +73,15 @@ impl Process {
             None => return Err(OsError::NoMemory),
         };
         let vmap = Box::new(UserPageTable::new());
+
         Ok(Process {
             context: Box::new(TrapFrame::default()),
             stack,
             vmap,
             state: State::Ready,
-            files: vec![],
-            last_file_id: Some(0),
+            files: vec![Some(FdEntry::Console)],
+            unused_file_descriptors: vec![],
+            // last_file_descriptor: Some(1),
             stack_base: Process::get_stack_base(),
             heap_ptr: Process::get_heap_base(),
             next_heap_page: Process::get_heap_base().add(VirtualAddr::from(Page::SIZE))
