@@ -242,14 +242,9 @@ pub fn sys_read(fd: usize, buf_ptr: u64, len: usize, tf: &mut TrapFrame) {
             Some(entry) => {
                 match entry {
                     FdEntry::Console => {
-                        let bytes =  match CONSOLE.lock().read(buf_slice) {
-                            Ok(bytes) => bytes,
-                            Err(_) => {
-                                p.context.x[7] = 0;
-                                return true
-                            }
-                        };
-                        p.context.x[0] = bytes as u64;
+                        let byte =  CONSOLE.lock().read_byte();
+                        buf_slice[0] = byte;
+                        p.context.x[0] = 1;
                         p.context.x[7] = 1;
                         return true
 
