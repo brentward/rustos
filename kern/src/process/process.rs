@@ -74,7 +74,7 @@ impl Process {
             stack,
             vmap,
             state: State::Ready,
-            files: vec![Some(FdEntry::Console)],
+            files: vec![Some(FdEntry::Console), Some(FdEntry::Console), Some(FdEntry::Console)],
             unused_file_descriptors: vec![],
             // last_file_descriptor: Some(1),
             stack_base: Process::get_stack_base(),
