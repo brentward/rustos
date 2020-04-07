@@ -9,10 +9,9 @@ pub(crate) mod file;
 pub(crate) mod metadata;
 pub(crate) mod vfat;
 
-pub use self::dir::Dir;
+pub use self::dir::{Dir, DirIterator};
 pub use self::ebpb::BiosParameterBlock;
 pub use self::entry::Entry;
-// pub use self::entry::HumanReadableEntry;
 pub use self::error::Error;
 pub use self::file::File;
 pub use self::metadata::{Attributes, Date, Metadata, Time, Timestamp};

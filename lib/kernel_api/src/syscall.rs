@@ -140,6 +140,28 @@ pub fn read(fd: u64, buf: &mut [u8]) -> OsResult<usize> {
     err_or!(ecode, bytes)
 }
 
+pub fn getdent(fd: u64, buf: &mut [fs::DirEnt]) -> OsResult<usize> {
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut entries: usize;
+    let count = buf.len();
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              svc $5
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(entries), "=r"(ecode)
+             : "r"(fd), "r"(buf_ptr), "r"(count), "i"(NR_GETDENT)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, entries)
+}
+
 pub fn sbrk(size: u64) -> OsResult<*mut u8> {
     let mut ecode: u64;
     let mut ptr: u64;

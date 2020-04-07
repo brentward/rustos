@@ -2,14 +2,13 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::vec;
 use shim::io;
-use shim::path::Path;
+use shim::path::{Path, PathBuf};
 use core::mem;
 use core::ops::{AddAssign, Add};
 
-
 use fat32::traits::FileSystem;
 use fat32::traits::Entry;
-use fat32::vfat::{File, Dir, Entry as EntryEnum};
+use fat32::vfat::{File, DirIterator, Entry as EntryEnum};
 
 use aarch64;
 
@@ -32,14 +31,9 @@ pub type Fd = usize;
 #[derive(Debug)]
 pub enum FdEntry {
     Console,
-    Entry(Box<EntryEnum<PiVFatHandle>>),
+    File(Box<File<PiVFatHandle>>),
+    DirEntries(Box<DirIterator<PiVFatHandle>>),
 }
-
-// #[derive(Debug)]
-// pub struct FileDescription {
-//     pub fd: Fd,
-//     pub entry: FdEntry,
-// }
 
 /// A structure that represents the complete state of a process.
 #[derive(Debug)]
@@ -59,6 +53,7 @@ pub struct Process {
     pub stack_base: VirtualAddr,
     pub heap_ptr: VirtualAddr,
     pub next_heap_page: VirtualAddr,
+    pub cwd: PathBuf,
 }
 
 impl Process {
@@ -84,7 +79,8 @@ impl Process {
             // last_file_descriptor: Some(1),
             stack_base: Process::get_stack_base(),
             heap_ptr: Process::get_heap_base(),
-            next_heap_page: Process::get_heap_base().add(VirtualAddr::from(Page::SIZE))
+            next_heap_page: Process::get_heap_base().add(VirtualAddr::from(Page::SIZE)),
+            cwd: PathBuf::from("/"),
         })
     }
 

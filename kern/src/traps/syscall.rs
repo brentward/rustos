@@ -2,11 +2,14 @@ use alloc::boxed::Box;
 use core::time::Duration;
 use core::slice;
 use core::str;
+use core::ffi::c_void;
+use core::mem::size_of;
+
 use core::ops::{Add, AddAssign, BitAnd, BitOr, Sub, SubAssign};
 
 use shim::path::PathBuf;
 
-use fat32::traits::{FileSystem, Entry};
+use fat32::traits::{FileSystem, Entry, Dir};
 use fat32::vfat::Entry as EntryEnum;
 
 use crate::console::CONSOLE;
@@ -101,15 +104,6 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
     use crate::console::kprintln;
 
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-        // let mut file_description_option = p.files[p.unused_file_descriptors];
-        // while file_description_option != None {
-        //     p.unused_file_descriptors += 1;
-        //     if p.unused_file_descriptors >= 1024 {
-        //         p.context.x[7] = 101;
-        //         return true
-        //     }
-        //     file_description_option = p.files[p.unused_file_descriptors];
-        // }
         let path_slice = unsafe { match p.vmap
             .get_slice_at_va(VirtualAddr::from(path_ptr), path_len) {
             Ok(slice) => slice,
@@ -145,7 +139,19 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
                     true
                 }
                 None => {
-                    p.files[fd] = Some(FdEntry::Entry(Box::new(entry)));
+                    match entry.is_file() {
+                        true => {
+                            let file = entry.into_file()
+                                .expect("Entry unexpectedly failed to convert to file");
+                            p.files[fd] = Some(FdEntry::File(Box::new(file)));
+                        }
+                        false => {
+                            let dir = entry.into_dir()
+                                .expect("Entry unexpectedly failed to convert to dir");
+                            let dir_entries = dir.entries().unwrap(); //FIXME
+                            p.files[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
+                        }
+                    }
                     p.context.x[0] = fd as u64;
                     p.context.x[7] = 1;
                     true
@@ -154,66 +160,23 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
 
         } else {
             let fd = p.files.len();
-            p.files.push(Some(FdEntry::Entry(Box::new(entry))));
+            match entry.is_file() {
+                true => {
+                    let file = entry.into_file()
+                        .expect("Entry unexpectedly failed to convert to file");
+                    p.files.push(Some(FdEntry::File(Box::new(file))));
+                }
+                false => {
+                    let dir = entry.into_dir()
+                        .expect("Entry unexpectedly failed to convert to dir");
+                    let dir_entries = dir.entries().unwrap(); //FIXME
+                    p.files.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
+                }
+            }
             p.context.x[0] = fd as u64;
             p.context.x[7] = 1;
             true
         }
-
-
-
-        // p.files.push(Some(FdEntry::Entry(Box::new(entry))));
-        //
-        // p.context.x[0] = fid as u64;
-        // p.context.x[7] = 1;
-        //
-        // true
-
-
-
-        // match p.last_file_descriptor {
-        //     Some(fid) => {
-        //         let path_slice = unsafe { match p.vmap
-        //             .get_slice_at_va(VirtualAddr::from(path_ptr), path_len) {
-        //             Ok(slice) => slice,
-        //             Err(_) => {
-        //                 p.context.x[7] = 104;
-        //                 return true
-        //             }
-        //         }};
-        //
-        //         let path = match str::from_utf8(path_slice) {
-        //             Ok(path) => path,
-        //             Err(_e) => {
-        //                 p.context.x[7] = 50;
-        //                 return true
-        //             }
-        //         };
-        //
-        //         let path_buf = PathBuf::from(path);
-        //
-        //         let entry = match FILESYSTEM.open(path_buf.as_path()) {
-        //             Ok(entry) => entry,
-        //             Err(_) => {
-        //                 p.context.x[7] = 10;
-        //                 return true
-        //             }
-        //         };
-        //
-        //         p.last_file_descriptor = fid.checked_add(1);
-        //         p.files.push(FileDescription { fd: fid, entry: Box::new(entry) });
-        //
-        //         p.context.x[0] = fid as u64;
-        //         p.context.x[7] = 1;
-        //
-        //         true
-        //
-        //     }
-        //     None => {
-        //         p.context.x[7] = 101;
-        //         return true
-        //     }
-        // }
     })), tf);
 }
 
@@ -230,94 +193,45 @@ pub fn sys_read(fd: usize, buf_ptr: u64, len: usize, tf: &mut TrapFrame) {
                 return true
             }
         }};
-        let mut files_index = p.files.len();
 
-        // for (index, file_description) in (&p.files).iter().enumerate() {
-        //     if file_description.fd == fd {
-        //         files_index = index;
-        //         break;
-        //     }
-        // }
-        let entry = match p.files.remove(fd) {
+        match p.files.remove(fd) {
             Some(entry) => {
                 match entry {
                     FdEntry::Console => {
                         let byte =  CONSOLE.lock().read_byte();
+                        p.files.insert(fd,  Some(FdEntry::Console));
                         buf_slice[0] = byte;
                         p.context.x[0] = 1;
                         p.context.x[7] = 1;
-                        return true
+                        true
 
                     }
-                    FdEntry::Entry(entry) => entry,
+                    FdEntry::File(mut file) => {
+                        let bytes = match file.read(&mut buf_slice) {
+                            Ok(bytes) => bytes,
+                            Err(_) => {
+                                p.context.x[7] = 101;
+                                return true
+                            }
+                        };
+                        p.files.insert(fd,  Some(FdEntry::File(file)));
+                        p.context.x[0] = bytes as u64;
+                        p.context.x[7] = 1;
+                        true
+
+                    }
+                    FdEntry::DirEntries(dir_entries) => {
+                        p.files.insert(fd,  Some(FdEntry::DirEntries(dir_entries)));
+                        p.context.x[7] = 80;
+                        true
+                    }
                 }
             }
             None => {
                 p.context.x[7] = 10;
-                return true
+                true
             }
-        };
-        if entry.is_file() {
-            let mut file =  match entry.into_file() {
-                Some(file) => file,
-                None => {
-                    p.context.x[7] = 0;
-                    return true
-                }
-            };
-            let bytes = match file.read(&mut buf_slice) {
-                Ok(bytes) => bytes,
-                Err(_) => {
-                    p.context.x[7] = 101;
-                    return true
-                }
-            };
-            p.files.insert(fd,  Some(FdEntry::Entry(Box::new(EntryEnum::File(file)))));
-            p.context.x[0] = bytes as u64;
-            p.context.x[7] = 1;
-            true
-
-
-        } else {
-            p.context.x[7] = 80;
-            true
         }
-        // if files_index < p.files.len() {
-        //     let file_description =  p.files.remove(files_index);
-        //     if file_description.entry.is_file() {
-        //         let mut file =  match file_description.entry.into_file() {
-        //             Some(file) => file,
-        //             None => {
-        //                 p.context.x[7] = 0;
-        //                 return true
-        //             }
-        //         };
-        //         let bytes = match file.read(&mut buf_slice) {
-        //             Ok(bytes) => bytes,
-        //             Err(_) => {
-        //                 p.context.x[7] = 101;
-        //                 return true
-        //             }
-        //         };
-        //         p.files.push(FileDescription {
-        //             fd: file_description.fd.clone(),
-        //             entry: Box::new(EntryEnum::File(file)),
-        //         });
-        //         p.context.x[0] = bytes as u64;
-        //         p.context.x[7] = 1;
-        //         true
-        //
-        //
-        //     } else {
-        //         p.context.x[7] = 80;
-        //         true
-        //     }
-        //
-        // } else {
-        //     p.context.x[7] = 101;
-        //     true
-        // }
-
     })), tf);
 }
 
@@ -336,6 +250,65 @@ pub fn sys_sbrk(size: u64, tf: &mut TrapFrame)  {
         p.context.x[0] = p.heap_ptr.as_u64();
         p.context.x[7] = 1;
         p.heap_ptr = next_heap_ptr;
+        true
+    })), tf);
+}
+
+pub fn sys_getdent(fd: usize, dent_buf_ptr: u64, count: usize, tf: &mut TrapFrame) {
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        let mut entries = 0u64;
+        let mut dir_entries = match p.files.remove(fd) {
+            Some(entry) => {
+                match entry {
+                    FdEntry::Console => {
+                        p.files.insert(fd,  Some(FdEntry::Console));
+                        p.context.x[7] = 0;
+                        return true
+                    }
+                    FdEntry::File(file) => {
+                        p.files.insert(fd,  Some(FdEntry::File(file)));
+                        p.context.x[7] = 0;
+                        return true
+                    }
+                    FdEntry::DirEntries(dir_entries) => dir_entries
+                }
+            }
+            None => {
+                p.context.x[7] = 10;
+                return true
+            }
+        };
+        for index in 0..count {
+            match dir_entries.next() {
+                Some(entry) => {
+
+                    let mut dent_buf_pa = match p.vmap.get_pa(VirtualAddr::from(dent_buf_ptr)) {
+                        Some(pa) => pa,
+                        None => {
+                            p.context.x[7] = 0;
+                            return true
+                        },
+                    };
+                    let dent_pa = dent_buf_pa.add(PhysicalAddr::from(size_of::<fs::DirEnt>() * index));
+                    let mut dent = unsafe { &mut *(dent_pa.as_usize() as  *mut fs::DirEnt) };
+
+                    dent.set_name(entry.name());
+                    match entry.is_file() {
+                        true => dent.set_d_type(fs::DirType::File),
+                        false => dent.set_d_type(fs::DirType::Dir),
+                    }
+                    entries += 1;
+
+                }
+                None => {
+                    break
+                }
+            }
+        }
+        p.files.insert(fd,  Some(FdEntry::DirEntries(dir_entries)));
+        p.context.x[0] = entries;
+        p.context.x[7] = 1;
+
         true
     })), tf);
 }
@@ -359,6 +332,7 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         6 => sys_open(tf.x[0] as u64, tf.x[1] as usize, tf),
         7 => sys_sbrk(tf.x[0] as u64, tf),
         8 => sys_read(tf.x[0] as usize, tf.x[1] as u64, tf.x[2] as usize, tf),
+        9 => sys_getdent(tf.x[0] as usize, tf.x[1] as u64, tf.x[2] as usize, tf),
 
         _ => sys_unknown(tf),
     }
