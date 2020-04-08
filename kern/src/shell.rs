@@ -185,6 +185,13 @@ pub fn shell(prefix: &str) {
                             Err(e) => Err(e),
                         }
                     },
+                    "append" => {
+                        match Append::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
                     "exit" => {
                         kprintln!("Goodbye...");
                         break
@@ -648,6 +655,62 @@ impl Executable for Cat {
     }
 }
 
+struct Append;
+
+impl Executable for Append {
+    fn new(_params: Option<&str>) -> ExecutableResult<Self> {
+        Ok(Append)
+    }
+
+    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
+        let mut result = String::new();
+        for &arg in cmd.args[1..].iter() {
+            let mut working_dir = cwd.clone();
+
+            let path = Path::new(&arg);
+
+            set_working_dir(&path, &mut working_dir);
+
+            let entry = match FILESYSTEM.open(working_dir.as_path()) {
+                Ok(entry) => entry,
+                Err(_) => {
+                    writeln!(&mut result, "cat: {} no such fhe or directory", path.to_str()
+                        .expect("path is not valid unicode"))?;
+
+                    return Err(StdError { result, code: 1 });
+                }
+            };
+
+            let mut bytes_read = 0usize;
+            kprintln!("size: {}", entry.size());
+            let total_size = entry.size();
+            let mut file = match entry.into_file() {
+                Some(file) => file,
+                None => {
+                    writeln!(result, "append: {}: is a directory", path.to_str()
+                        .expect("path is not valid unicode"))?;
+
+                    return Err(StdError { result, code: 1 });
+                }
+            };
+            let input = String::from("\r\nI'm adding this to the end of the file");
+            let mut buf = input.as_bytes();
+            let bytes = match file.write(buf) {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    writeln!(result, "append: {}: file could not be opened", path.to_str()
+                        .expect("path is not valid unicode"))?;
+
+                    return Err(StdError { result, code: 1 });
+                }
+            };
+            writeln!(result, "append: wrote {} bytes to {}", bytes, path.to_str()
+                .expect("path is not valid unicode"))?;
+
+        }
+        Ok(StdOut { result })
+    }
+}
 
 struct Brk;
 

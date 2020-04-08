@@ -26,7 +26,7 @@ use kernel_api::{OsError, OsResult};
 pub type Id = u64;
 
 /// Type alias for the type of a File Descriptor
-pub type Fd = usize;
+pub type Fd = u64;
 
 #[derive(Debug)]
 pub enum FdEntry {
@@ -47,7 +47,7 @@ pub struct Process {
     /// The scheduling state of the process.
     pub state: State,
     /// The list of open file handles.
-    pub files: Vec<Option<FdEntry>>,
+    pub file_table: Vec<Option<FdEntry>>,
     /// The last file ID
     pub unused_file_descriptors: Vec<usize>,
     pub stack_base: VirtualAddr,
@@ -74,7 +74,7 @@ impl Process {
             stack,
             vmap,
             state: State::Ready,
-            files: vec![Some(FdEntry::Console), Some(FdEntry::Console), Some(FdEntry::Console)],
+            file_table: vec![Some(FdEntry::Console), Some(FdEntry::Console), Some(FdEntry::Console)],
             unused_file_descriptors: vec![],
             // last_file_descriptor: Some(1),
             stack_base: Process::get_stack_base(),

@@ -133,7 +133,7 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
         if p.unused_file_descriptors.len() > 0 {
             let fd = p.unused_file_descriptors.pop()
                 .expect("Unexpected p.unused_file_descriptors.pop() failed after len check");
-            match  p.files[fd] {
+            match  p.file_table[fd] {
                 Some(_) => {
                     p.context.x[7] = 103;
                     true
@@ -143,13 +143,13 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
                         true => {
                             let file = entry.into_file()
                                 .expect("Entry unexpectedly failed to convert to file");
-                            p.files[fd] = Some(FdEntry::File(Box::new(file)));
+                            p.file_table[fd] = Some(FdEntry::File(Box::new(file)));
                         }
                         false => {
                             let dir = entry.into_dir()
                                 .expect("Entry unexpectedly failed to convert to dir");
                             let dir_entries = dir.entries().unwrap(); //FIXME
-                            p.files[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
+                            p.file_table[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
                         }
                     }
                     p.context.x[0] = fd as u64;
@@ -159,18 +159,18 @@ pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
             }
 
         } else {
-            let fd = p.files.len();
+            let fd = p.file_table.len();
             match entry.is_file() {
                 true => {
                     let file = entry.into_file()
                         .expect("Entry unexpectedly failed to convert to file");
-                    p.files.push(Some(FdEntry::File(Box::new(file))));
+                    p.file_table.push(Some(FdEntry::File(Box::new(file))));
                 }
                 false => {
                     let dir = entry.into_dir()
                         .expect("Entry unexpectedly failed to convert to dir");
                     let dir_entries = dir.entries().unwrap(); //FIXME
-                    p.files.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
+                    p.file_table.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
                 }
             }
             p.context.x[0] = fd as u64;
@@ -194,12 +194,12 @@ pub fn sys_read(fd: usize, buf_ptr: u64, len: usize, tf: &mut TrapFrame) {
             }
         }};
 
-        match p.files.remove(fd) {
+        match p.file_table.remove(fd) {
             Some(entry) => {
                 match entry {
                     FdEntry::Console => {
                         let byte =  CONSOLE.lock().read_byte();
-                        p.files.insert(fd,  Some(FdEntry::Console));
+                        p.file_table.insert(fd, Some(FdEntry::Console));
                         buf_slice[0] = byte;
                         p.context.x[0] = 1;
                         p.context.x[7] = 1;
@@ -214,14 +214,14 @@ pub fn sys_read(fd: usize, buf_ptr: u64, len: usize, tf: &mut TrapFrame) {
                                 return true
                             }
                         };
-                        p.files.insert(fd,  Some(FdEntry::File(file)));
+                        p.file_table.insert(fd, Some(FdEntry::File(file)));
                         p.context.x[0] = bytes as u64;
                         p.context.x[7] = 1;
                         true
 
                     }
                     FdEntry::DirEntries(dir_entries) => {
-                        p.files.insert(fd,  Some(FdEntry::DirEntries(dir_entries)));
+                        p.file_table.insert(fd, Some(FdEntry::DirEntries(dir_entries)));
                         p.context.x[7] = 80;
                         true
                     }
@@ -257,16 +257,16 @@ pub fn sys_sbrk(size: u64, tf: &mut TrapFrame)  {
 pub fn sys_getdent(fd: usize, dent_buf_ptr: u64, count: usize, tf: &mut TrapFrame) {
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         let mut entries = 0u64;
-        let mut dir_entries = match p.files.remove(fd) {
+        let mut dir_entries = match p.file_table.remove(fd) {
             Some(entry) => {
                 match entry {
                     FdEntry::Console => {
-                        p.files.insert(fd,  Some(FdEntry::Console));
+                        p.file_table.insert(fd, Some(FdEntry::Console));
                         p.context.x[7] = 0;
                         return true
                     }
                     FdEntry::File(file) => {
-                        p.files.insert(fd,  Some(FdEntry::File(file)));
+                        p.file_table.insert(fd, Some(FdEntry::File(file)));
                         p.context.x[7] = 0;
                         return true
                     }
@@ -305,7 +305,7 @@ pub fn sys_getdent(fd: usize, dent_buf_ptr: u64, count: usize, tf: &mut TrapFram
                 }
             }
         }
-        p.files.insert(fd,  Some(FdEntry::DirEntries(dir_entries)));
+        p.file_table.insert(fd, Some(FdEntry::DirEntries(dir_entries)));
         p.context.x[0] = entries;
         p.context.x[7] = 1;
 

@@ -143,7 +143,10 @@ impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
             cluster_offset = 0;
         }
         self.current_cluster = current_cluster;
-        self.offset += buf.len();
+        self.offset += bytes_written;
+        if self.offset > self.size {
+            self.size = self.offset;
+        }
         Ok(bytes_written)
     }
 
