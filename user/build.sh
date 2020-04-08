@@ -3,7 +3,7 @@
 IMG=fs.img
 MNT=mnt
 
-PROGS=(sleep fib)
+PROGS=(sleep fib sleep_exit)
 
 for d in ${PROGS[@]}; do
     (cd $d; make build)
