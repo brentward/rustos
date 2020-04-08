@@ -90,9 +90,63 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
 }
 
 impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
-    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-        unimplemented!("File::write()")
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut bytes_written = 0usize;
+        let mut cluster = match self.current_cluster{
+            Some(cluster)=> cluster,
+            None => return ioerr!(InvalidInput, "cluster in chain marked reserved"),
+        };
+        let mut current_cluster_result = Ok(self.current_cluster);
+        let mut current_cluster = current_cluster_result?;
+        let mut cluster_offset = self.offset % self.bytes_per_cluster;
+        while self.vfat.lock(
+            |vfat| { vfat.size_to_chain_end(cluster) }
+        )? < cluster_offset + buf.len() {
+            let new_cluster = self.vfat.lock(
+                |vfat| {
+                    vfat.find_free_cluster()
+                }
+            )?;
+            self.vfat.lock(
+                |vfat| {
+                    vfat.add_cluster_to_chain(cluster, new_cluster)
+                }
+            )?;
+            cluster = new_cluster;
+        }
+        while bytes_written < buf.len() {
+            let bytes = self.vfat.lock(
+                |vfat| {
+                    vfat.write_cluster(
+                        current_cluster.unwrap(),
+                        cluster_offset,
+                        &buf[bytes_written..]
+                    )
+                }
+            )?;
+            if bytes == self.bytes_per_cluster - cluster_offset {
+                current_cluster_result = self.vfat.lock(|vfat| {
+                    match vfat.fat_entry(current_cluster.unwrap())?.status() {
+                        Status::Data(cluster) => Ok(Some(cluster)),
+                        Status::Eoc(_) => Ok(None),
+                        Status::Bad => ioerr!(InvalidInput, "cluster in chain marked bad"),
+                        Status::Reserved => {
+                            ioerr!(InvalidInput, "cluster in chain marked reserved")
+                        }
+                        Status::Free => ioerr!(InvalidInput, "cluster in chain marked free"),
+                    }
+                });
+                current_cluster = current_cluster_result?;
+
+            }
+            bytes_written += bytes;
+            cluster_offset = 0;
+        }
+        self.current_cluster = current_cluster;
+        self.offset += buf.len();
+        Ok(bytes_written)
     }
+
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
