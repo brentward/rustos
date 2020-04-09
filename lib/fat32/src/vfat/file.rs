@@ -92,6 +92,7 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
 impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut bytes_written = 0usize;
+        let bytes_to_write = buf.len();
         let mut cluster = match self.current_cluster{
             Some(cluster)=> cluster,
             None => return ioerr!(InvalidInput, "cluster in chain marked reserved"),
@@ -100,7 +101,7 @@ impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
         let mut current_cluster = current_cluster_result?;
         let mut cluster_offset = self.offset % self.bytes_per_cluster;
         while self.vfat.lock(
-            |vfat| { vfat.size_to_chain_end(cluster) }
+            |vfat| { vfat.size_to_chain_end(cluster.fat_address()) }
         )? < self.offset + buf.len() {
             let new_cluster = self.vfat.lock(
                 |vfat| {
@@ -114,7 +115,7 @@ impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
             )?;
             cluster = new_cluster;
         }
-        while bytes_written < buf.len() {
+        while bytes_written < bytes_to_write {
             let bytes = self.vfat.lock(
                 |vfat| {
                     vfat.write_cluster(

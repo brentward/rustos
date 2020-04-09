@@ -114,12 +114,12 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let mut bytes = 0usize;
         let start_sector_index = offset / self.bytes_per_sector as usize;
         for sector_index in start_sector_index..self.sectors_per_cluster as usize  {
-            if buf.len() == 0 {
+            if buf.len() == bytes {
                 break
             }
             let current_offset = (offset + bytes)
                 - (sector_index as usize * self.bytes_per_sector as usize);
-            let mut data = self.device.get_mut(first_sector + sector_index as u64)?;
+            let data = self.device.get_mut(first_sector + sector_index as u64)?;
             let mut write_buf = &mut data[current_offset..];
             let bytes_written = write_buf.write(&buf[bytes..])?;
             bytes += bytes_written;
@@ -163,16 +163,17 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         Ok(bytes_total)
     }
 
-    pub fn size_to_chain_end(&mut self, mut current: Cluster) -> io::Result<usize> {
+    pub fn size_to_chain_end(&mut self, current_cluster_raw: u32) -> io::Result<usize> {
+        let mut cluster = Cluster::from(current_cluster_raw);
         let bytes_per_cluster =
             self.sectors_per_cluster as usize * self.bytes_per_sector as usize;
         let mut size = 0usize;
         loop {
-            let fat_entry = self.fat_entry(current)?.status();
+            let fat_entry = self.fat_entry(cluster)?.status();
             match fat_entry {
                 Status::Data(next_cluster) => {
                     size += bytes_per_cluster;
-                    current = next_cluster;
+                    cluster = next_cluster;
                 },
                 Status::Eoc(_) => {
                     size += bytes_per_cluster;
@@ -226,7 +227,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
 
     pub fn add_cluster_to_chain(&mut self, cluster: Cluster, new_cluster: Cluster) -> io::Result<()> {
         match self.fat_entry(new_cluster)?.status() {
-            Status::Eoc(_) => (),
+            Status::Free => (),
             _ => return ioerr!(InvalidData, "new_cluster is not free"),
         }
         match self.fat_entry(cluster)?.status() {
@@ -238,9 +239,9 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                 if sector > self.sectors_per_fat as u64 {
                     return ioerr!(NotFound, "invalid cluster index")
                 }
-                let mut data = self
+                let data = self
                     .device.get_mut(self.fat_start_sector + sector)?;
-                let mut new_cluster_fat_array = new_cluster.fat_address().to_le_bytes();
+                let new_cluster_fat_array = new_cluster.fat_address().to_le_bytes();
                 let mut data_slice = &mut data[position_in_sector..position_in_sector + 4];
                 let _bytes_written = data_slice.write(&new_cluster_fat_array)?;
                 // for index in 0..4 {
@@ -254,7 +255,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                 if new_sector > self.sectors_per_fat as u64 {
                     return ioerr!(NotFound, "invalid cluster index")
                 }
-                let mut new_data = self
+                let new_data = self
                     .device.get_mut(self.fat_start_sector + new_sector)?;
                 let eoc_array = 0x0FFFFFFFu32.to_le_bytes();
                 let mut new_data_slice = &mut new_data[position_in_new_sector..position_in_new_sector + 4];
