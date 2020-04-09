@@ -25,6 +25,7 @@ fn fib(n: u64) -> u64 {
 }
 
 fn main() {
+    println!("PID: {}, Time in ms: {}", getpid(), time().as_millis());
     println!("Started...");
 
     let rtn = fib(40);

@@ -674,7 +674,7 @@ impl Executable for Append {
             let entry = match FILESYSTEM.open(working_dir.as_path()) {
                 Ok(entry) => entry,
                 Err(_) => {
-                    writeln!(&mut result, "cat: {} no such fhe or directory", path.to_str()
+                    writeln!(&mut result, "append: {} no such fhe or directory", path.to_str()
                         .expect("path is not valid unicode"))?;
 
                     return Err(StdError { result, code: 1 });

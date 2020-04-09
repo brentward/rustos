@@ -101,7 +101,7 @@ impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
         let mut cluster_offset = self.offset % self.bytes_per_cluster;
         while self.vfat.lock(
             |vfat| { vfat.size_to_chain_end(cluster) }
-        )? < cluster_offset + buf.len() {
+        )? < self.offset + buf.len() {
             let new_cluster = self.vfat.lock(
                 |vfat| {
                     vfat.find_free_cluster()
