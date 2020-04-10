@@ -1,5 +1,5 @@
 use shim::io;
-use shim::io::{Write, Read};
+use shim::io::{Write, Read, Seek};
 use shim::path::{Path, PathBuf};
 
 use stack_vec::StackVec;
@@ -266,6 +266,15 @@ impl From<fmt::Error> for StdError {
     fn from(_error: fmt::Error) -> Self {
         StdError {
             result: String::from("Format error"),
+            code: 1,
+        }
+    }
+}
+
+impl core::convert::From<io::Error> for StdError {
+    fn from(_error: io::Error) -> Self {
+        StdError {
+            result: String::from("IO error"),
             code: 1,
         }
     }
@@ -663,6 +672,8 @@ impl Executable for Append {
     }
 
     fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
+        use io::SeekFrom;
+
         let mut result = String::new();
         for &arg in cmd.args[1..].iter() {
             let mut working_dir = cwd.clone();
@@ -695,6 +706,7 @@ impl Executable for Append {
             };
             let input = String::from("\r\nI'm adding this to the end of the file");
             let mut buf = input.as_bytes();
+            file.seek(SeekFrom::End(0 - buf.len() as i64))?;
             let bytes = match file.write(buf) {
                 Ok(bytes) => bytes,
                 Err(_) => {
