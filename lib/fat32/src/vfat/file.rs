@@ -2,6 +2,7 @@ use alloc::string::String;
 
 use shim::io::{self, SeekFrom};
 use shim::ioerr;
+use shim::path::{Path, PathBuf};
 
 use crate::traits;
 use crate::vfat::{Cluster, Metadata, VFatHandle, Status};
@@ -16,6 +17,7 @@ pub struct File<HANDLE: VFatHandle> {
     pub offset: usize,
     pub current_cluster: Option<Cluster>,
     pub bytes_per_cluster: usize,
+    pub path: PathBuf,
 }
 
 impl<HANDLE: VFatHandle> File<HANDLE> {
@@ -25,6 +27,7 @@ impl<HANDLE: VFatHandle> File<HANDLE> {
         name: String,
         metadata: Metadata,
         size: usize,
+        path: PathBuf,
     ) -> File<HANDLE> {
         let bytes_per_cluster = vfat.lock(
             |vfat| vfat.bytes_per_cluster()
@@ -38,6 +41,7 @@ impl<HANDLE: VFatHandle> File<HANDLE> {
             offset: 0,
             current_cluster: Some(first_cluster),
             bytes_per_cluster,
+            path
         }
     }
 }

@@ -2,6 +2,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
+use shim::path::{Path, PathBuf};
 use shim::const_assert_size;
 use shim::ffi::OsStr;
 use shim::io::{self, SeekFrom};
@@ -22,6 +23,7 @@ pub struct Dir<HANDLE: VFatHandle> {
     pub name: String,
     pub metadata: Metadata,
     pub size: usize,
+    pub path: PathBuf,
 }
 
 #[repr(C, packed)]
@@ -157,7 +159,8 @@ pub struct DirIterator<HANDLE: VFatHandle> {
     phantom: PhantomData<HANDLE>,
     dir_entries: Vec<VFatDirEntry>,
     position: usize,
-    vfat: HANDLE
+    vfat: HANDLE,
+    parent_path: PathBuf,
 }
 
 impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
@@ -289,6 +292,8 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         ]
                     )
                 );
+                let mut next_path = self.parent_path.clone();
+                next_path.push(name.as_str());
                 return if regular_dir.is_dir(){
                     Some(Entry::Dir(
                         Dir {
@@ -297,6 +302,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                             name,
                             metadata,
                             size: regular_dir.file_size as usize,
+                            path: next_path,
                         }
                     ))
 
@@ -307,6 +313,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         name,
                         metadata,
                         regular_dir.file_size as usize,
+                        next_path,
                     )))
                 }
             }
@@ -329,6 +336,7 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
             dir_entries: unsafe { cluster_chain.cast() },
             position: 0,
             vfat: self.vfat.clone(),
+            parent_path: self.path.clone(),
         })
     }
 }

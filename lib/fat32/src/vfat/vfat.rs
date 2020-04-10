@@ -10,7 +10,7 @@ use shim::io::{self, Write};
 use shim::ioerr;
 use shim::newioerr;
 use shim::path;
-use shim::path::{Path, Component};
+use shim::path::{Path, Component, PathBuf};
 
 use crate::mbr::MasterBootRecord;
 use crate::traits::{BlockDevice, FileSystem};
@@ -286,28 +286,29 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
         }
 
         let first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
-        let mut dir = Entry::Dir(Dir {
+        let mut entry = Entry::Dir(Dir {
             vfat: self.clone(),
             first_cluster,
             name: String::from(""),
             metadata: Metadata::default(),
             size: 0,
+            path: PathBuf::from("/")
         });
         for component in path.components() {
             match component {
-                Component::ParentDir => {
-                    dir = dir.into_dir()
-                        .ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
-                        .find("..")?;
-                },
+                // Component::ParentDir => {
+                //     entry = entry.into_dir()
+                //         .ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
+                //         .find("..")?;
+                // },
                 Component::Normal(name) => {
-                    dir = dir.into_dir()
+                    entry = entry.into_dir()
                         .ok_or(newioerr!(NotFound, "path not found"))?
                         .find(name)?;
                 }
                 _ => (),
             }
         }
-        Ok(dir)
+        Ok(entry)
     }
 }
