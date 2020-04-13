@@ -33,7 +33,7 @@ pub struct VFat<HANDLE: VFatHandle> {
     sectors_per_fat: u32,
     fat_start_sector: u64,
     data_start_sector: u64,
-    rootdir_cluster: Cluster,
+    pub rootdir_cluster: Cluster,
 }
 
 impl<HANDLE: VFatHandle> VFat<HANDLE> {
@@ -128,16 +128,15 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     }
 
     pub fn find_free_cluster(&mut self) -> io::Result<Cluster> {
-        let total_clusters = self.device.get_sector_count() as u32 * self.sectors_per_cluster as u32;
-        let mut free_cluster = ioerr!(InvalidData, "cluster in chain marked free");
+        let total_clusters = self.device.get_sector_count() as u32 / self.sectors_per_cluster as u32;
         for raw_cluster in 0..total_clusters {
             let cluster = Cluster::from(raw_cluster);
             match self.fat_entry(cluster)?.status() {
-                Status::Free => free_cluster = Ok(cluster),
+                Status::Free => return Ok(cluster),
                 _ => (),
             }
         }
-        free_cluster
+        ioerr!(NotFound, "No free clusters")
     }
 
     fn add_cluster_to_buf(&mut self, cluster: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
@@ -213,12 +212,42 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     Ok(bytes)
     }
 
+    pub fn write_chain(
+        &mut self,
+        start: Cluster,
+        buf: &Vec<u8>
+    ) -> io::Result<usize> {
+        let mut cluster = start;
+        let mut bytes = 0usize;
+        loop {
+            if bytes >= buf.len() {
+                break
+            }
+            let fat_entry = self.fat_entry(cluster)?.status();
+            // let cluster_end = bytes + (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize;
+            match fat_entry {
+                Status::Data(next_cluster) => {
+                    bytes += self.write_cluster(cluster, 0, &buf[bytes..])?;
+                    cluster = next_cluster;
+                },
+                Status::Eoc(_) => {
+                    bytes += self.write_cluster(cluster, 0, &buf[bytes..])?;
+                    break
+                },
+                Status::Bad => return ioerr!(InvalidData, "cluster in chain marked bad"),
+                Status::Reserved => return ioerr!(InvalidData, "cluster in chain marked reserved"),
+                Status::Free => return ioerr!(InvalidData, "cluster in chain marked free"),
+            };
+        }
+        Ok(bytes)
+    }
+
     pub fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
         let sector = cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
         let position_in_sector = cluster
             .fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
         if sector > self.sectors_per_fat as u64 {
-            return ioerr!(NotFound, "invalid cluster index")
+            return ioerr!(NotFound, "invalid cluster index: fat entry")
         }
         let data = self
             .device.get(self.fat_start_sector + sector)?;
@@ -230,45 +259,55 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
             Status::Free => (),
             _ => return ioerr!(InvalidData, "new_cluster is not free"),
         }
-        match self.fat_entry(cluster)?.status() {
-            Status::Eoc(_) => {
-                let sector = cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
-                let position_in_sector = cluster
-                    .fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
+        let mut current_cluster = cluster;
+        loop {
+            let fat_entry = self.fat_entry(current_cluster)?.status();
+            match fat_entry {
+                Status::Data(next_cluster) => {
+                    current_cluster = next_cluster;
+                },
+                Status::Eoc(_) => {
+                    let sector = current_cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
+                    let position_in_sector = current_cluster
+                        .fat_address() as usize * 4 - sector as usize * self.bytes_per_sector as usize;
 
-                if sector > self.sectors_per_fat as u64 {
-                    return ioerr!(NotFound, "invalid cluster index")
-                }
-                let data = self
-                    .device.get_mut(self.fat_start_sector + sector)?;
-                let new_cluster_fat_array = new_cluster.fat_address().to_le_bytes();
-                let mut data_slice = &mut data[position_in_sector..position_in_sector + 4];
-                let _bytes_written = data_slice.write(&new_cluster_fat_array)?;
-                // for index in 0..4 {
-                //     data[position_in_sector + index] = byte_array[index];
-                // }
+                    if sector > self.sectors_per_fat as u64 {
+                        return ioerr!(NotFound, "invalid cluster index: sector: add_cluster_to_chain")
+                    }
+                    let data = self
+                        .device.get_mut(self.fat_start_sector + sector)?;
+                    let new_cluster_fat_array = new_cluster.fat_address().to_le_bytes();
+                    let mut data_slice = &mut data[position_in_sector..position_in_sector + 4];
+                    let _bytes_written = data_slice.write(&new_cluster_fat_array)?;
+                    // for index in 0..4 {
+                    //     data[position_in_sector + index] = byte_array[index];
+                    // }
 
-                let new_sector = new_cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
-                let position_in_new_sector = new_cluster
-                    .fat_address() as usize * 4 - new_sector as usize * self.bytes_per_sector as usize;
+                    let new_sector = new_cluster.fat_address() as u64 * 4 / self.bytes_per_sector as u64;
+                    let position_in_new_sector = new_cluster
+                        .fat_address() as usize * 4 - new_sector as usize * self.bytes_per_sector as usize;
 
-                if new_sector > self.sectors_per_fat as u64 {
-                    return ioerr!(NotFound, "invalid cluster index")
-                }
-                let new_data = self
-                    .device.get_mut(self.fat_start_sector + new_sector)?;
-                let eoc_array = 0x0FFFFFFFu32.to_le_bytes();
-                let mut new_data_slice = &mut new_data[position_in_new_sector..position_in_new_sector + 4];
-                let _bytes_written = new_data_slice.write(&eoc_array)?;
+                    if new_sector > self.sectors_per_fat as u64 {
+                        return ioerr!(NotFound, "invalid cluster index: new sector: add_cluster_to_chain")
+                    }
+                    let new_data = self
+                        .device.get_mut(self.fat_start_sector + new_sector)?;
+                    let eoc_array = 0x0FFFFFFFu32.to_le_bytes();
+                    let mut new_data_slice = &mut new_data[position_in_new_sector..position_in_new_sector + 4];
+                    let _bytes_written = new_data_slice.write(&eoc_array)?;
 
 
-                // for index in 0..4 {
-                //     new_data[position_in_new_sector + index] = new_byte_array[index];
-                // }
-                Ok(())
-            }
-            _ => ioerr!(InvalidData, "cluster is not last in chain")
+                    // for index in 0..4 {
+                    //     new_data[position_in_new_sector + index] = new_byte_array[index];
+                    // }
+                    return Ok(())
+                },
+                Status::Bad => return ioerr!(InvalidData, "cluster in chain marked bad"),
+                Status::Reserved => return ioerr!(InvalidData, "cluster in chain marked reserved"),
+                Status::Free => return ioerr!(InvalidData, "cluster in chain marked free"),
+            };
         }
+
     }
 }
 
@@ -292,7 +331,9 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
             name: String::from(""),
             metadata: Metadata::default(),
             size: 0,
-            path: PathBuf::from("/")
+            path: PathBuf::from("/"),
+            parent_path: None,
+            parent_first_cluster: None,
         });
         for component in path.components() {
             match component {
@@ -311,4 +352,42 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
         }
         Ok(entry)
     }
+
+    // fn set_metadata<P: AsRef<Path>>(self, path: P, metadata: Metadata) -> io::Result<()> {
+    //     use crate::traits::Entry as EntryTrait;
+    //
+    //     let path = path.as_ref();
+    //     if !path.is_absolute() {
+    //         return ioerr!(InvalidInput, "path is not absolute")
+    //     }
+    //
+    //     let first_cluster = self.lock(|vfat| vfat.rootdir_cluster);
+    //     let mut entry = Entry::Dir(Dir {
+    //         vfat: self.clone(),
+    //         first_cluster,
+    //         name: String::from(""),
+    //         metadata: Metadata::default(),
+    //         size: 0,
+    //         path: PathBuf::from("/")
+    //     });
+    //     let mut found_entry: Entry<HANDLE>;
+    //     for component in path.components() {
+    //         match component {
+    //             // Component::ParentDir => {
+    //             //     entry = entry.into_dir()
+    //             //         .ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
+    //             //         .find("..")?;
+    //             // },
+    //             Component::Normal(name) => {
+    //                 found_entry = entry.into_dir()
+    //                     .ok_or(newioerr!(NotFound, "path not found"))?
+    //                     .find(name)?;
+    //             }
+    //             _ => (),
+    //         }
+    //     }
+    //
+    //     unimplemented!("VFat::set_metadata()")
+    // }
+
 }

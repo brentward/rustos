@@ -1,7 +1,9 @@
 use crate::traits;
 use crate::vfat::{Dir, File, Metadata, VFatHandle};
 use core::fmt;
+use shim::io;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 #[derive(Debug)]
 pub enum Entry<HANDLE: VFatHandle> {
@@ -53,6 +55,12 @@ impl<HANDLE: VFatHandle> Entry<HANDLE> {
             }
         }
     }
+
+    // /// They byte array representing the metadata as a string of raw
+    // /// VFatDirEntries
+    // pub fn write_metadata(&self, buf: &mut [u8]) -> io::Result<usize> {
+    //     Ok(0)
+    // }
 }
 
 impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE> {

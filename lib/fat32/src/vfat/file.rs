@@ -1,11 +1,13 @@
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use shim::io::{self, SeekFrom};
 use shim::ioerr;
-use shim::path::{Path, PathBuf};
+use shim::newioerr;
+use shim::path::{Path, PathBuf, Component};
 
 use crate::traits;
-use crate::vfat::{Cluster, Metadata, VFatHandle, Status};
+use crate::vfat::{Cluster, Metadata, VFatHandle, Status, Dir, Entry};
 
 #[derive(Debug)]
 pub struct File<HANDLE: VFatHandle> {
@@ -17,7 +19,8 @@ pub struct File<HANDLE: VFatHandle> {
     pub offset: usize,
     pub current_cluster: Option<Cluster>,
     pub bytes_per_cluster: usize,
-    pub path: PathBuf,
+    pub parent_path: PathBuf,
+    pub parent_first_cluster: Cluster,
 }
 
 impl<HANDLE: VFatHandle> File<HANDLE> {
@@ -27,7 +30,8 @@ impl<HANDLE: VFatHandle> File<HANDLE> {
         name: String,
         metadata: Metadata,
         size: usize,
-        path: PathBuf,
+        parent_path: PathBuf,
+        parent_first_cluster: Cluster,
     ) -> File<HANDLE> {
         let bytes_per_cluster = vfat.lock(
             |vfat| vfat.bytes_per_cluster()
@@ -41,7 +45,8 @@ impl<HANDLE: VFatHandle> File<HANDLE> {
             offset: 0,
             current_cluster: Some(first_cluster),
             bytes_per_cluster,
-            path
+            parent_path,
+            parent_first_cluster,
         }
     }
 }
@@ -95,6 +100,8 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
 
 impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        use crate::traits::{FileSystem, Dir as DirTrait, Entry as EntryTrait};
+
         let mut bytes_written = 0usize;
         let bytes_to_write = buf.len();
         let mut cluster = match self.current_cluster{
@@ -117,7 +124,6 @@ impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
                     vfat.add_cluster_to_chain(cluster, new_cluster)
                 }
             )?;
-            cluster = new_cluster;
         }
         while bytes_written < bytes_to_write {
             let bytes = self.vfat.lock(
@@ -151,6 +157,46 @@ impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
         self.offset += bytes_written;
         if self.offset > self.size {
             self.size = self.offset;
+            let rootdir_cluster = self.vfat.lock(|vfat| vfat.rootdir_cluster);
+            let mut entry = Entry::Dir(Dir {
+                vfat: self.vfat.clone(),
+                first_cluster: rootdir_cluster,
+                name: String::from(""),
+                metadata: Metadata::default(),
+                size: 0,
+                path: PathBuf::from("/"),
+                parent_path: None,
+                parent_first_cluster: None,
+            });
+            for component in self.parent_path.as_path().components() {
+                match component {
+                    // Component::ParentDir => {
+                    //     entry = entry.into_dir()
+                    //         .ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
+                    //         .find("..")?;
+                    // },
+                    Component::Normal(name) => {
+                        entry = entry.into_dir()
+                            .ok_or(newioerr!(NotFound, "path not found"))?
+                            .find(name)?;
+                    }
+                    _ => (),
+                }
+            }
+
+            let dir_entry = match entry.into_dir() {
+                Some(dir_entry) => dir_entry,
+                None => return ioerr!(InvalidData, "parent_dir is not an Entry::Dir"),
+            };
+            let mut dir_iter = dir_entry.entries()?;
+            let mut fat_buf: Vec<u8> = Vec::new();
+            let size = dir_iter.write_entry_size(self.name.as_str(), self.size, &mut fat_buf)?;
+            let chain_size = self.vfat.lock(|vfat| {
+                vfat.write_chain(self.parent_first_cluster, &fat_buf)
+            })?;
+            // TODO convert parent_dir_entry into Dir and then to DirIterator
+            // TODO call set_entry_size with new size on DirIterator
+            // TODO call write_dir_entries on DirIterator
         }
         Ok(bytes_written)
     }
