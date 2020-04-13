@@ -20,7 +20,7 @@ use crate::ALLOCATOR;
 use crate::FILESYSTEM;
 use crate::SCHEDULER;
 use crate::process::Process;
-use pi::{timer, gpio};
+use pi::{timer, gpio, rand};
 
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
@@ -198,6 +198,13 @@ pub fn shell(prefix: &str) {
                     },
                     "sleep" => {
                         match Sleep::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    "rand" => {
+                        match Rand::new(None) {
                             Ok(ref mut executable) => executable
                                 .exec(&command, &mut cwd),
                             Err(e) => Err(e),
@@ -704,14 +711,22 @@ impl Executable for Append {
                     return Err(StdError { result, code: 1 });
                 }
             };
-            let input = String::from("\r\nI'm adding this to the end of the file");
+            // let input = String::from("Insert this string");
+            let mut input = String::new();
+            for _ in 0..400 {
+                for _ in 0..40 {
+                    input.push('A');
+                }
+                input.push_str("\r\n")
+            }
             let mut buf = input.as_bytes();
-            file.seek(SeekFrom::End(0 - buf.len() as i64))?;
+            // file.seek(SeekFrom::Start(0))?;
             let bytes = match file.write(buf) {
                 Ok(bytes) => bytes,
-                Err(_) => {
-                    writeln!(result, "append: {}: file could not be opened", path.to_str()
+                Err(e) => {
+                    writeln!(result, "append: {}: file could not be writen", path.to_str()
                         .expect("path is not valid unicode"))?;
+                    writeln!(result, "{:?}", e)?;
 
                     return Err(StdError { result, code: 1 });
                 }
@@ -768,6 +783,22 @@ impl Executable for Sleep {
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let result = String::new();
         kernel_api::syscall::sleep(Duration::from_secs(10));
+
+        Ok(StdOut { result })
+    }
+}
+
+struct Rand;
+
+impl Executable for Rand {
+    fn new(_params: Option<&str>) -> ExecutableResult<Self> {
+        Ok(Rand)
+    }
+
+    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
+        let mut result = String::new();
+        let rand_num = rand::Rand::new().rand(0, 100);
+        writeln!(result, "Random number: {}", rand_num)?;
 
         Ok(StdOut { result })
     }
