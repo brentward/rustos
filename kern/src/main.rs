@@ -44,7 +44,8 @@ pub static IRQ: Irq = Irq::uninitialized();
 fn kmain() -> ! {
     fn print_init_with_progress(msg: &str) {
         kprint!("{}", msg);
-        let fake_random = (pi::timer::current_time().as_micros() & 0xFF) as u64 + 0xFF;
+        let fake_random = (pi::timer::current_time().as_micros() & 0xF) as u64 + 0xF;
+        // let fake_random = 0u64;
         let align_to = 40 - msg.len() as u64;
         for _ in 0..align_to {
             pi::timer::spin_sleep(core::time::Duration::from_millis(fake_random / align_to));

@@ -360,7 +360,7 @@ impl UserPageTable {
     ///
     /// Returns an error if given `va` is not valid.
     pub unsafe fn get_slice_at_va(&self, va: VirtualAddr, len: usize) -> Result<&[u8], ()> {
-        let ptr_pa =  match self.get_pa(VirtualAddr::from(va)) {
+        let ptr_pa =  match self.get_pa(va) {
             Some(pa) => pa,
             None => return Err(()),
         };
@@ -381,7 +381,7 @@ impl UserPageTable {
     ///
     /// Returns an error if given `va` is not valid.
     pub unsafe fn get_mut_slice_at_va(&self, va: VirtualAddr, len: usize) -> Result<&mut [u8], ()> {
-        let mut ptr_pa =  match self.get_pa(VirtualAddr::from(va)) {
+        let mut ptr_pa =  match self.get_pa(va) {
             Some(pa) => pa,
             None => return Err(()),
         };

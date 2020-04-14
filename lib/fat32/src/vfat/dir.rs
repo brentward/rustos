@@ -2,16 +2,20 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
+use shim::path::{Path, PathBuf};
 use shim::const_assert_size;
 use shim::ffi::OsStr;
-use shim::io;
+use shim::io::{self, SeekFrom};
+use shim::ioerr;
 use shim::newioerr;
-use core::char::{decode_utf16, REPLACEMENT_CHARACTER};
+use core::char::{decode_utf16, REPLACEMENT_CHARACTER}; // TODO refactor this use
+use core::mem::transmute;
+use core::fmt;
 
 use crate::traits;
 use crate::util::VecExt;
 use crate::vfat::{Attributes, Date, Metadata, Time, Timestamp};
-use crate::vfat::{Cluster, Entry, File, VFatHandle};
+use crate::vfat::{Cluster, Entry, File, VFatHandle, Status};
 
 #[derive(Debug)]
 pub struct Dir<HANDLE: VFatHandle> {
@@ -20,6 +24,9 @@ pub struct Dir<HANDLE: VFatHandle> {
     pub name: String,
     pub metadata: Metadata,
     pub size: usize,
+    pub path: PathBuf,
+    pub parent_path: Option<PathBuf>,
+    pub parent_first_cluster: Option<Cluster>,
 }
 
 #[repr(C, packed)]
@@ -47,6 +54,24 @@ impl VFatRegularDirEntry {
 
     fn is_dir(&self) -> bool {
         self.attributes & 0x10 != 0
+    }
+
+    pub fn size(&self) -> usize {
+        self.file_size as usize
+    }
+
+    pub fn set_size(&mut self, size: usize) -> io::Result<usize>{
+        if size <= core::u32::MAX as usize {
+            self.file_size = size as u32;
+            Ok(self.size() as usize)
+        } else {
+            ioerr!(InvalidInput, "over maximum file size for FAT32")
+        }
+    }
+
+    pub fn add_size(&mut self, size: usize) -> io::Result<usize> {
+        let new_size = self.size() + size;
+        self.set_size(new_size)
     }
 }
 
@@ -110,6 +135,10 @@ impl VFatUnknownDirEntry {
         self.attributes == 0x0F
     }
 
+    fn is_regular(&self) -> bool {
+        self.attributes != 0x0F
+    }
+
     fn is_unused(&self) -> bool {
         self.id == 0xE5
     }
@@ -151,11 +180,19 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     }
 }
 
+pub struct EntryModify {
+    pub name: String,
+    pub size: usize,
+    pub modified: Timestamp,
+}
+
 pub struct DirIterator<HANDLE: VFatHandle> {
     phantom: PhantomData<HANDLE>,
     dir_entries: Vec<VFatDirEntry>,
     position: usize,
-    vfat: HANDLE
+    vfat: HANDLE,
+    path: PathBuf,
+    first_cluster: Cluster,
 }
 
 impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
@@ -203,6 +240,206 @@ impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
             format!("{}", short_filename)
         }
     }
+
+    pub fn write_entry_size(&mut self, name: &str, size: usize, buf: &mut Vec<u8>) -> io::Result<usize> {
+        use crate::traits::Entry;
+        use crate::util::SliceExt;
+        use io::Write;
+
+        self.position = 0;
+        let mut bytes_writen = 0usize;
+        let mut lfn_vec: Vec<&VFatLfnDirEntry> = Vec::with_capacity(20);
+
+        for position in self.position..self.dir_entries.len() {
+            let dir_entry = &self.dir_entries[position];
+
+            let unknown_dir_entry = unsafe { dir_entry.unknown };
+            if unknown_dir_entry.is_end() {
+                let data_entry = unsafe {
+                    transmute::<VFatUnknownDirEntry, [u8; 32]>(unknown_dir_entry)
+                };
+                let mut write_buf = &mut buf[bytes_writen..];
+                let bytes = write_buf.write(&data_entry)?;
+                bytes_writen += bytes;
+
+                self.position = self.dir_entries.len();
+                return Ok(bytes_writen)
+            }
+            if unknown_dir_entry.is_unused() {
+                let data_entry = unsafe {
+                    transmute::<VFatUnknownDirEntry, [u8; 32]>(unknown_dir_entry)
+                };
+                // let mut write_buf = &mut buf[bytes_writen..];
+                buf.reserve(32);
+                let bytes = buf.write(&data_entry)?;
+                bytes_writen += bytes;
+
+                self.position += 1;
+            }
+            if unknown_dir_entry.is_lfn() {
+                lfn_vec.push(unsafe { &dir_entry.long_filename });
+                let data_entry = unsafe {
+                    transmute::<VFatUnknownDirEntry, [u8; 32]>(unknown_dir_entry)
+                };
+                // let mut write_buf = &mut buf[bytes_writen..];
+                buf.reserve(32);
+                let bytes = buf.write(&data_entry)?;
+                bytes_writen += bytes;
+
+                self.position += 1;
+            } else {
+                let mut regular_dir_entry = unsafe { dir_entry.regular };
+                let entry_name = if lfn_vec.len() != 0 {
+                    Self::lfn(&mut lfn_vec)
+                } else {
+                    Self::short_name(&regular_dir_entry.file_name, &regular_dir_entry.file_ext)
+                };
+                if entry_name.as_str() == name {
+                    regular_dir_entry.set_size(size)?;
+                }
+                let data_entry = unsafe {
+                    transmute::<VFatRegularDirEntry, [u8; 32]>(regular_dir_entry)
+                };
+                // let mut write_buf = &mut buf[bytes_writen..];
+                buf.reserve(32);
+                let bytes = buf.write(&data_entry)?;
+                bytes_writen += bytes;
+
+                self.position += 1;
+
+            }
+
+        }
+        Ok(bytes_writen)
+
+    // let mut dir_entries = self.dir_entries.clone();
+        // let mut entry_index_option: Option<usize>  = None;
+        // for entry in self {
+        //     if entry.name() == name {
+        //         let index = self.position - 1;
+        //         entry_index_option = Some(index);
+        //     }
+        // }
+        // let entry_index = match entry_index_option {
+        //     Some(index) => index,
+        //     None => return ioerr!(NotFound, "Canno find DirEntry"),
+        // };
+        // let mut dir_entry = match dir_entries.get_mut(entry_index) {
+        //     Some(dir_entry) => dir_entry,
+        //     None => return ioerr!(NotFound, "Canno find DirEntry"),
+        // };
+        // let unknown_dir_entry = unsafe { dir_entry.unknown };
+        // if unknown_dir_entry.is_regular() {
+        //     let mut regular_dir = unsafe { dir_entry.regular };
+        //     let size = regular_dir.set_size(size)?;
+        //     self.write_dir_entries()?;
+        //     return Ok(size)
+        // } else {
+        //     return ioerr!(InvalidData, "VFatLfnDirEntry is invalid at this position")
+        // }
+        //
+        // ioerr!(NotFound, "No entry matching name found in DirIterator")
+    }
+
+    // pub fn write_dir_entries(&mut self) -> io::Result<()> {
+    //     let mut bytes_written = 0usize;
+    //     let data: Vec<u8> = unsafe { self.dir_entries.clone().cast() };
+    //     let bytes_to_write = data.len();
+    //     let mut cluster = self.first_cluster;
+    //     let bytes_per_cluster = self.vfat.lock(
+    //         |vfat| vfat.bytes_per_cluster()
+    //     );
+    //     let mut current_cluster_result = Ok(Some((self.first_cluster)));
+    //     let mut current_cluster = current_cluster_result?;
+    //     while self.vfat.lock(
+    //         |vfat| { vfat.size_to_chain_end(cluster.fat_address()) }
+    //     )? < bytes_to_write {
+    //         let new_cluster = self.vfat.lock(
+    //             |vfat| {
+    //                 vfat.find_free_cluster()
+    //             }
+    //         )?;
+    //         self.vfat.lock(
+    //             |vfat| {
+    //                 vfat.add_cluster_to_chain(cluster, new_cluster)
+    //             }
+    //         )?;
+    //         cluster = new_cluster;
+    //     }
+    //     while bytes_written < bytes_to_write {
+    //         let bytes = self.vfat.lock(
+    //             |vfat| {
+    //                 vfat.write_cluster(
+    //                     current_cluster.unwrap(),
+    //                     0,
+    //                     &data[bytes_written..]
+    //                 )
+    //             }
+    //         )?;
+    //         if bytes == bytes_per_cluster {
+    //             current_cluster_result = self.vfat.lock(|vfat| {
+    //                 match vfat.fat_entry(current_cluster.unwrap())?.status() {
+    //                     Status::Data(cluster) => Ok(Some(cluster)),
+    //                     Status::Eoc(_) => Ok(None),
+    //                     Status::Bad => return ioerr!(InvalidInput, "cluster in chain marked bad"),
+    //                     Status::Reserved => {
+    //                         return ioerr!(InvalidInput, "cluster in chain marked reserved")
+    //                     }
+    //                     Status::Free => return ioerr!(InvalidInput, "cluster in chain marked free"),
+    //                 }
+    //             });
+    //             current_cluster = current_cluster_result?;
+    //
+    //         } else {
+    //             return ioerr!(UnexpectedEof, "Bytes written did not match cluster size")
+    //         }
+    //         bytes_written += bytes;
+    //     }
+    //     Ok(())
+    // }
+}
+
+impl<HANDLE: VFatHandle> io::Seek for  DirIterator<HANDLE> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+
+        match pos {
+            SeekFrom::Start(offset) => {
+                if offset > self.dir_entries.len() as u64 {
+                    ioerr!(InvalidInput, "beyond end of dir")
+                } else {
+                    self.position = offset as usize;
+                    Ok(self.position as u64)
+                }
+            }
+            SeekFrom::End(offset) => {
+                if self.dir_entries.len() as i64 + offset < 0 {
+                    ioerr!(InvalidInput, "beyond beginning of dir")
+                } else {
+                    self.position = (self.dir_entries.len() as i64 + offset) as usize;
+                    Ok(self.position as u64)
+                }
+            }
+            SeekFrom::Current(offset) => {
+                if self.position as i64 + offset < 0 {
+                    ioerr!(InvalidInput, "beyond beginning of dir")
+                } else if self.position as i64 + offset > self.dir_entries.len() as i64 {
+                    ioerr!(InvalidInput, "beyond end of dir")
+                } else {
+                    self.position = (self.position as i64 + offset) as usize;
+                    Ok(self.position as u64)
+                }
+            }
+        }
+    }
+}
+
+impl<HANDLE: VFatHandle> fmt::Debug for DirIterator<HANDLE> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DirIterator")
+            .field("len", &self.dir_entries.len())
+            .field("positon", &self.position)
+            .finish()
+    }
 }
 
 impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
@@ -212,7 +449,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
         for position in self.position..self.dir_entries.len() {
             let dir_entry = &self.dir_entries[position];
 
-            let unknown_dir_entry = unsafe {dir_entry.unknown};
+            let unknown_dir_entry = unsafe { dir_entry.unknown };
             if unknown_dir_entry.is_end() {
                 self.position = self.dir_entries.len();
                 return None
@@ -243,7 +480,9 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         ]
                     )
                 );
-                return if regular_dir.is_dir(){
+                let mut next_path = self.path.clone();
+                next_path.push(name.as_str());
+                return if regular_dir.is_dir() {
                     Some(Entry::Dir(
                         Dir {
                             vfat: self.vfat.clone(),
@@ -251,6 +490,9 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                             name,
                             metadata,
                             size: regular_dir.file_size as usize,
+                            path: next_path,
+                            parent_path: Some(self.path.clone()),
+                            parent_first_cluster: Some(self.first_cluster),
                         }
                     ))
 
@@ -261,6 +503,8 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         name,
                         metadata,
                         regular_dir.file_size as usize,
+                        self.path.clone(),
+                        self.first_cluster,
                     )))
                 }
             }
@@ -283,6 +527,8 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
             dir_entries: unsafe { cluster_chain.cast() },
             position: 0,
             vfat: self.vfat.clone(),
+            path: self.path.clone(),
+            first_cluster: self.first_cluster,
         })
     }
 }

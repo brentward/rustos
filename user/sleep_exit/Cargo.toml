@@ -1,5 +1,5 @@
 [package]
-name = "fib"
+name = "sleep_exit"
 version = "0.1.0"
 authors = [
     "Sergio Benitez <sb@sergio.bz>",
