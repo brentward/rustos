@@ -180,13 +180,35 @@ pub fn sbrk(size: u64) -> OsResult<*mut u8> {
     err_or!(ecode, ptr)
 }
 
+pub fn write_str(msg: &str) -> OsResult<usize> {
+    let msg_ptr = msg.as_ptr() as u64;
+    let msg_len = msg.len() as u64;
+    let mut ecode: u64;
+    let mut len: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              svc $4
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(len), "=r"(ecode)
+             : "r"(msg_ptr), "r"(msg_len), "i"(NR_WRITE_STR)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, len as usize)
+}
+
 struct Console;
 
 impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        for b in s.bytes() {
-            write(b);
-        }
+        write_str(s)?;
+        // for b in s.bytes() {
+        //     write(b);
+        // }
         Ok(())
     }
 }

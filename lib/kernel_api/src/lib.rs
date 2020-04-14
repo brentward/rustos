@@ -83,12 +83,19 @@ impl core::convert::From<io::Error> for OsError {
     }
 }
 
+impl core::convert::From<OsError> for fmt::Error {
+    fn from(_e: OsError) -> Self {
+        fmt::Error
+    }
+}
+
 pub const NR_SLEEP: usize = 1;
 pub const NR_TIME: usize = 2;
 pub const NR_EXIT: usize = 3;
 pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
-pub const NR_OPEN: usize = 6;
+pub const NR_WRITE_STR: usize = 6;
 pub const NR_SBRK: usize = 7;
-pub const NR_READ: usize = 8;
-pub const NR_GETDENT: usize = 9;
+pub const NR_OPEN: usize = 8;
+pub const NR_READ: usize = 9;
+pub const NR_GETDENT: usize = 10;
