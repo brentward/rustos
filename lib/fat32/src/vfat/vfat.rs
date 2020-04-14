@@ -33,7 +33,7 @@ pub struct VFat<HANDLE: VFatHandle> {
     sectors_per_fat: u32,
     fat_start_sector: u64,
     data_start_sector: u64,
-    pub rootdir_cluster: Cluster,
+    rootdir_cluster: Cluster,
 }
 
 impl<HANDLE: VFatHandle> VFat<HANDLE> {
@@ -80,6 +80,26 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize
     }
 
+    pub fn bytes_per_sector(&self) -> usize {
+        self.bytes_per_sector as usize
+    }
+
+    pub fn sectors_per_cluster(&self) -> usize {
+        self.sectors_per_cluster as usize
+    }
+    pub fn sectors_per_fat(&self) -> usize {
+        self.sectors_per_fat as usize
+    }
+    pub fn fat_start_sector(&self) -> usize {
+        self.fat_start_sector as usize
+    }
+    pub fn data_start_sector(&self) -> usize {
+        self.data_start_sector as usize
+    }
+    pub fn rootdir_cluster(&self) -> Cluster {
+        self.rootdir_cluster
+    }
+
     pub fn read_cluster(
         &mut self,
         cluster: Cluster,
@@ -114,7 +134,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let mut bytes = 0usize;
         let start_sector_index = offset / self.bytes_per_sector as usize;
         for sector_index in start_sector_index..self.sectors_per_cluster as usize  {
-            if buf.len() == bytes {
+            if bytes >= buf.len() {
                 break
             }
             let current_offset = (offset + bytes)
@@ -219,19 +239,19 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     ) -> io::Result<usize> {
         let mut cluster = start;
         let mut bytes = 0usize;
-        loop {
-            if bytes >= buf.len() {
-                break
-            }
+        while bytes < buf.len() {
             let fat_entry = self.fat_entry(cluster)?.status();
-            // let cluster_end = bytes + (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize;
+            let cluster_end = buf.len().min(
+                bytes + (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize
+            );
+            let cluster_offset = bytes % (self.bytes_per_sector * self.sectors_per_cluster as u16) as usize;
             match fat_entry {
                 Status::Data(next_cluster) => {
-                    bytes += self.write_cluster(cluster, 0, &buf[bytes..])?;
+                    bytes += self.write_cluster(cluster, cluster_offset, &buf[bytes..])?;
                     cluster = next_cluster;
                 },
                 Status::Eoc(_) => {
-                    bytes += self.write_cluster(cluster, 0, &buf[bytes..])?;
+                    bytes += self.write_cluster(cluster, cluster_offset, &buf[bytes..])?;
                     break
                 },
                 Status::Bad => return ioerr!(InvalidData, "cluster in chain marked bad"),
