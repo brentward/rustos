@@ -1,18 +1,11 @@
-#![feature(alloc_error_handler)]
 #![feature(asm)]
 #![no_std]
 #![no_main]
-extern crate alloc;
-
-use kernel_api::allocator::Allocator;
-
-#[cfg_attr(not(test), global_allocator)]
-pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 
 mod cr0;
 
 use kernel_api::println;
-use kernel_api::syscall::{getpid, time};
+use kernel_api::syscall::{getpid, time, sleep, exit};
 
 use core::time::Duration;
 
@@ -25,10 +18,32 @@ fn fib(n: u64) -> u64 {
 }
 
 fn main() {
-    println!("PID: {}, Time in ms: {}", getpid(), time().as_millis());
     println!("Started...");
+
+    let pid = getpid();
+    println!("PID: {}", pid);
+
+    let current_time = time();
+    println!("time in milliseconds: {}", current_time.as_millis());
+
 
     let rtn = fib(40);
 
     println!("Ended: Result = {}", rtn);
+
+    let current_time = time();
+    println!("time in milliseconds: {}", current_time.as_millis());
+
+    println!("sleep for 5 sec");
+    sleep(Duration::from_secs(5));
+
+    println!("I'm back");
+    println!("another fib");
+    let rtn = fib(40);
+
+    println!("Ended: Result = {}", rtn);
+
+    println!("goodbye");
+
+    exit()
 }

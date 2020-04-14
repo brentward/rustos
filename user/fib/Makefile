@@ -1,6 +1,6 @@
 ROOT := $(shell git rev-parse --show-toplevel)
 
-BIN := $(shell basename $(shell pwd))
+BIN := $(shell basename $(shell realpath .))
 TARGET := target/aarch64-unknown-none/release/$(BIN)
 OBJCPY := cargo objcopy -- --strip-all -O binary
 

@@ -1,9 +1,5 @@
-#![feature(optin_builtin_traits)]
 #![feature(asm)]
 #![no_std]
-
-pub mod allocator;
-pub mod mutex;
 
 use core::fmt;
 
@@ -11,7 +7,6 @@ use shim::io;
 
 #[cfg(feature = "user-space")]
 pub mod syscall;
-pub mod fs;
 
 pub type OsResult<T> = core::result::Result<T, OsError>;
 
@@ -27,8 +22,6 @@ pub enum OsError {
     BadAddress = 50,
     FileExists = 60,
     InvalidArgument = 70,
-    IsDirectory = 80,
-    IsFile = 90,
 
     IoError = 101,
     IoErrorEof = 102,
@@ -53,8 +46,6 @@ impl core::convert::From<u64> for OsError {
             50 => OsError::BadAddress,
             60 => OsError::FileExists,
             70 => OsError::InvalidArgument,
-            80 => OsError::IsDirectory,
-            90 => OsError::IsFile,
 
             101 => OsError::IoError,
             102 => OsError::IoErrorEof,
@@ -88,7 +79,3 @@ pub const NR_TIME: usize = 2;
 pub const NR_EXIT: usize = 3;
 pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
-pub const NR_OPEN: usize = 6;
-pub const NR_SBRK: usize = 7;
-pub const NR_READ: usize = 8;
-pub const NR_GETDENT: usize = 9;

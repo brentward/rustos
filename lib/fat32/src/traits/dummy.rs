@@ -99,24 +99,6 @@ impl Timestamp for Dummy {
     fn second(&self) -> u8 {
         panic!("Dummy")
     }
-    fn set_year(&mut self, _year: usize) {
-        panic!("Dummy")
-    }
-    fn set_month(&mut self, _month: u8) {
-        panic!("Dummy")
-    }
-    fn set_day(&mut self, _day: u8) {
-        panic!("Dummy")
-    }
-    fn set_hour(&mut self, _hour: u8) {
-        panic!("Dummy")
-    }
-    fn set_minute(&mut self, _minute: u8) {
-        panic!("Dummy")
-    }
-    fn set_second(&mut self, _second: u8) {
-        panic!("Dummy")
-    }
 }
 
 impl Metadata for Dummy {

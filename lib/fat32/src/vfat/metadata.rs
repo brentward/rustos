@@ -85,10 +85,6 @@ impl TimestampTrait for Timestamp {
     fn year(&self) -> usize {
         (self.date.0 as usize >> 9) + 1980
     }
-    fn set_year(&mut self, year: usize) {
-        self.date.0 &= !(0x7Fu16 << 9);
-        self.date.0 |= (year as u16 - 1980) << 9;
-    }
 
     /// The calendar month, starting at 1 for January. Always in range [1, 12].
     ///
@@ -100,13 +96,6 @@ impl TimestampTrait for Timestamp {
             _ => panic!("metadata month is out of range")
         }
     }
-    fn set_month(&mut self, month: u8) {
-        if month < 1 || month > 12 {
-            panic!("Metadata::set_month() month out of range of 1 to 12")
-        }
-        self.date.0 &= !(0xFu16 << 5);
-        self.date.0 |= (month as u16) << 5;
-    }
 
     /// The calendar day, starting at 1. Always in range [1, 31].
     fn day(&self) -> u8 {
@@ -115,14 +104,6 @@ impl TimestampTrait for Timestamp {
             day@ 0..=31 => day,
             _ => panic!("metadata day is out of range")
         }
-    }
-    fn set_day(&mut self, day: u8) {
-        if day < 1 || day > 31 {
-            panic!("Metadata::set_day() day out of range of 1 to 31")
-        }
-        self.date.0 &= !0x1Fu16;
-        self.date.0 |= day as u16;
-
     }
 
     /// The 24-hour hour. Always in range [0, 24).
@@ -133,14 +114,6 @@ impl TimestampTrait for Timestamp {
             _ => panic!("metadata hour is out of range")
         }
     }
-    fn set_hour(&mut self, hour: u8) {
-        if hour > 24 {
-            panic!("Metadata::set_hour() hour out of range of 0 to 24")
-        }
-        self.time.0 &= !(0x1Fu16 << 11);
-        self.time.0 |= (hour as u16) << 11;
-
-    }
 
     /// The minute. Always in range [0, 60).
     fn minute(&self) -> u8 {
@@ -149,14 +122,6 @@ impl TimestampTrait for Timestamp {
             minute @ 0..=60 => minute,
             _ => panic!("metadata minute is out of range")
         }
-    }
-    fn set_minute(&mut self, minute: u8) {
-        if minute > 60 {
-            panic!("Metadata::set_minute() hour out of range of 0 to 60")
-        }
-        self.time.0 &= !(0x3Fu16 << 5);
-        self.time.0 |= (minute as u16) << 5;
-
     }
 
     /// The second. Always in range [0, 60).
@@ -167,14 +132,6 @@ impl TimestampTrait for Timestamp {
             _ => panic!("metadata second is out of range")
         }
     }
-    fn set_second(&mut self, second: u8) {
-        if second > 60 {
-            panic!("Metadata::set_second() second out of range of 0 to 60")
-        }
-        self.time.0 &= !0x1Fu16;
-        self.time.0 |= second as u16 / 2;
-
-    }
 }
 
 impl Metadata {
@@ -182,25 +139,9 @@ impl Metadata {
         (self.attributes.0 & 0x01) !=0
     }
 
-    pub fn set_read_only(&mut self) {
-        self.attributes.0 |= 0x01;
-    }
-
-    pub fn clear_read_only(&mut self) {
-        self.attributes.0 &= !0x01;
-    }
-
     /// Whether the entry should be "hidden" from directory traversals.
     fn hidden(&self) -> bool {
         ((self.attributes.0 & 0x02) >> 1) != 0
-    }
-
-    pub fn set_hidden(&mut self) {
-        self.attributes.0 |= 0x02;
-    }
-
-    pub fn clear_hidden(&mut self) {
-        self.attributes.0 &= !0x02;
     }
 
     /// Whether the entry is marked as system.
@@ -208,25 +149,9 @@ impl Metadata {
         ((self.attributes.0 & 0x04) >> 2) != 0
     }
 
-    pub fn set_system(&mut self) {
-        self.attributes.0 |= 0x04;
-    }
-
-    pub fn clear_system(&mut self) {
-        self.attributes.0 &= !0x04;
-    }
-
     /// Whether the entry is a volume ID.
     pub fn volume_id(&self) -> bool {
         ((self.attributes.0 & 0x08) >> 3) != 0
-    }
-
-    pub fn set_volume_id(&mut self) {
-        self.attributes.0 |= 0x08;
-    }
-
-    pub fn clear_volume_id(&mut self) {
-        self.attributes.0 &= !0x08;
     }
 
     /// Whether the entry is a directory.
@@ -234,43 +159,11 @@ impl Metadata {
         ((self.attributes.0 & 0x10) >> 4) != 0
     }
 
-    pub fn set_directory(&mut self) {
-        self.attributes.0 |= 0x10;
-    }
-
-    pub fn clear_directory(&mut self) {
-        self.attributes.0 &= !0x10;
-    }
-
     /// Whether the entry is marked archive.
     fn archive(&self) -> bool {
         ((self.attributes.0 & 0x20) >> 5) != 0
     }
 
-    pub fn set_archive(&mut self) {
-        self.attributes.0 |= 0x20;
-    }
-
-    pub fn clear_archive(&mut self) {
-        self.attributes.0 &= !0x20;
-    }
-
-    /// Set modified timestamp to provided values
-    pub fn set_modified_timestamp(
-        &mut self,
-        year: usize,
-        month: u8,
-        day: u8,
-        hour: u8,
-        minute: u8,
-        second: u8) {
-        self.modification_timestamp.set_year(year);
-        self.modification_timestamp.set_month(month);
-        self.modification_timestamp.set_day(day);
-        self.modification_timestamp.set_hour(hour);
-        self.modification_timestamp.set_minute(minute);
-        self.modification_timestamp.set_second(second);
-    }
 }
 
 impl MetadataTrait for Metadata {

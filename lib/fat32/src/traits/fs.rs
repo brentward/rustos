@@ -1,7 +1,6 @@
 use shim::{io, path::Path};
 
 use crate::traits::Metadata;
-// use crate::vfat::Metadata as MetadataStruct;
 
 /// Trait implemented by files in the file system.
 pub trait File: io::Read + io::Write + io::Seek + Sized {
@@ -90,7 +89,6 @@ pub trait FileSystem: Sized {
     ///
     /// All other error values are implementation defined.
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry>;
-    // fn set_metadata<P: AsRef<Path>>(self, path: P, metadata: MetadataStruct) -> io::Result<()y>;
 
     /// Opens the file at `path`. `path` must be absolute.
     ///

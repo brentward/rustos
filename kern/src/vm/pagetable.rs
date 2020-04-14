@@ -1,7 +1,7 @@
 use core::iter::Chain;
-use core::ops::{Deref, DerefMut, BitAnd, Sub, BitOr};
+use core::ops::{Deref, DerefMut, BitAnd, Sub};
 use core::slice::Iter;
-use core::slice::{from_raw_parts_mut, from_raw_parts};
+use core::slice::from_raw_parts_mut;
 
 use alloc::boxed::Box;
 use alloc::fmt;
@@ -206,23 +206,6 @@ impl PageTable {
     pub fn get_baddr(&self) -> PhysicalAddr {
         self.l2.as_ptr()
     }
-
-    /// Extracts `ADDR` field of RawL3Entry for the L2Entry indicated by the given VirtualAddress
-    /// `va` and returns as a `PhysicalAddr` if valid. Otherwise, return `None`.
-    pub fn get_entry_pa(&self, va: VirtualAddr) -> Option<PhysicalAddr> {
-        let (l2_index, l3_index) = PageTable::locate(va.bitand(VirtualAddr::from(!0xFFFF)));
-        let l2_entry = self.l2.entries[l2_index];
-        let l3_addr = l2_entry.get_masked(RawL2Entry::ADDR);
-
-        if self.l3[0].as_ptr().as_u64() == l3_addr {
-            self.l3[0].entries[l3_index].get_page_addr()
-        } else if self.l3[1].as_ptr().as_u64() == l3_addr {
-            self.l3[1].entries[l3_index].get_page_addr()
-        } else {
-            panic!("Unexpected failure to find L3PageTable in PageTable::set_entry()")
-        }
-    }
-
 }
 
 impl<'a> IntoIterator for &'a PageTable {
@@ -337,60 +320,6 @@ impl UserPageTable {
         let page = unsafe { from_raw_parts_mut(page_ptr, PAGE_SIZE)} ;
         page
     }
-
-    /// Gets a PhysicalAddr at the VirtualAddr given by `va`. Returns None
-    /// if the given VirtualAddr is not valid
-    pub fn get_pa(&self, va: VirtualAddr) -> Option<PhysicalAddr> {
-        let va_locate = va.sub(VirtualAddr::from(USER_IMG_BASE));
-        match self.get_entry_pa(va_locate) {
-            Some(pa) => Some(pa.bitor(PhysicalAddr::from(
-                va.bitand(VirtualAddr::from(0xFFFF)).as_u64()))),
-            None => None,
-        }
-    }
-
-    /// Gets a slice of u8 values of length `len` located at the VirtualAddr given by `va`.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that a slice of u8 values of length `len` exists at
-    /// VirtualAddr `va`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if given `va` is not valid.
-    pub unsafe fn get_slice_at_va(&self, va: VirtualAddr, len: usize) -> Result<&[u8], ()> {
-        let ptr_pa =  match self.get_pa(va) {
-            Some(pa) => pa,
-            None => return Err(()),
-        };
-
-        Ok(unsafe {
-            from_raw_parts(ptr_pa.as_ptr(), len)
-        })
-    }
-
-    /// Gets a mutable slice of u8 values of length `len` located at the VirtualAddr given by `va`.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that a slice of u8 values of length `len` exists at
-    /// VirtualAddr `va`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if given `va` is not valid.
-    pub unsafe fn get_mut_slice_at_va(&self, va: VirtualAddr, len: usize) -> Result<&mut [u8], ()> {
-        let mut ptr_pa =  match self.get_pa(va) {
-            Some(pa) => pa,
-            None => return Err(()),
-        };
-
-        Ok(unsafe {
-            from_raw_parts_mut(ptr_pa.as_mut_ptr(), len)
-        })
-    }
-
 }
 
 impl Deref for KernPageTable {

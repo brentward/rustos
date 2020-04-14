@@ -54,7 +54,7 @@ impl CachedPartition {
         CachedPartition {
             device: Box::new(device),
             cache: HashMap::new(),
-            partition,
+            partition: partition,
         }
     }
 
@@ -99,10 +99,6 @@ impl CachedPartition {
         } else {
             Ok(())
         }
-    }
-
-    pub fn get_sector_count(&self) -> u64 {
-        self.partition.num_sectors
     }
 
     /// Returns a mutable reference to the cached sector `sector`. If the sector

@@ -2,11 +2,10 @@ ROOT := $(shell git rev-parse --show-toplevel)
 
 KERN := kernel
 TARGET := target/aarch64-unknown-none/release/${KERN}
-# SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
-SDCARD ?= $(ROOT)/user/fs.img
+SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
+# SDCARD ?= $(ROOT)/user/fs.img
 OBJCPY := cargo objcopy -- --strip-all -O binary
-TTY_PATH := /dev/tty.SLAB_USBtoUART
-# TTY_PATH := /dev/ttyUSB0
+TTY_PATH := /dev/ttyUSB0
 QEMU_ARGS ?=
 
 .PHONY: all build qemu transmit objdump nm check clean install test
@@ -39,12 +38,6 @@ transmit: build
 	ttywrite -i build/$(KERN).bin $(TTY_PATH)
 	screen $(TTY_PATH) 115200
 
-readobj: build
-	cargo readobj -- -file-headers build/$(KERN).elf
-
-size: build
-	cargo size --release -- -A build/$(KERN).elf
-
 objdump: build
 	cargo objdump -- -disassemble -no-show-raw-insn -print-imm-hex build/$(KERN).elf
 
@@ -54,7 +47,6 @@ nm: build
 clean:
 	cargo clean
 	rm -rf build
-	rm -rf debug
 
 install: build
 	@echo "+ Installing build/$(KERN).elf [install-kernel.py]"

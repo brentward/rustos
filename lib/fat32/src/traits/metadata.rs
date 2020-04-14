@@ -4,31 +4,23 @@ pub trait Timestamp: Copy + Clone + Sized {
     ///
     /// The year is not offset. 2009 is 2009.
     fn year(&self) -> usize;
-    fn set_year(&mut self, year: usize);
 
     /// The calendar month, starting at 1 for January. Always in range [1, 12].
     ///
     /// January is 1, Feburary is 2, ..., December is 12.
     fn month(&self) -> u8;
-    fn set_month(&mut self, month: u8);
 
     /// The calendar day, starting at 1. Always in range [1, 31].
     fn day(&self) -> u8;
-    fn set_day(&mut self, day: u8);
 
     /// The 24-hour hour. Always in range [0, 24).
     fn hour(&self) -> u8;
-    fn set_hour(&mut self, hour: u8);
-
 
     /// The minute. Always in range [0, 60).
     fn minute(&self) -> u8;
-    fn set_minute(&mut self, minute: u8);
 
     /// The second. Always in range [0, 60).
     fn second(&self) -> u8;
-    fn set_second(&mut self, second: u8);
-
 }
 
 /// Trait for directory entry metadata.

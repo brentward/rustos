@@ -39,16 +39,18 @@ pub fn sleep(span: Duration) -> OsResult<Duration> {
 }
 
 pub fn time() -> Duration {
+    let mut ecode: u64 = 0;
     let mut elapsed_s: u64 = 0;
     let mut fractional_ns: u64 = 0;
 
     unsafe {
-        asm!("svc $2
+        asm!("svc $3
               mov $0, x0
-              mov $1, x1"
-             : "=r"(elapsed_s), "=r"(fractional_ns)
+              mov $1, x1
+              mov $2, x7"
+             : "=r"(elapsed_s), "=r"(fractional_ns), "=r"(ecode)
              : "i"(NR_TIME)
-             : "x0", "x1"
+             : "x0", "x1", "x7"
              : "volatile");
     }
 
@@ -69,10 +71,13 @@ pub fn write(b: u8) {
     let mut ecode: u64;
 
     unsafe {
-        asm!("mov x0, $0
-              svc $1"
-             :: "r"(b), "i"(NR_WRITE)
-             :: "volatile");
+        asm!("mov x0, $1
+              svc $2
+              mov $1, x7"
+             : "=r"(ecode)
+             : "r"(b), "i"(NR_WRITE)
+             : "x0", "x7"
+             : "volatile");
     }
 }
 
@@ -81,104 +86,18 @@ pub fn getpid() -> u64 {
     let mut pid: u64;
 
     unsafe {
-        asm!("svc $1
-              mov $0, x0"
-             : "=r"(pid)
+        asm!("svc $2
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(pid), "=r"(ecode)
              : "i"(NR_GETPID)
-             : "x0"
+             : "x0", "x7"
              : "volatile");
     }
 
     pid
 }
 
-pub fn open(path: &str) -> OsResult<u64> {
-
-    if !path.is_ascii() {
-        panic!("Path: {} is not valid ascii", path)
-    }
-    let path_ptr = path.as_ptr() as u64;
-    let path_len = path.len() as u64;
-    let mut ecode: u64;
-    let mut fid: u64;
-
-    unsafe {
-        asm!("mov x0, $2
-              mov x1, $3
-              svc $4
-              mov $0, x0
-              mov $1, x7"
-             : "=r"(fid), "=r"(ecode)
-             : "r"(path_ptr), "r"(path_len), "i"(NR_OPEN)
-             : "x0", "x7"
-             : "volatile");
-    }
-
-    err_or!(ecode, fid)
-
-}
-
-pub fn read(fd: u64, buf: &mut [u8]) -> OsResult<usize> {
-    let buf_ptr = buf.as_ptr() as u64;
-    let mut ecode: u64;
-    let mut bytes: usize;
-    let count = buf.len();
-
-    unsafe {
-        asm!("mov x0, $2
-              mov x1, $3
-              mov x2, $4
-              svc $5
-              mov $0, x0
-              mov $1, x7"
-             : "=r"(bytes), "=r"(ecode)
-             : "r"(fd), "r"(buf_ptr), "r"(count), "i"(NR_READ)
-             : "x0", "x7"
-             : "volatile");
-    }
-
-    err_or!(ecode, bytes)
-}
-
-pub fn getdent(fd: u64, buf: &mut [fs::DirEnt]) -> OsResult<usize> {
-    let buf_ptr = buf.as_ptr() as u64;
-    let mut ecode: u64;
-    let mut entries: usize;
-    let count = buf.len();
-
-    unsafe {
-        asm!("mov x0, $2
-              mov x1, $3
-              mov x2, $4
-              svc $5
-              mov $0, x0
-              mov $1, x7"
-             : "=r"(entries), "=r"(ecode)
-             : "r"(fd), "r"(buf_ptr), "r"(count), "i"(NR_GETDENT)
-             : "x0", "x7"
-             : "volatile");
-    }
-
-    err_or!(ecode, entries)
-}
-
-pub fn sbrk(size: u64) -> OsResult<*mut u8> {
-    let mut ecode: u64;
-    let mut ptr: u64;
-
-    unsafe {
-        asm!("mov x0, $2
-              svc $3
-              mov $0, x0
-              mov $1, x7"
-             : "=r"(ptr), "=r"(ecode)
-             : "r"(size), "i"(NR_SBRK)
-             : "x0", "x7"
-             : "volatile");
-    }
-    let ptr = ptr as *mut u8;
-    err_or!(ecode, ptr)
-}
 
 struct Console;
 

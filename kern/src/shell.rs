@@ -1,5 +1,5 @@
 use shim::io;
-use shim::io::{Write, Read, Seek};
+use shim::io::{Write, Read};
 use shim::path::{Path, PathBuf};
 
 use stack_vec::StackVec;
@@ -20,7 +20,7 @@ use crate::ALLOCATOR;
 use crate::FILESYSTEM;
 use crate::SCHEDULER;
 use crate::process::Process;
-use pi::{timer, gpio, rand};
+use pi::{timer, gpio};
 
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
@@ -178,15 +178,13 @@ pub fn shell(prefix: &str) {
                             Err(e) => Err(e),
                         }
                     },
+                    // "ll2" => {
+                    //     let mut ll_cmd = Ls::from(Some("l"))?;
+                    //     ll_cmd.set_long(true);
+                    //     ll_cmd.exec(&command, &mut cwd)
+                    // }
                     "cat" => {
                         match Cat::new(None) {
-                            Ok(ref mut executable) => executable
-                                .exec(&command, &mut cwd),
-                            Err(e) => Err(e),
-                        }
-                    },
-                    "append" => {
-                        match Append::new(None) {
                             Ok(ref mut executable) => executable
                                 .exec(&command, &mut cwd),
                             Err(e) => Err(e),
@@ -198,13 +196,6 @@ pub fn shell(prefix: &str) {
                     },
                     "sleep" => {
                         match Sleep::new(None) {
-                            Ok(ref mut executable) => executable
-                                .exec(&command, &mut cwd),
-                            Err(e) => Err(e),
-                        }
-                    },
-                    "rand" => {
-                        match Rand::new(None) {
                             Ok(ref mut executable) => executable
                                 .exec(&command, &mut cwd),
                             Err(e) => Err(e),
@@ -226,13 +217,9 @@ pub fn shell(prefix: &str) {
                     },
                     "panic!" => panic!("called panic"),
                     _path => {
-                        match BinFile::new(None) {
-                            Ok(ref mut executable) => {
-                                match executable.exec(&command, &mut cwd) {
-                                    Ok(_) => break,
-                                    Err(e) => Err(e),
-                                }
-                            }
+                        match Unknown::new(None) {
+                            Ok(ref mut executable) => executable
+                                .exec(&command, &mut cwd),
                             Err(e) => Err(e),
                         }
                     },
@@ -278,15 +265,6 @@ impl From<fmt::Error> for StdError {
     }
 }
 
-impl core::convert::From<io::Error> for StdError {
-    fn from(_error: io::Error) -> Self {
-        StdError {
-            result: String::from("IO error"),
-            code: 1,
-        }
-    }
-}
-
 trait Executable: core::marker::Sized {
     fn new(params: Option<&str>) -> ExecutableResult<Self>;
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult;
@@ -313,49 +291,18 @@ impl Executable for Echo {
     }
 }
 
-struct BinFile;
+struct Unknown;
 
-impl Executable for BinFile {
-    fn new(_params: Option<&str>) -> ExecutableResult<BinFile> {
-        Ok(BinFile)
+impl Executable for Unknown {
+    fn new(_params: Option<&str>) -> ExecutableResult<Unknown> {
+        Ok(Unknown)
     }
 
-    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
+    fn exec(&mut self, cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
+        writeln!(result, "bwsh: command not found: {}", cmd.path())?;
 
-        let mut working_dir = cwd.clone();
-
-        let path = Path::new(cmd.path());
-
-        set_working_dir(&path, &mut working_dir);
-
-        let entry = match FILESYSTEM.open(working_dir.as_path()) {
-            Ok(entry) => entry,
-            Err(_) => {
-                writeln!(result, "bwsh: {}: command not found", cmd.path())?;
-
-                return Err(StdError { result, code: 1 })
-            }
-        };
-
-        if entry.is_file() {
-            let p = match Process::load(working_dir.as_path()) {
-                Ok(process) => process,
-                Err(e) => {
-                    writeln!(result, "bwsh: error running command: {:#?}", e)?;
-
-                    return Err(StdError { result, code: 1 })
-                }
-            };
-            SCHEDULER.add(p);
-
-        } else {
-            writeln!(result, "bwsh: {}: is a directory", cmd.path())?;
-
-            return Err(StdError { result, code: 1 })
-        }
-
-        Ok(StdOut { result })
+        Err(StdError { result, code: 1 })
     }
 }
 
@@ -671,130 +618,6 @@ impl Executable for Cat {
     }
 }
 
-struct Append;
-
-impl Executable for Append {
-    fn new(_params: Option<&str>) -> ExecutableResult<Self> {
-        Ok(Append)
-    }
-
-    fn exec(&mut self, cmd: &Command, cwd: &mut PathBuf) -> StdResult {
-        use io::SeekFrom;
-
-        let mut result = String::new();
-        for &arg in cmd.args[1..].iter() {
-            let mut working_dir = cwd.clone();
-
-            let path = Path::new(&arg);
-
-            set_working_dir(&path, &mut working_dir);
-
-            let entry = match FILESYSTEM.open(working_dir.as_path()) {
-                Ok(entry) => entry,
-                Err(_) => {
-                    writeln!(&mut result, "append: {} no such fhe or directory", path.to_str()
-                        .expect("path is not valid unicode"))?;
-
-                    return Err(StdError { result, code: 1 });
-                }
-            };
-
-            let mut bytes_read = 0usize;
-            kprintln!("size: {}", entry.size());
-            let total_size = entry.size();
-            let mut file = match entry.into_file() {
-                Some(file) => file,
-                None => {
-                    writeln!(result, "append: {}: is a directory", path.to_str()
-                        .expect("path is not valid unicode"))?;
-
-                    return Err(StdError { result, code: 1 });
-                }
-            };
-            let first_cluster = file.first_cluster.fat_address();
-            writeln!(result, "append: file: {} first_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), first_cluster)?;
-            let chain_size = file.size_of_chain()?;
-            writeln!(result, "append: file: {} chain size: {} bytes", path.to_str()
-                .expect("path is not valid unicode"), chain_size)?;
-            let bytes_per_cluster = file.bytes_per_cluster();
-            writeln!(result, "append: file: {} bytes_per_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), bytes_per_cluster)?;
-            let bytes_per_sector = file.bytes_per_sector();
-            writeln!(result, "append: file: {} bytes_per_sector: {}", path.to_str()
-                .expect("path is not valid unicode"), bytes_per_sector)?;
-            let sectors_per_cluster = file.sectors_per_cluster();
-            writeln!(result, "append: file: {} sectors_per_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), sectors_per_cluster)?;
-            let sectors_per_fat = file.sectors_per_fat();
-            writeln!(result, "append: file: {} sectors_per_fat: {}", path.to_str()
-                .expect("path is not valid unicode"), sectors_per_fat)?;
-            let fat_start_sector = file.fat_start_sector();
-            writeln!(result, "append: file: {} fat_start_sector: {}", path.to_str()
-                .expect("path is not valid unicode"), fat_start_sector)?;
-            let data_start_sector = file.data_start_sector();
-            writeln!(result, "append: file: {} data_start_sector: {}", path.to_str()
-                .expect("path is not valid unicode"), data_start_sector)?;
-            let rootdir_cluster = file.rootdir_cluster();
-            writeln!(result, "append: file: {} rootdir_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), rootdir_cluster)?;
-
-            // let input = String::from("Insert this string");
-            let mut input = String::new();
-            for _ in 0..200 {
-                for _ in 0..80 {
-                    input.push('A');
-                }
-                input.push_str("\r\n")
-            }
-            let mut buf = input.as_bytes();
-            file.seek(SeekFrom::End(0))?;
-            let bytes = match file.write(buf) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    writeln!(result, "append: {}: file could not be writen", path.to_str()
-                        .expect("path is not valid unicode"))?;
-                    writeln!(result, "{:?}", e)?;
-
-                    return Err(StdError { result, code: 1 });
-                }
-            };
-            writeln!(result, "append: wrote {} bytes to {}", bytes, path.to_str()
-                .expect("path is not valid unicode"))?;
-
-            let first_cluster = file.first_cluster.fat_address();
-            writeln!(result, "append: file: {} first_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), first_cluster)?;
-            let chain_size = file.size_of_chain()?;
-            writeln!(result, "append: file: {} chain size: {} bytes", path.to_str()
-                .expect("path is not valid unicode"), chain_size)?;
-            let bytes_per_cluster = file.bytes_per_cluster();
-            writeln!(result, "append: file: {} bytes_per_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), bytes_per_cluster)?;
-            let bytes_per_sector = file.bytes_per_sector();
-            writeln!(result, "append: file: {} bytes_per_sector: {}", path.to_str()
-                .expect("path is not valid unicode"), bytes_per_sector)?;
-            let sectors_per_cluster = file.sectors_per_cluster();
-            writeln!(result, "append: file: {} sectors_per_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), sectors_per_cluster)?;
-            let sectors_per_fat = file.sectors_per_fat();
-            writeln!(result, "append: file: {} sectors_per_fat: {}", path.to_str()
-                .expect("path is not valid unicode"), sectors_per_fat)?;
-            let fat_start_sector = file.fat_start_sector();
-            writeln!(result, "append: file: {} fat_start_sector: {}", path.to_str()
-                .expect("path is not valid unicode"), fat_start_sector)?;
-            let data_start_sector = file.data_start_sector();
-            writeln!(result, "append: file: {} data_start_sector: {}", path.to_str()
-                .expect("path is not valid unicode"), data_start_sector)?;
-            let rootdir_cluster = file.rootdir_cluster();
-            writeln!(result, "append: file: {} rootdir_cluster: {}", path.to_str()
-                .expect("path is not valid unicode"), rootdir_cluster)?;
-
-        }
-        Ok(StdOut { result })
-    }
-}
-
 struct Brk;
 
 impl Executable for Brk {
@@ -839,22 +662,6 @@ impl Executable for Sleep {
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let result = String::new();
         kernel_api::syscall::sleep(Duration::from_secs(10));
-
-        Ok(StdOut { result })
-    }
-}
-
-struct Rand;
-
-impl Executable for Rand {
-    fn new(_params: Option<&str>) -> ExecutableResult<Self> {
-        Ok(Rand)
-    }
-
-    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
-        let mut result = String::new();
-        let rand_num = rand::Rand::new().rand(0, 100);
-        writeln!(result, "Random number: {}", rand_num)?;
 
         Ok(StdOut { result })
     }

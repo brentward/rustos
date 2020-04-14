@@ -1,13 +1,10 @@
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use shim::io::{self, SeekFrom};
 use shim::ioerr;
-use shim::newioerr;
-use shim::path::{Path, PathBuf, Component};
 
 use crate::traits;
-use crate::vfat::{Cluster, Metadata, VFatHandle, Status, Dir, Entry};
+use crate::vfat::{Cluster, Metadata, VFatHandle, Status};
 
 #[derive(Debug)]
 pub struct File<HANDLE: VFatHandle> {
@@ -19,8 +16,6 @@ pub struct File<HANDLE: VFatHandle> {
     pub offset: usize,
     pub current_cluster: Option<Cluster>,
     pub bytes_per_cluster: usize,
-    pub parent_path: PathBuf,
-    pub parent_first_cluster: Cluster,
 }
 
 impl<HANDLE: VFatHandle> File<HANDLE> {
@@ -30,8 +25,6 @@ impl<HANDLE: VFatHandle> File<HANDLE> {
         name: String,
         metadata: Metadata,
         size: usize,
-        parent_path: PathBuf,
-        parent_first_cluster: Cluster,
     ) -> File<HANDLE> {
         let bytes_per_cluster = vfat.lock(
             |vfat| vfat.bytes_per_cluster()
@@ -45,66 +38,7 @@ impl<HANDLE: VFatHandle> File<HANDLE> {
             offset: 0,
             current_cluster: Some(first_cluster),
             bytes_per_cluster,
-            parent_path,
-            parent_first_cluster,
         }
-    }
-
-    // pub fn set_offset(&mut self, offset: usize) -> io::Result<usize> {
-    //     self.offset = offset;
-    //     let cluster_index = offset / self.bytes_per_cluster;
-    //     let mut cluster = self.first_cluster;
-    //     for _cluster_index in 0..cluster_index {
-    //         let fat_entry = self.fat_entry(cluster)?.status();
-    //         match fat_entry {
-    //             Status::Data(next_cluster) => cluster = next_cluster,
-    //             Status::Eoc(_) => {
-    //                 bytes += self.add_cluster_to_buf(cluster, buf)?;
-    //                 break
-    //             },
-    //             Status::Bad => return ioerr!(InvalidData, "cluster in chain marked bad"),
-    //             Status::Reserved => return ioerr!(InvalidData, "cluster in chain marked reserved"),
-    //             Status::Free => return ioerr!(InvalidData, "cluster in chain marked free"),
-    //         };
-    //
-    //     }
-    // }
-
-    pub fn size_of_chain(&self) -> io::Result<usize> {
-        self.vfat.lock(|vfat| vfat.size_to_chain_end(self.first_cluster.fat_address()))
-    }
-    pub fn bytes_per_cluster(&self) -> usize {
-        self.bytes_per_cluster
-    }
-    pub fn bytes_per_sector(&self) -> usize {
-        self.vfat.lock(|vfat| {
-            vfat.bytes_per_sector()
-        })
-    }
-    pub fn sectors_per_cluster(&self) -> usize {
-        self.vfat.lock(|vfat| {
-            vfat.sectors_per_cluster()
-        })
-    }
-    pub fn sectors_per_fat(&self) -> usize {
-        self.vfat.lock(|vfat| {
-            vfat.sectors_per_fat()
-        })
-    }
-    pub fn fat_start_sector(&self) -> usize {
-        self.vfat.lock(|vfat| {
-            vfat.fat_start_sector()
-        })
-    }
-    pub fn data_start_sector(&self) -> usize {
-        self.vfat.lock(|vfat| {
-            vfat.data_start_sector()
-        })
-    }
-    pub fn rootdir_cluster(&self) -> u32 {
-        self.vfat.lock(|vfat| {
-            vfat.rootdir_cluster().fat_address()
-        })
     }
 }
 
@@ -127,153 +61,38 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
         match pos {
             SeekFrom::Start(offset) => {
                 if offset > self.size() {
-                    return ioerr!(InvalidInput, "beyond end of file")
+                    ioerr!(InvalidInput, "beyond end of file")
                 } else {
                     self.offset = offset as usize;
+                    Ok(offset)
                 }
             }
             SeekFrom::End(offset) => {
                 if self.size() as i64 + offset < 0 {
-                    return ioerr!(InvalidInput, "beyond beginning of file")
+                    ioerr!(InvalidInput, "beyond beginning of file")
                 } else {
                     self.offset = (self.size() as i64 + offset) as usize;
+                    Ok(self.offset as u64)
                 }
             }
             SeekFrom::Current(offset) => {
                 if self.offset as i64 + offset < 0 {
-                    return ioerr!(InvalidInput, "beyond beginning of file")
+                    ioerr!(InvalidInput, "beyond beginning of file")
                 } else if self.offset as i64 + offset > self.size() as i64 {
-                    return ioerr!(InvalidInput, "beyond end of file")
+                    ioerr!(InvalidInput, "beyond end of file")
                 } else {
                     self.offset = (self.offset as i64 + offset) as usize;
+                    Ok(self.offset as u64)
                 }
             }
-        }
-        let mut current_cluster = self.first_cluster;
-        let return_result = self.vfat.lock(|vfat| {
-            let mut result = Ok(self.offset as u64);
-            for _ in 0..(self.offset / self.bytes_per_cluster) {
-                let fat_entry = vfat.fat_entry(current_cluster)?;
-                result = match fat_entry.status() {
-                    Status::Data(next_cluster) => {
-                        current_cluster = next_cluster;
-                        Ok(self.offset as u64)
-                    },
-                    _ => ioerr!(InvalidData, "Unexpected invalid cluster in chain"),
-                };
-            }
-            result
-        });
-        match return_result {
-            Ok(result) => {
-                self.current_cluster = Some(current_cluster);
-                Ok(result)
-            },
-            Err(e) => Err(e),
         }
     }
 }
 
 impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        use crate::traits::{FileSystem, Dir as DirTrait, Entry as EntryTrait};
-
-        let mut bytes_written = 0usize;
-        let bytes_to_write = buf.len();
-        let mut cluster = match self.current_cluster{
-            Some(cluster)=> cluster,
-            None => return ioerr!(InvalidInput, "cluster in chain marked reserved"),
-        };
-        let mut current_cluster_result = Ok(self.current_cluster);
-        let mut current_cluster = current_cluster_result?;
-        let mut cluster_offset = self.offset % self.bytes_per_cluster;
-        while self.vfat.lock(
-            |vfat| { vfat.size_to_chain_end(cluster.fat_address()) }
-        )? < self.offset + buf.len() {
-            let new_cluster = self.vfat.lock(
-                |vfat| {
-                    vfat.find_free_cluster()
-                }
-            )?;
-            self.vfat.lock(
-                |vfat| {
-                    vfat.add_cluster_to_chain(cluster, new_cluster)
-                }
-            )?;
-        }
-        while bytes_written < bytes_to_write {
-            let bytes = self.vfat.lock(
-                |vfat| {
-                    vfat.write_cluster(
-                        current_cluster.unwrap(),
-                        cluster_offset,
-                        &buf[bytes_written..]
-                    )
-                }
-            )?;
-            if bytes == self.bytes_per_cluster - cluster_offset {
-                current_cluster_result = self.vfat.lock(|vfat| {
-                    match vfat.fat_entry(current_cluster.unwrap())?.status() {
-                        Status::Data(cluster) => Ok(Some(cluster)),
-                        Status::Eoc(_) => Ok(None),
-                        Status::Bad => ioerr!(InvalidInput, "cluster in chain marked bad"),
-                        Status::Reserved => {
-                            ioerr!(InvalidInput, "cluster in chain marked reserved")
-                        }
-                        Status::Free => ioerr!(InvalidInput, "cluster in chain marked free"),
-                    }
-                });
-                current_cluster = current_cluster_result?;
-
-            }
-            bytes_written += bytes;
-            cluster_offset = 0;
-        }
-        self.current_cluster = current_cluster;
-        self.offset += bytes_written;
-        if self.offset > self.size {
-            self.size = self.offset;
-            let rootdir_cluster = self.vfat.lock(|vfat| vfat.rootdir_cluster());
-            let mut entry = Entry::Dir(Dir {
-                vfat: self.vfat.clone(),
-                first_cluster: rootdir_cluster,
-                name: String::from(""),
-                metadata: Metadata::default(),
-                size: 0,
-                path: PathBuf::from("/"),
-                parent_path: None,
-                parent_first_cluster: None,
-            });
-            for component in self.parent_path.as_path().components() {
-                match component {
-                    // Component::ParentDir => {
-                    //     entry = entry.into_dir()
-                    //         .ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
-                    //         .find("..")?;
-                    // },
-                    Component::Normal(name) => {
-                        entry = entry.into_dir()
-                            .ok_or(newioerr!(NotFound, "path not found"))?
-                            .find(name)?;
-                    }
-                    _ => (),
-                }
-            }
-
-            let dir_entry = match entry.into_dir() {
-                Some(dir_entry) => dir_entry,
-                None => return ioerr!(InvalidData, "parent_dir is not an Entry::Dir"),
-            };
-            let mut dir_iter = dir_entry.entries()?;
-            let mut fat_buf: Vec<u8> = Vec::new();
-            let size = dir_iter.write_entry_size(self.name.as_str(), self.size, &mut fat_buf)?;
-            let chain_size = self.vfat.lock(|vfat| {
-                vfat.write_chain(self.parent_first_cluster, &fat_buf)
-            })?;
-        }
-        Ok(bytes_written)
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        unimplemented!("File::write()")
     }
-
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }

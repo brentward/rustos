@@ -23,6 +23,3 @@ kernel_api = { path = "../lib/kernel_api" }
 
 [dev-dependencies]
 shim = { path = "../lib/shim", features = ["alloc"] }
-
-[profile.release]
-debug = true

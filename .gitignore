@@ -1,7 +1,6 @@
 target/
 build/
 TAGS
-.DS_Store
 
 # Remove Cargo.lock from gitignore if creating an executable, leave it for libraries
 # More information here http://doc.crates.io/guide.html#cargotoml-vs-cargolock
