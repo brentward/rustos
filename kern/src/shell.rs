@@ -711,16 +711,44 @@ impl Executable for Append {
                     return Err(StdError { result, code: 1 });
                 }
             };
+            let first_cluster = file.first_cluster.fat_address();
+            writeln!(result, "append: file: {} first_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), first_cluster)?;
+            let chain_size = file.size_of_chain()?;
+            writeln!(result, "append: file: {} chain size: {} bytes", path.to_str()
+                .expect("path is not valid unicode"), chain_size)?;
+            let bytes_per_cluster = file.bytes_per_cluster();
+            writeln!(result, "append: file: {} bytes_per_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), bytes_per_cluster)?;
+            let bytes_per_sector = file.bytes_per_sector();
+            writeln!(result, "append: file: {} bytes_per_sector: {}", path.to_str()
+                .expect("path is not valid unicode"), bytes_per_sector)?;
+            let sectors_per_cluster = file.sectors_per_cluster();
+            writeln!(result, "append: file: {} sectors_per_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), sectors_per_cluster)?;
+            let sectors_per_fat = file.sectors_per_fat();
+            writeln!(result, "append: file: {} sectors_per_fat: {}", path.to_str()
+                .expect("path is not valid unicode"), sectors_per_fat)?;
+            let fat_start_sector = file.fat_start_sector();
+            writeln!(result, "append: file: {} fat_start_sector: {}", path.to_str()
+                .expect("path is not valid unicode"), fat_start_sector)?;
+            let data_start_sector = file.data_start_sector();
+            writeln!(result, "append: file: {} data_start_sector: {}", path.to_str()
+                .expect("path is not valid unicode"), data_start_sector)?;
+            let rootdir_cluster = file.rootdir_cluster();
+            writeln!(result, "append: file: {} rootdir_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), rootdir_cluster)?;
+
             // let input = String::from("Insert this string");
             let mut input = String::new();
-            for _ in 0..400 {
-                for _ in 0..40 {
+            for _ in 0..200 {
+                for _ in 0..80 {
                     input.push('A');
                 }
                 input.push_str("\r\n")
             }
             let mut buf = input.as_bytes();
-            // file.seek(SeekFrom::Start(0))?;
+            file.seek(SeekFrom::End(0))?;
             let bytes = match file.write(buf) {
                 Ok(bytes) => bytes,
                 Err(e) => {
@@ -733,6 +761,34 @@ impl Executable for Append {
             };
             writeln!(result, "append: wrote {} bytes to {}", bytes, path.to_str()
                 .expect("path is not valid unicode"))?;
+
+            let first_cluster = file.first_cluster.fat_address();
+            writeln!(result, "append: file: {} first_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), first_cluster)?;
+            let chain_size = file.size_of_chain()?;
+            writeln!(result, "append: file: {} chain size: {} bytes", path.to_str()
+                .expect("path is not valid unicode"), chain_size)?;
+            let bytes_per_cluster = file.bytes_per_cluster();
+            writeln!(result, "append: file: {} bytes_per_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), bytes_per_cluster)?;
+            let bytes_per_sector = file.bytes_per_sector();
+            writeln!(result, "append: file: {} bytes_per_sector: {}", path.to_str()
+                .expect("path is not valid unicode"), bytes_per_sector)?;
+            let sectors_per_cluster = file.sectors_per_cluster();
+            writeln!(result, "append: file: {} sectors_per_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), sectors_per_cluster)?;
+            let sectors_per_fat = file.sectors_per_fat();
+            writeln!(result, "append: file: {} sectors_per_fat: {}", path.to_str()
+                .expect("path is not valid unicode"), sectors_per_fat)?;
+            let fat_start_sector = file.fat_start_sector();
+            writeln!(result, "append: file: {} fat_start_sector: {}", path.to_str()
+                .expect("path is not valid unicode"), fat_start_sector)?;
+            let data_start_sector = file.data_start_sector();
+            writeln!(result, "append: file: {} data_start_sector: {}", path.to_str()
+                .expect("path is not valid unicode"), data_start_sector)?;
+            let rootdir_cluster = file.rootdir_cluster();
+            writeln!(result, "append: file: {} rootdir_cluster: {}", path.to_str()
+                .expect("path is not valid unicode"), rootdir_cluster)?;
 
         }
         Ok(StdOut { result })
