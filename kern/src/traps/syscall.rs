@@ -12,7 +12,8 @@ use shim::path::PathBuf;
 use fat32::traits::{FileSystem, Entry, Dir};
 use fat32::vfat::Entry as EntryEnum;
 
-use crate::console::CONSOLE;
+use crate::console::{kprint, CONSOLE};
+use crate::param::USER_IMG_BASE;
 use crate::process::{State, FdEntry};
 use crate::traps::TrapFrame;
 use crate::SCHEDULER;
@@ -100,84 +101,161 @@ pub fn sys_getpid(tf: &mut TrapFrame) {
     })), tf);
 }
 
-pub fn sys_open(path_ptr: u64, path_len: usize, tf: &mut TrapFrame) {
+pub fn sys_open(path_ptr: usize, path_len: usize, tf: &mut TrapFrame) {
     use crate::console::kprintln;
 
-    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-        let path_slice = unsafe { match p.vmap
-            .get_slice_at_va(VirtualAddr::from(path_ptr), path_len) {
-            Ok(slice) => slice,
-            Err(_) => {
-                p.context.x[7] = 104;
-                return true
-            }
-        }};
+    let result = unsafe { to_user_slice(path_ptr, path_len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
 
-        let path = match str::from_utf8(path_slice) {
-            Ok(path) => path,
-            Err(_e) => {
-                p.context.x[7] = 50;
-                return true
-            }
-        };
+    match result {
+        Ok(path) => {
+            let path_buf = PathBuf::from(path);
 
-        let path_buf = PathBuf::from(path);
-
-        let entry = match FILESYSTEM.open(path_buf.as_path()) {
-            Ok(entry) => entry,
-            Err(_) => {
-                p.context.x[7] = 10;
-                return true
-            }
-        };
-        if p.unused_file_descriptors.len() > 0 {
-            let fd = p.unused_file_descriptors.pop()
-                .expect("Unexpected p.unused_file_descriptors.pop() failed after len check");
-            match  p.file_table[fd] {
-                Some(_) => {
-                    p.context.x[7] = 103;
-                    true
+            let entry = match FILESYSTEM.open(path_buf.as_path()) {
+                Ok(entry) => entry,
+                Err(_) => {
+                    tf.x[7] = OsError::NoEntry as u64;
                 }
-                None => {
-                    match entry.is_file() {
-                        true => {
-                            let file = entry.into_file()
-                                .expect("Entry unexpectedly failed to convert to file");
-                            p.file_table[fd] = Some(FdEntry::File(Box::new(file)));
-                        }
-                        false => {
-                            let dir = entry.into_dir()
-                                .expect("Entry unexpectedly failed to convert to dir");
-                            let dir_entries = dir.entries().unwrap(); //FIXME
-                            p.file_table[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
-                        }
+            };
+            if p.unused_file_descriptors.len() > 0 {
+                let fd = p.unused_file_descriptors.pop()
+                    .expect("Unexpected p.unused_file_descriptors.pop() failed after len check");
+                match  p.file_table[fd] {
+                    Some(_) => {
+                        tf.x[7] = OsError::IoErrorInvalidData as u64;
                     }
-                    p.context.x[0] = fd as u64;
-                    p.context.x[7] = 1;
-                    true
+                    None => {
+                        match entry.is_file() {
+                            true => {
+                                let file = entry.into_file()
+                                    .expect("Entry unexpectedly failed to convert to file");
+                                p.file_table[fd] = Some(FdEntry::File(Box::new(file)));
+                            }
+                            false => {
+                                let dir = entry.into_dir()
+                                    .expect("Entry unexpectedly failed to convert to dir");
+                                let dir_entries = dir.entries().unwrap(); //FIXME
+                                p.file_table[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
+                            }
+                        }
+                        tf.x[0] = fd as u64;
+                        tf.x[7] = OsError::Ok as u64;
+                    }
                 }
+
+            } else {
+                let fd = p.file_table.len();
+                match entry.is_file() {
+                    true => {
+                        let file = entry.into_file()
+                            .expect("Entry unexpectedly failed to convert to file");
+                        p.file_table.push(Some(FdEntry::File(Box::new(file))));
+                    }
+                    false => {
+                        let dir = entry.into_dir()
+                            .expect("Entry unexpectedly failed to convert to dir");
+                        let dir_entries = dir.entries().unwrap(); //FIXME
+                        p.file_table.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
+                    }
+                }
+                tf.x[0] = fd as u64;
+                tf.x[7] = OsError::Ok as u64;
+                true
             }
 
-        } else {
-            let fd = p.file_table.len();
-            match entry.is_file() {
-                true => {
-                    let file = entry.into_file()
-                        .expect("Entry unexpectedly failed to convert to file");
-                    p.file_table.push(Some(FdEntry::File(Box::new(file))));
-                }
-                false => {
-                    let dir = entry.into_dir()
-                        .expect("Entry unexpectedly failed to convert to dir");
-                    let dir_entries = dir.entries().unwrap(); //FIXME
-                    p.file_table.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
-                }
-            }
-            p.context.x[0] = fd as u64;
-            p.context.x[7] = 1;
+        }
+        Err(e) => {
+            p.context.x[7] = e as u64;
             true
         }
-    })), tf);
+
+
+    //     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+    //     // let path_slice = unsafe { match p.vmap
+    //     //     .get_slice_at_va(VirtualAddr::from(path_ptr), path_len) {
+    //     //     Ok(slice) => slice,
+    //     //     Err(_) => {
+    //     //         p.context.x[7] = 104;
+    //     //         return true
+    //     //     }
+    //     // }};
+    //     //
+    //     // let path = match str::from_utf8(path_slice) {
+    //     //     Ok(path) => path,
+    //     //     Err(_e) => {
+    //     //         p.context.x[7] = 50;
+    //     //         return true
+    //     //     }
+    //     // };
+    //     let result = unsafe { to_user_slice(path_ptr, path_len) }
+    //         .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+    //
+    //     match result {
+    //         Ok(path) => {
+    //             let path_buf = PathBuf::from(path);
+    //
+    //             let entry = match FILESYSTEM.open(path_buf.as_path()) {
+    //                 Ok(entry) => entry,
+    //                 Err(_) => {
+    //                     p.context.x[7] = OsError::NoEntry as u64;
+    //                     return true
+    //                 }
+    //             };
+    //             if p.unused_file_descriptors.len() > 0 {
+    //                 let fd = p.unused_file_descriptors.pop()
+    //                     .expect("Unexpected p.unused_file_descriptors.pop() failed after len check");
+    //                 match  p.file_table[fd] {
+    //                     Some(_) => {
+    //                         p.context.x[7] = OsError::IoErrorInvalidData as u64;
+    //                         true
+    //                     }
+    //                     None => {
+    //                         match entry.is_file() {
+    //                             true => {
+    //                                 let file = entry.into_file()
+    //                                     .expect("Entry unexpectedly failed to convert to file");
+    //                                 p.file_table[fd] = Some(FdEntry::File(Box::new(file)));
+    //                             }
+    //                             false => {
+    //                                 let dir = entry.into_dir()
+    //                                     .expect("Entry unexpectedly failed to convert to dir");
+    //                                 let dir_entries = dir.entries().unwrap(); //FIXME
+    //                                 p.file_table[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
+    //                             }
+    //                         }
+    //                         p.context.x[0] = fd as u64;
+    //                         p.context.x[7] = OsError::Ok as u64;
+    //                         true
+    //                     }
+    //                 }
+    //
+    //             } else {
+    //                 let fd = p.file_table.len();
+    //                 match entry.is_file() {
+    //                     true => {
+    //                         let file = entry.into_file()
+    //                             .expect("Entry unexpectedly failed to convert to file");
+    //                         p.file_table.push(Some(FdEntry::File(Box::new(file))));
+    //                     }
+    //                     false => {
+    //                         let dir = entry.into_dir()
+    //                             .expect("Entry unexpectedly failed to convert to dir");
+    //                         let dir_entries = dir.entries().unwrap(); //FIXME
+    //                         p.file_table.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
+    //                     }
+    //                 }
+    //                 p.context.x[0] = fd as u64;
+    //                 p.context.x[7] = OsError::Ok as u64;
+    //                 true
+    //             }
+    //
+    //         }
+    //         Err(e) => {
+    //             p.context.x[7] = e as u64;
+    //             true
+    //         }
+    //     }
+    // })), tf);
 }
 
 pub fn sys_read(fd: usize, buf_ptr: u64, len: usize, tf: &mut TrapFrame) {
@@ -313,6 +391,64 @@ pub fn sys_getdent(fd: usize, dent_buf_ptr: u64, count: usize, tf: &mut TrapFram
     })), tf);
 }
 
+/// Returns a slice from a virtual address and a legnth.
+///
+/// # Errors
+/// This functions returns `Err(OsError::BadAddress)` if the slice is not entirely
+/// in userspace.
+unsafe fn to_user_slice<'a>(va: usize, len: usize) -> OsResult<&'a [u8]> {
+    let overflow = va.checked_add(len).is_none();
+    if va >= USER_IMG_BASE && !overflow {
+        Ok(core::slice::from_raw_parts(va as *const u8, len))
+    } else {
+        Err(OsError::BadAddress)
+    }
+}
+
+/// Returns a mutable slice from a virtual address and a legnth.
+///
+/// # Errors
+/// This functions returns `Err(OsError::BadAddress)` if the slice is not entirely
+/// in userspace.
+unsafe fn to_user_slice_mut<'a>(va: usize, len: usize) -> OsResult<&'a mut [u8]> {
+    let overflow = va.checked_add(len).is_none();
+    if va >= USER_IMG_BASE && !overflow {
+        Ok(core::slice::from_raw_parts_mut(va as *mut u8, len))
+    } else {
+        Err(OsError::BadAddress)
+    }
+}
+
+/// Writes a UTF-8 string to the console.
+///
+/// This system call takes the address of the buffer as the first parameter and
+/// the length of the buffer as the second parameter.
+///
+/// In addition to the usual status value, this system call returns the length
+/// of the UTF-8 message.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
+/// - `OsError::InvalidArgument`: The provided buffer is not UTF-8 encoded.
+pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
+    let result = unsafe { to_user_slice(va, len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+
+    match result {
+        Ok(msg) => {
+            kprint!("{}", msg);
+
+            tf.x[0] = msg.len() as u64;
+            tf.x[7] = OsError::Ok as u64;
+        }
+        Err(e) => {
+            tf.x[7] = e as u64;
+        }
+    }
+}
+
 pub fn sys_unknown(tf: &mut TrapFrame)  {
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
         p.context.x[7] = 0;
@@ -329,10 +465,11 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         3 => sys_exit(tf),
         4 => sys_write(tf.x[0] as u8, tf),
         5 => sys_getpid(tf),
-        6 => sys_open(tf.x[0] as u64, tf.x[1] as usize, tf),
+        6 => sys_write_str(tf.x[0] as usize, tf.x[1] as usize, tf),
         7 => sys_sbrk(tf.x[0] as u64, tf),
-        8 => sys_read(tf.x[0] as usize, tf.x[1] as u64, tf.x[2] as usize, tf),
-        9 => sys_getdent(tf.x[0] as usize, tf.x[1] as u64, tf.x[2] as usize, tf),
+        8 => sys_open(tf.x[0] as usize, tf.x[1] as usize, tf),
+        9 => sys_read(tf.x[0] as usize, tf.x[1] as u64, tf.x[2] as usize, tf),
+        10 => sys_getdent(tf.x[0] as usize, tf.x[1] as u64, tf.x[2] as usize, tf),
 
         _ => sys_unknown(tf),
     }
