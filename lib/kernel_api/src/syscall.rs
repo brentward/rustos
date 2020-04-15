@@ -81,7 +81,7 @@ pub fn write(b: u8) {
     }
 }
 
-pub fn write_str(msg: &str) OsResult<usize> {
+pub fn write_str(msg: &str) -> OsResult<usize> {
     let msg_ptr = msg.as_ptr() as u64;
     let msg_len = msg.len() as u64;
     let mut ecode: u64;

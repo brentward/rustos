@@ -38,6 +38,7 @@ use process::GlobalScheduler;
 use traps::irq::{Fiq, GlobalIrq};
 use vm::VMManager;
 use console::kprintln;
+use pi;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
@@ -58,6 +59,8 @@ extern "C" {
 
 unsafe fn kmain() -> ! {
     crate::logger::init_logger();
+    pi::timer::spin_sleep(core::time::Duration::from_millis(250));
+
 
     info!(
         "text beg: {:016x}, end: {:016x}",
@@ -70,8 +73,18 @@ unsafe fn kmain() -> ! {
 
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();
+    ALLOCATOR.initialize();
+    FILESYSTEM.initialize();
+    // GLOABAL_IRQ.new();
+    VMM.initialize();
+    SCHEDULER.initialize();
 
+    // init::initialize_app_cores();
     kprintln!("Welcome to cs3210!");
+
+    SCHEDULER.start();
+
+
     shell::shell("> ");
     loop {}
 }

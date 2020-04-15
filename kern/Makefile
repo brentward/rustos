@@ -5,7 +5,7 @@ TARGET := target/aarch64-unknown-none/release/${KERN}
 # SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
 SDCARD ?= $(ROOT)/user/fs.img
 OBJCPY := cargo objcopy -- --strip-all -O binary
-TTY_PATH := /dev/ttyUSB0
+TTY_PATH := /dev/tty.SLAB_USBtoUART
 QEMU_ARGS ?=
 
 .PHONY: all build qemu transmit objdump nm check clean install test
