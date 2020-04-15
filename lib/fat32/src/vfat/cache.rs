@@ -54,7 +54,7 @@ impl CachedPartition {
         CachedPartition {
             device: Box::new(device),
             cache: HashMap::new(),
-            partition: partition,
+            partition,
         }
     }
 

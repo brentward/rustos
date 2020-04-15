@@ -19,7 +19,7 @@ use crate::percore::{get_preemptive_counter, is_mmu_ready, local_irq};
 use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::{TrapFrame, irq};
-use crate::{VMM, IRQ, SCHEDULER, ETHERNET, USB};
+use crate::{VMM, GLOABAL_IRQ, SCHEDULER, ETHERNET, USB};
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -70,10 +70,10 @@ impl GlobalScheduler {
                     affinity(),
                     id,
                     tf.elr,
-                    tf.xs[30],
-                    tf.xs[29],
-                    tf.xs[28],
-                    tf.xs[27]
+                    tf.x[30],
+                    tf.x[29],
+                    tf.x[28],
+                    tf.x[27]
                 );
                 return id;
             }
@@ -130,7 +130,7 @@ impl GlobalScheduler {
 
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
-        *self.0.lock() = Some(Scheduler::new());
+        *self.0.lock() = Some(Box::new(Scheduler::new()));
 
         let process_0 = match Process::load("/fib_new.bin") {
             Ok(process) => process,
@@ -157,7 +157,7 @@ impl GlobalScheduler {
         let mut controller = interrupt::Controller::new();
         controller.enable(interrupt::Interrupt::Timer1);
         timer::tick_in(TICK);
-        IRQ.register(interrupt::Interrupt::Timer1, Box::new(|tf|{
+        GLOABAL_IRQ.register(interrupt::Interrupt::Timer1, Box::new(|tf|{
             timer::tick_in(TICK);
             SCHEDULER.switch(State::Ready, tf);
         }));

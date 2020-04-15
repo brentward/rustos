@@ -26,7 +26,7 @@ pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
         let current_time = timer::current_time();
         if current_time >= end_time {
             p.context.x[0] = (current_time - start_time).as_millis() as u64;
-            p.context.x[7] = 0;
+            p.context.x[7] = OsError::Ok as u64;
             true
         } else {
             false
@@ -46,12 +46,15 @@ pub fn sys_time(tf: &mut TrapFrame) {
     let current_time = timer::current_time();
     let seconds = current_time.as_secs();
     let nanoseconds = (current_time - Duration::from_secs(seconds)).as_nanos() as u64;
-    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-        p.context.x[0] = seconds;
-        p.context.x[1] = nanoseconds;
-        p.context.x[7] = 0;
-        true
-    })), tf);
+    tf.x[0] = seconds;
+    tf.x[1] = nanoseconds;
+    tf.x[7] = OsError::Ok as u64;
+    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+    //     p.context.x[0] = seconds;
+    //     p.context.x[1] = nanoseconds;
+    //     p.context.x[7] = 0;
+    //     true
+    // })), tf);
 }
 
 /// Kills the current process.
@@ -69,16 +72,25 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 pub fn sys_write(b: u8, tf: &mut TrapFrame) {
     use crate::console::kprint;
 
-    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-        if b.is_ascii() {
-            let ch = b as char;
-            kprint!("{}", ch);
-            p.context.x[7] = 0;
-        } else {
-            p.context.x[7] = 70;
-        }
-        true
-    })), tf);
+    if b.is_ascii() {
+        let ch = b as char;
+        kprint!("{}", ch);
+        tf.x[7] = OsError::Ok as u64;
+    } else {
+        tf.x[7] = OsError::IoErrorInvalidInput as u64;
+    }
+
+
+    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+    //     if b.is_ascii() {
+    //         let ch = b as char;
+    //         kprint!("{}", ch);
+    //         p.context.x[7] = 0;
+    //     } else {
+    //         p.context.x[7] = 70;
+    //     }
+    //     true
+    // })), tf);
 }
 
 /// Returns the current process's ID.
@@ -88,12 +100,14 @@ pub fn sys_write(b: u8, tf: &mut TrapFrame) {
 /// In addition to the usual status value, this system call returns a
 /// parameter: the current process's ID.
 pub fn sys_getpid(tf: &mut TrapFrame) {
-    let pid = tf.tpidr;
-    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-        p.context.x[0] = pid;
-        p.context.x[7] = 0;
-        true
-    })), tf);
+    tf.x[0] = tf.tpidr;
+    tf.x[7] = OsError::Ok as u64;
+
+    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+    //     p.context.x[0] = pid;
+    //     p.context.x[7] = 0;
+    //     true
+    // })), tf);
 }
 
 /// Creates a socket and saves the socket handle in the current process's
@@ -263,11 +277,11 @@ pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
         Ok(msg) => {
             kprint!("{}", msg);
 
-            tf.xs[0] = msg.len() as u64;
-            tf.xs[7] = OsError::Ok as u64;
+            tf.x[0] = msg.len() as u64;
+            tf.x[7] = OsError::Ok as u64;
         }
         Err(e) => {
-            tf.xs[7] = e as u64;
+            tf.x[7] = e as u64;
         }
     }
 }
@@ -281,5 +295,7 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         3 => sys_exit(tf),
         4 => sys_write(tf.x[0] as u8, tf),
         5 => sys_getpid(tf),
-        _ => tf.x[7] = 1,
+        6 => sys_write_str(tf.x[0] as usize, tf.x[1] as usize, tf),
+        _ => tf.x[7] = OsError::Unknown as u64,
+    }
 }

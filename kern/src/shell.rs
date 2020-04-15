@@ -178,11 +178,6 @@ pub fn shell(prefix: &str) {
                             Err(e) => Err(e),
                         }
                     },
-                    // "ll2" => {
-                    //     let mut ll_cmd = Ls::from(Some("l"))?;
-                    //     ll_cmd.set_long(true);
-                    //     ll_cmd.exec(&command, &mut cwd)
-                    // }
                     "cat" => {
                         match Cat::new(None) {
                             Ok(ref mut executable) => executable
@@ -193,20 +188,6 @@ pub fn shell(prefix: &str) {
                     "exit" => {
                         kprintln!("Goodbye...");
                         break
-                    },
-                    "sleep" => {
-                        match Sleep::new(None) {
-                            Ok(ref mut executable) => executable
-                                .exec(&command, &mut cwd),
-                            Err(e) => Err(e),
-                        }
-                    },
-                    "brk" => {
-                        match Brk::new(None) {
-                            Ok(ref mut executable) => executable
-                                .exec(&command, &mut cwd),
-                            Err(e) => Err(e),
-                        }
                     },
                     "blink" => {
                         match Blink::new(None) {
@@ -618,21 +599,6 @@ impl Executable for Cat {
     }
 }
 
-struct Brk;
-
-impl Executable for Brk {
-    fn new(_params: Option<&str>) -> ExecutableResult<Brk> {
-        Ok(Brk)
-    }
-
-    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
-        let result = String::new();
-        aarch64::brk!(2);
-
-        Ok(StdOut { result })
-    }
-}
-
 struct Blink;
 
 impl Executable for Blink {
@@ -649,21 +615,6 @@ impl Executable for Blink {
         let result = String::new();
         Ok(StdOut { result })
 
-    }
-}
-
-struct Sleep;
-
-impl Executable for Sleep {
-    fn new(_params: Option<&str>) -> ExecutableResult<Sleep> {
-        Ok(Sleep)
-    }
-
-    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
-        let result = String::new();
-        kernel_api::syscall::sleep(Duration::from_secs(10));
-
-        Ok(StdOut { result })
     }
 }
 

@@ -112,24 +112,21 @@ impl PageTable {
             l3: [
                 L3PageTable::new(),
                 L3PageTable::new(),
+                L3PageTable::new(),
             ],
         });
 
         page_table.l2.entries[0].set_masked(page_table.l3[0].as_ptr().as_u64(), RawL2Entry::ADDR);
-        // page_table.l2.entries[0].set_bit(RawL2Entry::AF);
-        // page_table.l2.entries[0].set_value(EntrySh::ISh, RawL2Entry::SH);
-        // page_table.l2.entries[0].set_value(perm, RawL2Entry::AP);
-        // page_table.l2.entries[0].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
         page_table.l2.entries[0].set_value(EntryType::Table, RawL2Entry::TYPE);
         page_table.l2.entries[0].set_value(EntryValid::Valid, RawL2Entry::VALID);
 
         page_table.l2.entries[1].set_masked(page_table.l3[1].as_ptr().as_u64(), RawL2Entry::ADDR);
-        // page_table.l2.entries[1].set_bit(RawL2Entry::AF);
-        // page_table.l2.entries[1].set_value(EntrySh::ISh, RawL2Entry::SH);
-        // page_table.l2.entries[1].set_value(perm, RawL2Entry::AP);
-        // page_table.l2.entries[1].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
         page_table.l2.entries[1].set_value(EntryType::Table, RawL2Entry::TYPE);
         page_table.l2.entries[1].set_value(EntryValid::Valid, RawL2Entry::VALID);
+
+        page_table.l2.entries[2].set_masked(page_table.l3[2].as_ptr().as_u64(), RawL2Entry::ADDR);
+        page_table.l2.entries[2].set_value(EntryType::Table, RawL2Entry::TYPE);
+        page_table.l2.entries[2].set_value(EntryValid::Valid, RawL2Entry::VALID);
 
         page_table
     }
@@ -147,7 +144,6 @@ impl PageTable {
         }
         let l2_index = va.bitand(VirtualAddr::from(0b1usize << 29)).as_usize() >> 29;
         let l3_index = va.bitand(VirtualAddr::from(0x1FFFusize << 16)).as_usize() >> 16;
-        // let l2_index = (va.as_usize() & 0b1usize << 29) >> 29;
         if l2_index >= 2 {
             panic!(
                 "L2 Index: {} from VirtualAddr: {} is greater than L3PageTable count: 2",
@@ -155,7 +151,6 @@ impl PageTable {
                 va.as_usize()
             );
         }
-        // let l3_index = (va.as_usize() & 0x1FFFusize << 16) >> 16;
         (l2_index, l3_index)
     }
 

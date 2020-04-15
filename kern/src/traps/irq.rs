@@ -113,24 +113,16 @@ where
 {
     /// Register an irq handler for an interrupt.
     fn register(&self, int: I, handler: IrqHandler) {
-        match *self.0.lock() {
-            Some(ref mut irq_handlers) => {
-                irq_handlers[Interrupt::to_index(int)] = Some(handler);
-            }
-            None => panic!("Irq not initialized"),
-        }
+        let mut irq_handler_mutex = self.index(int).lock();
+        *irq_handler_mutex = Some(handler);
     }
 
     /// Executes an irq handler for the given interrupt.
     fn invoke(&self, int: I, tf: &mut TrapFrame) {
-        match &mut *self.0.lock() {
-            Some(irq_handlers) => {
-                match &mut irq_handlers[Interrupt::to_index(int)] {
-                    Some(handler) => handler(tf),
-                    None => panic!("No IrqHandler"),
-                }
-            }
-            None => panic!("Irq not initialized"),
+        let mut irq_handler_mutex = self.index(int).lock();
+        match &mut *irq_handler_mutex {
+            Some(handler) => handler(tf),
+            None => panic!("IrqHandlerRegistry::invoke() mutex has No IrqHandler"),
         }
     }
 }

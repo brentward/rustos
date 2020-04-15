@@ -37,6 +37,7 @@ use net::GlobalEthernetDriver;
 use process::GlobalScheduler;
 use traps::irq::{Fiq, GlobalIrq};
 use vm::VMManager;
+use console::kprintln;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
@@ -72,4 +73,5 @@ unsafe fn kmain() -> ! {
 
     kprintln!("Welcome to cs3210!");
     shell::shell("> ");
+    loop {}
 }
