@@ -74,13 +74,14 @@ unsafe fn kmain() -> ! {
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();
     // GLOABAL_IRQ.initialize();
-    // VMM.initialize();
-    // SCHEDULER.initialize();
+    VMM.initialize();
+    SCHEDULER.initialize();
+    VMM.setup();
 
-    init::initialize_app_cores();
-    // kprintln!("Welcome to cs3210!");
+    // init::initialize_app_cores();
+    kprintln!("Welcome to BrentOS!");
 
-    // SCHEDULER.start();
+    SCHEDULER.start();
 
 
     shell::shell("> ");
