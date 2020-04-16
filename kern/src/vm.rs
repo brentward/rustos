@@ -40,7 +40,7 @@ impl VMManager {
 
         *self.kern_pt.lock() = Some(kern_page_table);
 
-        self.wait();
+        // self.wait();
     }
 
     /// Set up the virtual memory manager for the current core.
@@ -108,7 +108,7 @@ impl VMManager {
         info!("MMU is ready for core-{}/@sp={:016x}", affinity(), SP.get());
 
         // Lab 5 1.B
-        unimplemented!("wait for other cores")
+        // unimplemented!("wait for other cores")
     }
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.

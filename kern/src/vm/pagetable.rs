@@ -142,11 +142,11 @@ impl PageTable {
         if !allocator::util::has_alignment(va.as_usize(), Page::SIZE) {
             panic!("VirtualAddr: {} is not aligned to page size: {}", va.as_usize(), Page::SIZE);
         }
-        let l2_index = va.bitand(VirtualAddr::from(0b1usize << 29)).as_usize() >> 29;
+        let l2_index = va.bitand(VirtualAddr::from(0b11usize << 29)).as_usize() >> 29;
         let l3_index = va.bitand(VirtualAddr::from(0x1FFFusize << 16)).as_usize() >> 16;
-        if l2_index >= 2 {
+        if l2_index >= 3 {
             panic!(
-                "L2 Index: {} from VirtualAddr: {} is greater than L3PageTable count: 2",
+                "L2 Index: {} from VirtualAddr: {} is greater than L3PageTable count: 3",
                 l2_index,
                 va.as_usize()
             );
@@ -188,6 +188,8 @@ impl PageTable {
             self.l3[0].entries[l3_index].0.set(entry.get())
         } else if self.l3[1].as_ptr().as_u64() == l3_addr {
             self.l3[1].entries[l3_index].0.set(entry.get())
+        } else if self.l3[2].as_ptr().as_u64() == l3_addr {
+            self.l3[2].entries[l3_index].0.set(entry.get())
         } else {
             panic!("Unexpected failure to find L3PageTable in PageTable::set_entry()")
         };

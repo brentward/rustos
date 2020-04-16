@@ -73,16 +73,14 @@ unsafe fn kmain() -> ! {
 
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();
-    ALLOCATOR.initialize();
-    FILESYSTEM.initialize();
-    // GLOABAL_IRQ.new();
-    VMM.initialize();
-    SCHEDULER.initialize();
+    // GLOABAL_IRQ.initialize();
+    // VMM.initialize();
+    // SCHEDULER.initialize();
 
-    // init::initialize_app_cores();
-    kprintln!("Welcome to cs3210!");
+    init::initialize_app_cores();
+    // kprintln!("Welcome to cs3210!");
 
-    SCHEDULER.start();
+    // SCHEDULER.start();
 
 
     shell::shell("> ");

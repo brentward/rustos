@@ -124,8 +124,6 @@ impl GlobalScheduler {
             timer::tick_in(TICK);
             SCHEDULER.switch(State::Ready, tf);
         }));
-
-        unimplemented!("initialize_global_timer_interrupt()")
     }
 
     /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
