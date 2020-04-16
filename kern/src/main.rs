@@ -14,64 +14,76 @@
 mod init;
 
 extern crate alloc;
+#[macro_use]
+extern crate log;
 
 pub mod allocator;
 pub mod console;
 pub mod fs;
+pub mod logger;
 pub mod mutex;
-pub mod shell;
+pub mod net;
 pub mod param;
+pub mod percore;
 pub mod process;
+pub mod shell;
 pub mod traps;
 pub mod vm;
 
-use console::{kprintln, kprint};
-
 use allocator::Allocator;
 use fs::FileSystem;
+use net::uspi::Usb;
+use net::GlobalEthernetDriver;
 use process::GlobalScheduler;
-use traps::irq::Irq;
+use traps::irq::{Fiq, GlobalIrq};
 use vm::VMManager;
+use console::kprintln;
+use pi;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 pub static SCHEDULER: GlobalScheduler = GlobalScheduler::uninitialized();
 pub static VMM: VMManager = VMManager::uninitialized();
-pub static IRQ: Irq = Irq::uninitialized();
+pub static USB: Usb = Usb::uninitialized();
+pub static GLOABAL_IRQ: GlobalIrq = GlobalIrq::new();
+pub static FIQ: Fiq = Fiq::new();
+pub static ETHERNET: GlobalEthernetDriver = GlobalEthernetDriver::uninitialized();
 
-#[no_mangle]
-fn kmain() -> ! {
-    fn print_init_with_progress(msg: &str) {
-        kprint!("{}", msg);
-        let fake_random = (pi::timer::current_time().as_micros() & 0xFF) as u64 + 0xFF;
-        let align_to = 40 - msg.len() as u64;
-        for _ in 0..align_to {
-            pi::timer::spin_sleep(core::time::Duration::from_millis(fake_random / align_to));
-            kprint!(".")
-        }
-    }
+extern "C" {
+    static __text_beg: u64;
+    static __text_end: u64;
+    static __bss_beg: u64;
+    static __bss_end: u64;
+}
+
+unsafe fn kmain() -> ! {
+    crate::logger::init_logger();
     pi::timer::spin_sleep(core::time::Duration::from_millis(250));
-    unsafe {
-        print_init_with_progress("Initializing ALLOCATOR");
-        ALLOCATOR.initialize();
-        kprintln!(" [ok]");
-        print_init_with_progress("Initializing FILESYSTEM");
-        FILESYSTEM.initialize();
-        kprintln!(" [ok]");
-        print_init_with_progress("Initializing IRQ");
-        IRQ.initialize();
-        kprintln!(" [ok]");
-        print_init_with_progress("Initializing VMM");
-        VMM.initialize();
-        kprintln!(" [ok]");
-        print_init_with_progress("Initializing SCHEDULER");
-        SCHEDULER.initialize();
-        kprintln!(" [ok]");
-        print_init_with_progress("Starting SCHEDULER");
-        kprintln!(" [ok]");
-        kprintln!("");
-        kprintln!("Welcome to BrentOS");
-        SCHEDULER.start()
-    }
+
+
+    info!(
+        "text beg: {:016x}, end: {:016x}",
+        &__text_beg as *const _ as u64, &__text_end as *const _ as u64
+    );
+    info!(
+        "bss  beg: {:016x}, end: {:016x}",
+        &__bss_beg as *const _ as u64, &__bss_end as *const _ as u64
+    );
+
+    ALLOCATOR.initialize();
+    FILESYSTEM.initialize();
+    // GLOABAL_IRQ.initialize();
+    VMM.initialize();
+    SCHEDULER.initialize();
+    VMM.setup();
+
+    // init::initialize_app_cores();
+    kprintln!("Welcome to BrentOS!");
+
+    SCHEDULER.start();
+
+
+    shell::shell("> ");
+    loop {}
 }

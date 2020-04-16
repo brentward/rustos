@@ -61,30 +61,49 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
         match pos {
             SeekFrom::Start(offset) => {
                 if offset > self.size() {
-                    ioerr!(InvalidInput, "beyond end of file")
+                    return ioerr!(InvalidInput, "beyond end of file")
                 } else {
                     self.offset = offset as usize;
-                    Ok(offset)
                 }
             }
             SeekFrom::End(offset) => {
                 if self.size() as i64 + offset < 0 {
-                    ioerr!(InvalidInput, "beyond beginning of file")
+                    return ioerr!(InvalidInput, "beyond beginning of file")
                 } else {
                     self.offset = (self.size() as i64 + offset) as usize;
-                    Ok(self.offset as u64)
                 }
             }
             SeekFrom::Current(offset) => {
                 if self.offset as i64 + offset < 0 {
-                    ioerr!(InvalidInput, "beyond beginning of file")
+                    return ioerr!(InvalidInput, "beyond beginning of file")
                 } else if self.offset as i64 + offset > self.size() as i64 {
-                    ioerr!(InvalidInput, "beyond end of file")
+                    return ioerr!(InvalidInput, "beyond end of file")
                 } else {
                     self.offset = (self.offset as i64 + offset) as usize;
-                    Ok(self.offset as u64)
                 }
             }
+        }
+        let mut current_cluster = self.first_cluster;
+        let return_result = self.vfat.lock(|vfat| {
+            let mut result = Ok(self.offset as u64);
+            for _ in 0..(self.offset / self.bytes_per_cluster) {
+                let fat_entry = vfat.fat_entry(current_cluster)?;
+                result = match fat_entry.status() {
+                    Status::Data(next_cluster) => {
+                        current_cluster = next_cluster;
+                        Ok(self.offset as u64)
+                    },
+                    _ => ioerr!(InvalidData, "Unexpected invalid cluster in chain"),
+                };
+            }
+            result
+        });
+        match return_result {
+            Ok(result) => {
+                self.current_cluster = Some(current_cluster);
+                Ok(result)
+            },
+            Err(e) => Err(e),
         }
     }
 }

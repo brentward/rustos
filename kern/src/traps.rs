@@ -9,12 +9,15 @@ pub use crate::shell;
 
 
 use pi::interrupt::{Controller, Interrupt};
+use pi::local_interrupt::{LocalController, LocalInterrupt};
 
 use crate::console::kprintln;
-use crate::IRQ;
+use crate::GLOABAL_IRQ;
 
 use self::syndrome::Syndrome;
 use self::syscall::handle_syscall;
+use crate::percore;
+use crate::traps::irq::IrqHandlerRegistry;
 
 #[repr(u16)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -66,8 +69,8 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
         Kind::Irq => {
             let controller = Controller::new();
             for int in Interrupt::iter() {
-                if controller.is_pending(*int) {
-                    IRQ.invoke(*int, tf)
+                if controller.is_pending(int) {
+                    GLOABAL_IRQ.invoke(int, tf)
                 }
 
             }

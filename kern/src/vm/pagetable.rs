@@ -100,7 +100,7 @@ impl L3PageTable {
 #[repr(align(65536))]
 pub struct PageTable {
     pub l2: L2PageTable,
-    pub l3: [L3PageTable; 2],
+    pub l3: [L3PageTable; 3],
 }
 
 impl PageTable {
@@ -112,31 +112,27 @@ impl PageTable {
             l3: [
                 L3PageTable::new(),
                 L3PageTable::new(),
+                L3PageTable::new(),
             ],
         });
 
         page_table.l2.entries[0].set_masked(page_table.l3[0].as_ptr().as_u64(), RawL2Entry::ADDR);
-        // page_table.l2.entries[0].set_bit(RawL2Entry::AF);
-        // page_table.l2.entries[0].set_value(EntrySh::ISh, RawL2Entry::SH);
-        // page_table.l2.entries[0].set_value(perm, RawL2Entry::AP);
-        // page_table.l2.entries[0].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
         page_table.l2.entries[0].set_value(EntryType::Table, RawL2Entry::TYPE);
         page_table.l2.entries[0].set_value(EntryValid::Valid, RawL2Entry::VALID);
 
         page_table.l2.entries[1].set_masked(page_table.l3[1].as_ptr().as_u64(), RawL2Entry::ADDR);
-        // page_table.l2.entries[1].set_bit(RawL2Entry::AF);
-        // page_table.l2.entries[1].set_value(EntrySh::ISh, RawL2Entry::SH);
-        // page_table.l2.entries[1].set_value(perm, RawL2Entry::AP);
-        // page_table.l2.entries[1].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
         page_table.l2.entries[1].set_value(EntryType::Table, RawL2Entry::TYPE);
         page_table.l2.entries[1].set_value(EntryValid::Valid, RawL2Entry::VALID);
+
+        page_table.l2.entries[2].set_masked(page_table.l3[2].as_ptr().as_u64(), RawL2Entry::ADDR);
+        page_table.l2.entries[2].set_value(EntryType::Table, RawL2Entry::TYPE);
+        page_table.l2.entries[2].set_value(EntryValid::Valid, RawL2Entry::VALID);
 
         page_table
     }
 
     /// Returns the (L2index, L3index) extracted from the given virtual address.
-    /// Since we are only supporting 1GB virtual memory in this system, L2index
-    /// should be smaller than 2.
+    /// L2index should be smaller than the number of L3PageTable.
     ///
     /// # Panics
     ///
@@ -146,17 +142,15 @@ impl PageTable {
         if !allocator::util::has_alignment(va.as_usize(), Page::SIZE) {
             panic!("VirtualAddr: {} is not aligned to page size: {}", va.as_usize(), Page::SIZE);
         }
-        let l2_index = va.bitand(VirtualAddr::from(0b1usize << 29)).as_usize() >> 29;
+        let l2_index = va.bitand(VirtualAddr::from(0b11usize << 29)).as_usize() >> 29;
         let l3_index = va.bitand(VirtualAddr::from(0x1FFFusize << 16)).as_usize() >> 16;
-        // let l2_index = (va.as_usize() & 0b1usize << 29) >> 29;
-        if l2_index >= 2 {
+        if l2_index >= 3 {
             panic!(
-                "L2 Index: {} from VirtualAddr: {} is greater than L3PageTable count: 2",
+                "L2 Index: {} from VirtualAddr: {} is greater than L3PageTable count: 3",
                 l2_index,
                 va.as_usize()
             );
         }
-        // let l3_index = (va.as_usize() & 0x1FFFusize << 16) >> 16;
         (l2_index, l3_index)
     }
 
@@ -194,6 +188,8 @@ impl PageTable {
             self.l3[0].entries[l3_index].0.set(entry.get())
         } else if self.l3[1].as_ptr().as_u64() == l3_addr {
             self.l3[1].entries[l3_index].0.set(entry.get())
+        } else if self.l3[2].as_ptr().as_u64() == l3_addr {
+            self.l3[2].entries[l3_index].0.set(entry.get())
         } else {
             panic!("Unexpected failure to find L3PageTable in PageTable::set_entry()")
         };
