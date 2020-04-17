@@ -74,7 +74,7 @@ impl BiosParameterBlock {
             _ => (),
         }
         let bpb: BiosParameterBlock = unsafe { mem::transmute(buf) };
-        if bpb.bootable_partition_signature != [0x55, 0xAA] {
+        if bpb.bootable_partition_signature != [0x55, 0xaa] {
             return Err(Error::BadSignature);
         }
         Ok(bpb)

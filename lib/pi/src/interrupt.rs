@@ -3,7 +3,7 @@ use crate::common::IO_BASE;
 use volatile::prelude::*;
 use volatile::{Volatile, ReadVolatile, Reserved};
 
-const INT_BASE: usize = IO_BASE + 0xB000 + 0x200;
+const INT_BASE: usize = IO_BASE + 0xb000 + 0x200;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Interrupt {

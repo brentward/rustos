@@ -57,7 +57,7 @@ impl VMManager {
 
         // (ref. D7.2.70: Memory Attribute Indirection Register)
         MAIR_EL1.set(
-            (0xFF <<  0) |// AttrIdx=0: normal, IWBWA, OWBWA, NTR
+            (0xff <<  0) |// AttrIdx=0: normal, IWBWA, OWBWA, NTR
             (0x04 <<  8) |// AttrIdx=1: device, nGnRE (must be OSH too)
             (0x44 << 16), // AttrIdx=2: non cacheable
         );
