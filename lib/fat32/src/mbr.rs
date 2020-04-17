@@ -58,7 +58,7 @@ impl PartitionEntry {
     }
 
     pub fn is_fat32(&self) -> bool {
-        (self.partition_type == 0xB || self.partition_type == 0xC)
+        (self.partition_type == 0xb || self.partition_type == 0xc)
     }
 
     pub fn start_sector(&self) -> u32 {
@@ -142,7 +142,7 @@ impl MasterBootRecord {
             _ => (),
         }
         let mbr: MasterBootRecord = unsafe { mem::transmute(buf) };
-        if mbr.magic_signature != [0x55u8, 0xAAu8] {
+        if mbr.magic_signature != [0x55u8, 0xaau8] {
             return Err(Error::BadSignature);
         }
         for (index, partition) in mbr.partitions.iter().enumerate() {

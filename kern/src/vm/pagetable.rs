@@ -143,7 +143,7 @@ impl PageTable {
             panic!("VirtualAddr: {} is not aligned to page size: {}", va.as_usize(), Page::SIZE);
         }
         let l2_index = va.bitand(VirtualAddr::from(0b11usize << 29)).as_usize() >> 29;
-        let l3_index = va.bitand(VirtualAddr::from(0x1FFFusize << 16)).as_usize() >> 16;
+        let l3_index = va.bitand(VirtualAddr::from(0x1fffusize << 16)).as_usize() >> 16;
         if l2_index >= 3 {
             panic!(
                 "L2 Index: {} from VirtualAddr: {} is greater than L3PageTable count: 3",
