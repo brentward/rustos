@@ -20,6 +20,8 @@ build:
 
 	@echo "+ Building build/$(KERN).bin [objcopy]"
 	@$(OBJCPY) $(TARGET) build/$(KERN).bin
+	@cp -f build/* ../../build/
+
 
 build-all:
 	@(cd ../ext/uspi/lib; make)

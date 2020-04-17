@@ -13,7 +13,7 @@ pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const USER_MASK_BITS: usize = 34;
 pub const KERNEL_MASK_BITS: usize = 31;
 
-pub const USER_IMG_BASE: usize = 0xFFFF_FFFF_C000_0000;
+pub const USER_IMG_BASE: usize = 0xffff_ffff_c000_0000;
 const_assert_eq!(
     USER_IMG_BASE,
     ((1 << USER_MASK_BITS) - 1) << (64 - USER_MASK_BITS)
