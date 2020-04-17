@@ -139,19 +139,12 @@ unsafe fn kmain2() -> ! {
 /// Wakes up each app core by writing the address of `init::start2`
 /// to their spinning base and send event with `sev()`.
 pub unsafe fn initialize_app_cores() {
-    for core_index in 1..2 {
+    for core_index in 1..NCORES {
         let core_spin_ptr = SPINNING_BASE.add(core_index);
         write_volatile(core_spin_ptr, start2 as usize);
         asm::sev();
-    }
-    for core_index in 1..NCORES {
-        let core_spin_ptr = SPINNING_BASE.add(core_index);
-        loop {
-            let spin_addr = read_volatile(core_spin_ptr as *const usize);
-            if spin_addr == 0 {
-                break
-            }
+        while read_volatile(core_spin_ptr as *const usize) !=0  {
+            //spin
         }
     }
-
 }
