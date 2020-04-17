@@ -9,7 +9,7 @@ pub(crate) mod file;
 pub(crate) mod metadata;
 pub(crate) mod vfat;
 
-pub use self::dir::Dir;
+pub use self::dir::{Dir, DirIterator};
 pub use self::ebpb::BiosParameterBlock;
 pub use self::entry::Entry;
 // pub use self::entry::HumanReadableEntry;

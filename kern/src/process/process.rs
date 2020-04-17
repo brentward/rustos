@@ -1,11 +1,14 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use alloc::vec;
 use shim::io;
-use shim::path::Path;
+use shim::path::{Path, PathBuf};
 use core::mem;
+use core::ops::Add;
 
 use fat32::traits::FileSystem;
 use fat32::traits::Entry;
+use fat32::vfat::{File, DirIterator, Entry as EntryEnum};
 
 use aarch64;
 use smoltcp::socket::SocketHandle;
@@ -15,11 +18,22 @@ use crate::process::{Stack, State};
 use crate::traps::TrapFrame;
 use crate::vm::*;
 use crate::FILESYSTEM;
+use crate::fs::PiVFatHandle;use crate::console::{Console, CONSOLE};
 
 use kernel_api::{OsError, OsResult};
 
 /// Type alias for the type of a process ID.
 pub type Id = u64;
+
+/// Type alias for the type of a File Descriptor
+pub type Fd = u64;
+
+#[derive(Debug)]
+pub enum FdEntry {
+    Console,
+    File(Box<File<PiVFatHandle>>),
+    DirEntries(Box<DirIterator<PiVFatHandle>>),
+}
 
 /// A structure that represents the complete state of a process.
 #[derive(Debug)]
@@ -32,6 +46,15 @@ pub struct Process {
     pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
+
+    /// The list of open file handles.
+    pub file_table: Vec<Option<FdEntry>>,
+    /// The last file ID
+    pub unused_file_descriptors: Vec<usize>,
+    pub stack_base: VirtualAddr,
+    pub heap_ptr: VirtualAddr,
+    pub next_heap_page: VirtualAddr,
+    pub cwd: PathBuf,
     // Lab 5 2.C
     ///// Socket handles held by the current process
     // pub sockets: Vec<SocketHandle>,
@@ -54,6 +77,13 @@ impl Process {
             stack,
             vmap,
             state: State::Ready,
+            file_table: vec![Some(FdEntry::Console), Some(FdEntry::Console), Some(FdEntry::Console)],
+            unused_file_descriptors: vec![],
+            // last_file_descriptor: Some(1),
+            stack_base: Process::get_stack_base(),
+            heap_ptr: Process::get_heap_base(),
+            next_heap_page: Process::get_heap_base().add(VirtualAddr::from(Page::SIZE)),
+            cwd: PathBuf::from("/"),
         })
     }
 
@@ -78,7 +108,7 @@ impl Process {
             aarch64::SPSR_EL1::D |
             aarch64::SPSR_EL1::A |
             aarch64::SPSR_EL1::F;
-        // FIXME: Set trapframe for the process.
+
         Ok(p)
     }
 
@@ -133,6 +163,10 @@ impl Process {
     /// stack.
     pub fn get_stack_top() -> VirtualAddr {
         VirtualAddr::from(USER_STACK_BASE + (Page::SIZE - 16))
+    }
+
+    pub fn get_heap_base() -> VirtualAddr {
+        VirtualAddr::from(USER_HEAP_BASE)
     }
 
     /// Returns `true` if this process is ready to be scheduled.

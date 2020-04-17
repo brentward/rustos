@@ -119,6 +119,78 @@ pub fn getpid() -> u64 {
     pid
 }
 
+// pub fn open<P: AsRef<Path>>(path: P) -> OsResult<u64> {
+pub fn open(path: &str) -> OsResult<u64> {
+    // let path = path.as_ref();
+    // let path = match path.to_str() {
+    //     Some(str) => str,
+    //     None => return Err(OsError::InvalidArgument),
+    // };
+    let path_ptr = path.as_ptr() as u64;
+    let path_len = path.len() as u64;
+    let mut ecode: u64;
+    let mut fid: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              svc $4
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(fid), "=r"(ecode)
+             : "r"(path_ptr), "r"(path_len), "i"(NR_OPEN)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, fid)
+
+}
+
+pub fn read(fd: u64, buf: &mut [u8]) -> OsResult<usize> {
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut bytes: usize;
+    let count = buf.len();
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              svc $5
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(bytes), "=r"(ecode)
+             : "r"(fd), "r"(buf_ptr), "r"(count), "i"(NR_READ)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, bytes)
+}
+
+// pub fn getdent(fd: u64, buf: &mut [fs::DirEnt]) -> OsResult<usize> {
+//     let buf_ptr = buf.as_ptr() as u64;
+//     let mut ecode: u64;
+//     let mut entries: usize;
+//     let count = buf.len();
+//
+//     unsafe {
+//         asm!("mov x0, $2
+//               mov x1, $3
+//               mov x2, $4
+//               svc $5
+//               mov $0, x0
+//               mov $1, x7"
+//              : "=r"(entries), "=r"(ecode)
+//              : "r"(fd), "r"(buf_ptr), "r"(count), "i"(NR_GETDENT)
+//              : "x0", "x7"
+//              : "volatile");
+//     }
+//
+//     err_or!(ecode, entries)
+// }
+//
 pub fn sock_create() -> SocketDescriptor {
     // Lab 5 2.D
     unimplemented!("sock_create")

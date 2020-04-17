@@ -1,5 +1,9 @@
+// #![feature(optin_builtin_traits)]
 #![feature(asm)]
 #![no_std]
+
+// pub mod allocator;
+// pub mod mutex;
 
 use core::fmt;
 
@@ -7,6 +11,7 @@ use shim::io;
 
 #[cfg(feature = "user-space")]
 pub mod syscall;
+pub mod fs;
 
 pub type OsResult<T> = core::result::Result<T, OsError>;
 
@@ -85,6 +90,10 @@ pub const NR_EXIT: usize = 3;
 pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
 pub const NR_WRITE_STR: usize = 6;
+pub const NR_SBRK: usize = 7;
+pub const NR_OPEN: usize = 8;
+pub const NR_READ: usize = 9;
+pub const NR_GETDENT: usize = 10;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SocketDescriptor(u64);

@@ -78,7 +78,7 @@ unsafe fn kmain() -> ! {
     SCHEDULER.initialize();
     VMM.setup();
 
-    // init::initialize_app_cores();
+    init::initialize_app_cores();
     kprintln!("Welcome to BrentOS!");
 
     SCHEDULER.start();

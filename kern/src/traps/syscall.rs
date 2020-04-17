@@ -1,16 +1,21 @@
 use alloc::boxed::Box;
 use core::time::Duration;
+use shim::path::PathBuf;
+use core::mem::size_of;
+use core::ops::Add;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
 use crate::console::{kprint, CONSOLE};
 use crate::param::USER_IMG_BASE;
-use crate::process::State;
+use crate::process::{State, FdEntry};
 use crate::traps::TrapFrame;
-use crate::{ETHERNET, SCHEDULER};
+use crate::{ETHERNET, SCHEDULER, FILESYSTEM};
+use crate::vm::{PageTable, VirtualAddr, PhysicalAddr, PagePerm, Page};
 
 use kernel_api::*;
 use pi::timer;
+use fat32::traits::{FileSystem, Entry, Dir};
 
 /// Sleep for `ms` milliseconds.
 ///
@@ -49,12 +54,6 @@ pub fn sys_time(tf: &mut TrapFrame) {
     tf.x[0] = seconds;
     tf.x[1] = nanoseconds;
     tf.x[7] = OsError::Ok as u64;
-    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-    //     p.context.x[0] = seconds;
-    //     p.context.x[1] = nanoseconds;
-    //     p.context.x[7] = 0;
-    //     true
-    // })), tf);
 }
 
 /// Kills the current process.
@@ -79,18 +78,6 @@ pub fn sys_write(b: u8, tf: &mut TrapFrame) {
     } else {
         tf.x[7] = OsError::IoErrorInvalidInput as u64;
     }
-
-
-    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-    //     if b.is_ascii() {
-    //         let ch = b as char;
-    //         kprint!("{}", ch);
-    //         p.context.x[7] = 0;
-    //     } else {
-    //         p.context.x[7] = 70;
-    //     }
-    //     true
-    // })), tf);
 }
 
 /// Returns the current process's ID.
@@ -102,13 +89,255 @@ pub fn sys_write(b: u8, tf: &mut TrapFrame) {
 pub fn sys_getpid(tf: &mut TrapFrame) {
     tf.x[0] = tf.tpidr;
     tf.x[7] = OsError::Ok as u64;
-
-    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-    //     p.context.x[0] = pid;
-    //     p.context.x[7] = 0;
-    //     true
-    // })), tf);
 }
+
+pub fn sys_open(va: usize, len: usize, tf: &mut TrapFrame) {
+    use crate::console::kprintln;
+
+    let result = unsafe { to_user_slice(va, len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+
+
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        // let path_slice = unsafe { match p.vmap
+        //     .get_slice_at_va(VirtualAddr::from(path_ptr), path_len) {
+        //     Ok(slice) => slice,
+        //     Err(_) => {
+        //         p.context.x[7] = 104;
+        //         return true
+        //     }
+        // }};
+        // let result = unsafe { to_user_slice(va, len) }
+        //     .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+        // let path = match str::from_utf8(path_slice) {
+        //     Ok(path) => path,
+        //     Err(_e) => {
+        //         p.context.x[7] = 50;
+        //         return true
+        //     }
+        // };
+        match result {
+            Ok(path) => {
+                let path_buf = PathBuf::from(path);
+
+                let entry = match FILESYSTEM.open(path_buf.as_path()) {
+                    Ok(entry) => entry,
+                    Err(_) => {
+                        p.context.x[7] = OsError::NoEntry as u64;
+                        return true
+                    }
+                };
+                if p.unused_file_descriptors.len() > 0 {
+                    let fd = p.unused_file_descriptors.pop()
+                        .expect("Unexpected p.unused_file_descriptors.pop() failed after len check");
+                    match p.file_table[fd] {
+                        Some(_) => {
+                            p.context.x[7] = OsError::IoErrorInvalidData as u64;
+                            true
+                        }
+                        None => {
+                            match entry.is_file() {
+                                true => {
+                                    let file = entry.into_file()
+                                        .expect("Entry unexpectedly failed to convert to file");
+                                    p.file_table[fd] = Some(FdEntry::File(Box::new(file)));
+                                }
+                                false => {
+                                    let dir = entry.into_dir()
+                                        .expect("Entry unexpectedly failed to convert to dir");
+                                    let dir_entries = dir.entries().unwrap(); //FIXME
+                                    p.file_table[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
+                                }
+                            }
+                            p.context.x[0] = fd as u64;
+                            p.context.x[7] = OsError::Ok as u64;
+                            true
+                        }
+                    }
+                } else {
+                    let fd = p.file_table.len();
+                    match entry.is_file() {
+                        true => {
+                            let file = entry.into_file()
+                                .expect("Entry unexpectedly failed to convert to file");
+                            p.file_table.push(Some(FdEntry::File(Box::new(file))));
+                        }
+                        false => {
+                            let dir = entry.into_dir()
+                                .expect("Entry unexpectedly failed to convert to dir");
+                            let dir_entries = dir.entries().unwrap(); //FIXME
+                            p.file_table.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
+                        }
+                    }
+                    p.context.x[0] = fd as u64;
+                    p.context.x[7] = OsError::Ok as u64;
+                    true
+                }
+            }
+            Err(e) => {
+                p.context.x[7] = e as u64;
+                true
+            }
+        }
+    })), tf);
+}
+
+pub fn sys_read(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    use crate::console::kprintln;
+    use shim::io::Read;
+
+
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+
+
+        // let mut buf_slice = unsafe { match p.vmap
+        //     .get_mut_slice_at_va(VirtualAddr::from(va), len) {
+        //     Ok(slice) => slice,
+        //     Err(_) => {
+        //         p.context.x[7] = 104;
+        //         return true
+        //     }
+        // }};
+
+        let result = unsafe { to_user_slice_mut(va, len) }
+            .map_err(|_| OsError::InvalidArgument);
+
+        match result {
+            Ok(buf_slice) => {
+                match p.file_table.remove(fd) {
+                    Some(entry) => {
+                        match entry {
+                            FdEntry::Console => {
+                                let byte =  CONSOLE.lock().read_byte();
+                                p.file_table.insert(fd, Some(FdEntry::Console));
+                                buf_slice[0] = byte;
+                                p.context.x[0] = 1;
+                                p.context.x[7] = OsError::Ok as u64;
+                                true
+
+                            }
+                            FdEntry::File(mut file) => {
+                                let bytes = match file.read(&mut buf_slice[..]) {
+                                    Ok(bytes) => bytes,
+                                    Err(_) => {
+                                        p.context.x[7] = OsError::IoError as u64;
+                                        return true
+                                    }
+                                };
+                                p.file_table.insert(fd, Some(FdEntry::File(file)));
+                                p.context.x[0] = bytes as u64;
+                                p.context.x[7] = OsError::Ok as u64;
+                                true
+
+                            }
+                            FdEntry::DirEntries(dir_entries) => {
+                                p.file_table.insert(fd, Some(FdEntry::DirEntries(dir_entries)));
+                                p.context.x[7] = 80;
+                                true
+                            }
+                        }
+                    }
+                    None => {
+                        p.context.x[7] = 10;
+                        true
+                    }
+                }
+
+            }
+            Err(e) => {
+                p.context.x[7] = e as u64;
+                true
+            }
+        }
+
+    })), tf);
+}
+
+pub fn sys_sbrk(size: usize, tf: &mut TrapFrame)  {
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        let next_heap_ptr = p.heap_ptr.add(VirtualAddr::from(size));
+        while p.next_heap_page.as_u64() < next_heap_ptr.as_u64() {
+            let next_heap_page = p.next_heap_page.add(VirtualAddr::from(Page::SIZE));
+            if next_heap_page.as_u64() >= p.stack_base.as_u64() {
+                p.context.x[7] = OsError::NoVmSpace as u64;
+                return true
+            }
+            let _heap_page = p.vmap.alloc(p.next_heap_page, PagePerm::RW);
+            p.next_heap_page = next_heap_page;
+        }
+        p.context.x[0] = p.heap_ptr.as_u64();
+        p.context.x[7] = OsError::Ok as u64;
+        p.heap_ptr = next_heap_ptr;
+        true
+    })), tf);
+}
+
+// pub fn sys_getdent(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+//     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+//         let overflow = va.checked_add(len * size_of::<fs::DirEnt>()).is_none();
+//         let result = if va >= USER_IMG_BASE && !overflow {
+//             Ok(va)
+//         } else {
+//             Err(OsError::BadAddress)
+//         };
+//
+//         match &result {
+//             Ok(va) => {
+//                 let mut entries = 0u64;
+//                 let mut dir_entries = match p.file_table.remove(fd) {
+//                     Some(entry) => {
+//                         match entry {
+//                             FdEntry::Console => {
+//                                 p.file_table.insert(fd, Some(FdEntry::Console));
+//                                 p.context.x[7] = OsError::Ok as u64;
+//                                 return true
+//                             }
+//                             FdEntry::File(file) => {
+//                                 p.file_table.insert(fd, Some(FdEntry::File(file)));
+//                                 p.context.x[7] = OsError::Ok as u64;
+//                                 return true
+//                             }
+//                             FdEntry::DirEntries(dir_entries) => dir_entries
+//                         }
+//                     }
+//                     None => {
+//                         p.context.x[7] = 10;
+//                         return true
+//                     }
+//                 };
+//                 for index in 0..len {
+//                     match dir_entries.next() {
+//                         Some(entry) => {
+//                             let dent_va = va.add(size_of::<fs::DirEnt>() * index);
+//                             let mut dent = unsafe { &mut *(dent_va as  *mut fs::DirEnt) };
+//
+//                             dent.set_name(entry.name());
+//                             match entry.is_file() {
+//                                 true => dent.set_d_type(fs::DirType::File),
+//                                 false => dent.set_d_type(fs::DirType::Dir),
+//                             }
+//                             entries += 1;
+//
+//                         }
+//                         None => {
+//                             break
+//                         }
+//                     }
+//                 }
+//                 p.file_table.insert(fd, Some(FdEntry::DirEntries(dir_entries)));
+//                 p.context.x[0] = entries;
+//                 p.context.x[7] = OsError::Ok as u64;
+//
+//                 true
+//             }
+//             Err(e) => {
+//                 tf.x[7] = *e as u64;
+//                 true
+//             },
+//         }
+//     }
+//     )), tf);
+// }
 
 /// Creates a socket and saves the socket handle in the current process's
 /// socket list.
@@ -296,6 +525,10 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         4 => sys_write(tf.x[0] as u8, tf),
         5 => sys_getpid(tf),
         6 => sys_write_str(tf.x[0] as usize, tf.x[1] as usize, tf),
+        7 => sys_sbrk(tf.x[0] as usize, tf),
+        8 => sys_open(tf.x[0] as usize, tf.x[1] as usize, tf),
+        9 => sys_read(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
+        // 10 => sys_getdent(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
         _ => tf.x[7] = OsError::Unknown as u64,
     }
 }

@@ -78,7 +78,7 @@ impl GlobalScheduler {
                 return id;
             }
 
-            aarch64::wfi();
+            aarch64::wfe();
         }
     }
 
@@ -138,27 +138,27 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
-        let process_0 = match Process::load("/fib") {
+        let process_0 = match Process::load("/sleep") {
             Ok(process) => process,
             Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
         };
-        let process_1 = match Process::load("/fib") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
-        };
-        let process_2 = match Process::load("/fib") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
-        };
-        let process_3 = match Process::load("/fib") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
-        };
+        // let process_1 = match Process::load("/fib") {
+        //     Ok(process) => process,
+        //     Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        // };
+        // let process_2 = match Process::load("/fib") {
+        //     Ok(process) => process,
+        //     Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        // };
+        // let process_3 = match Process::load("/fib") {
+        //     Ok(process) => process,
+        //     Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        // };
 
         self.add(process_0);
-        self.add(process_1);
-        self.add(process_2);
-        self.add(process_3);
+        // self.add(process_1);
+        // self.add(process_2);
+        // self.add(process_3);
         self.initialize_global_timer_interrupt();
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);

@@ -1,9 +1,15 @@
+#![feature(alloc_error_handler)]
 #![feature(asm)]
 #![feature(never_type)]
 #![no_std]
 #![no_main]
 
 mod cr0;
+
+use kernel_api::allocator::Allocator;
+
+#[cfg_attr(not(test), global_allocator)]
+pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 
 use core::time::Duration;
 

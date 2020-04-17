@@ -1,11 +1,12 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+use core::fmt;
 
 use shim::const_assert_size;
 use shim::ffi::OsStr;
-use shim::io;
-use shim::newioerr;
+use shim::io::{self, SeekFrom};
+use shim::{newioerr, ioerr};
 use core::char::{decode_utf16, REPLACEMENT_CHARACTER};
 
 use crate::traits;
@@ -266,6 +267,49 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
             }
         }
         None
+    }
+}
+
+impl<HANDLE: VFatHandle> io::Seek for  DirIterator<HANDLE> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+
+        match pos {
+            SeekFrom::Start(offset) => {
+                if offset > self.dir_entries.len() as u64 {
+                    ioerr!(InvalidInput, "beyond end of dir")
+                } else {
+                    self.position = offset as usize;
+                    Ok(self.position as u64)
+                }
+            }
+            SeekFrom::End(offset) => {
+                if self.dir_entries.len() as i64 + offset < 0 {
+                    ioerr!(InvalidInput, "beyond beginning of dir")
+                } else {
+                    self.position = (self.dir_entries.len() as i64 + offset) as usize;
+                    Ok(self.position as u64)
+                }
+            }
+            SeekFrom::Current(offset) => {
+                if self.position as i64 + offset < 0 {
+                    ioerr!(InvalidInput, "beyond beginning of dir")
+                } else if self.position as i64 + offset > self.dir_entries.len() as i64 {
+                    ioerr!(InvalidInput, "beyond end of dir")
+                } else {
+                    self.position = (self.position as i64 + offset) as usize;
+                    Ok(self.position as u64)
+                }
+            }
+        }
+    }
+}
+
+impl<HANDLE: VFatHandle> fmt::Debug for DirIterator<HANDLE> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DirIterator")
+            .field("len", &self.dir_entries.len())
+            .field("positon", &self.position)
+            .finish()
     }
 }
 
