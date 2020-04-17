@@ -1,7 +1,8 @@
 use aarch64::*;
 
 use core::mem::zeroed;
-use core::ptr::write_volatile;
+use core::ptr::{write_volatile, read_volatile};
+use alloc::boxed::Box;
 
 mod oom;
 mod panic;
@@ -9,6 +10,7 @@ mod panic;
 use crate::kmain;
 use crate::param::*;
 use crate::VMM;
+use crate::console::kprintln;
 
 global_asm!(include_str!("init/vectors.s"));
 
@@ -116,16 +118,8 @@ unsafe fn kinit() -> ! {
 /// Kernel entrypoint for core 1, 2, and 3
 #[no_mangle]
 pub unsafe extern "C" fn start2() -> ! {
-    // info!("in start2");
-    // let index = affinity();
-    // info!("index: {}", index);
-    // info!("SP would be: {:016x}", KERN_STACK_BASE - KERN_STACK_SIZE * affinity());
-    SP.set(KERN_STACK_BASE - KERN_STACK_SIZE * affinity());
+    SP.set(KERN_STACK_BASE - (KERN_STACK_SIZE * MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize));
     kinit2()
-    // loop {}
-    // write_volatile(SPINNING_BASE.add(affinity()), zeroed());
-    // loop {}
-
 }
 
 unsafe fn kinit2() -> ! {
@@ -135,57 +129,29 @@ unsafe fn kinit2() -> ! {
 }
 
 unsafe fn kmain2() -> ! {
-    // let core_index = affinity();
-    // info!("core-{} started/@sp={:016x}", core_index, SP.get());
-    // let mut core_spin_ptr = SPINNING_BASE.add(affinity());
+    let core_index = affinity();
+    info!("core-{} started/@sp={:016x}", core_index, SP.get());
+    write_volatile(SPINNING_BASE.add(core_index), 0);
 
-    // let core_spin_ptr = (SPINNING_BASE as usize + core_index * 8) as *mut u8;
-    // unsafe { *core_spin_ptr = 0; }
-    write_volatile(SPINNING_BASE.add(affinity()), zeroed());
-
-    loop { }
-
-    // // Lab 5 1.A
-    // unimplemented!("kmain2")
+    loop { asm::nop() }
 }
 
 /// Wakes up each app core by writing the address of `init::start2`
 /// to their spinning base and send event with `sev()`.
 pub unsafe fn initialize_app_cores() {
-    info!("initialize_app_cores(): SPINNING_BASE: {:016x}", SPINNING_BASE as usize);
-    info!("*SPINNING_BASE: {:016x}", *SPINNING_BASE);
-    //
-    for core_index in 1..NCORES{
-        let mut core_spin_ptr = SPINNING_BASE.add(core_index);
-        // let core_spin_ptr = (SPINNING_BASE as usize + core_index * 8) as *mut u64;
-
-        info!("core-{}", core_index);
-        info!("core_spin_ptr: {:016x}", core_spin_ptr as usize);
-        info!("*core_spin_ptr: {:016x}", *core_spin_ptr);
+    for core_index in 1..2 {
+        let core_spin_ptr = SPINNING_BASE.add(core_index);
         write_volatile(core_spin_ptr, start2 as usize);
-        info!("start2: {:016x}", start2 as u64);
-        info!("*core_spin_ptr: {:016x}", *core_spin_ptr);
-        // asm::sev();
-        while *core_spin_ptr != 0 {
-            // info!("loop: core_spin_ptr: {:016x}", core_spin_ptr as usize);
-            // info!("loop: *core_spin_ptr: {:016x}", *core_spin_ptr);
-            // asm::nop();
-        }
-
+        asm::sev();
     }
-    sev();
-    // sev();
-
     for core_index in 1..NCORES {
-        let mut core_spin_ptr = SPINNING_BASE.add(core_index);
-        // let core_spin_ptr = (SPINNING_BASE as usize + core_index * 8) as *mut u64;
-         while *core_spin_ptr != 0 {
-             // info!("loop: core_spin_ptr: {:016x}", core_spin_ptr as usize);
-             // info!("loop: *core_spin_ptr: {:016x}", *core_spin_ptr);
-             // asm::nop();
+        let core_spin_ptr = SPINNING_BASE.add(core_index);
+        loop {
+            let spin_addr = read_volatile(core_spin_ptr as *const usize);
+            if spin_addr == 0 {
+                break
+            }
         }
     }
-    info!("past core check");
-
 
 }

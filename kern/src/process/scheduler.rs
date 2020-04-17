@@ -76,9 +76,11 @@ impl GlobalScheduler {
                     tf.x[27]
                 );
                 return id;
+            // } else {
+            //     unsafe { asm!("brk 1" :::: "volatile"); }
             }
 
-            aarch64::wfi();
+            aarch64::wfe();
         }
     }
 

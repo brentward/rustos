@@ -19,7 +19,7 @@ shim = { path = "../lib/shim", features = ["no_std", "alloc"] }
 stack-vec = { path = "../lib/stack-vec/" }
 fat32 = { path = "../lib/fat32/", features = ["no_std"] }
 aarch64 = { path = "../lib/aarch64/" }
-kernel_api = { path = "../lib/kernel_api", default_features = false }
+kernel_api = { path = "../lib/kernel_api", default-features = false }
 log = "0.4"
 smoltcp = { version = "0.6", default-features = false, features = [
     "alloc",
@@ -32,3 +32,6 @@ smoltcp = { version = "0.6", default-features = false, features = [
 
 [dev-dependencies]
 shim = { path = "../lib/shim", features = ["alloc"] }
+
+[profile.release]
+debug = true
