@@ -28,21 +28,24 @@ impl Allocator {
     pub const fn new() -> Self {
         Allocator(Mutex::new(None))
     }
-
-    /// Initializes the memory allocator.
-    /// The caller should assure that the method is invoked only once during the
-    /// kernel initialization.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the system's memory map could not be retrieved.
-    pub unsafe fn initialize(&self) {
-        *self.0.lock() = Some(AllocatorImpl::new());
-    }
+    //
+    // /// Initializes the memory allocator.
+    // /// The caller should assure that the method is invoked only once during the
+    // /// kernel initialization.
+    // ///
+    // /// # Panics
+    // ///
+    // /// Panics if the system's memory map could not be retrieved.
+    // pub unsafe fn initialize(&self) {
+    //     *self.0.lock() = Some(AllocatorImpl::new());
+    // }
 }
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if self.0.lock().is_none() {
+            *self.0.lock() = Some(AllocatorImpl::new());
+        }
         self.0
             .lock()
             .as_mut()
@@ -51,6 +54,9 @@ unsafe impl GlobalAlloc for Allocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if self.0.lock().is_none() {
+            *self.0.lock() = Some(AllocatorImpl::new());
+        }
         self.0
             .lock()
             .as_mut()

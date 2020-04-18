@@ -9,7 +9,7 @@ use kernel_api::println;
 use kernel_api::syscall::{getpid, time};
 use bw_allocator::Allocator;
 
-#[cfg_attr(not(test), global_allocator)]
+#[global_allocator]
 pub static A: Allocator = Allocator::new();
 
 use core::time::Duration;
@@ -24,7 +24,7 @@ fn fib(n: u64) -> u64 {
 }
 
 fn main() {
-    unsafe { A.initialize(); }
+    // unsafe { A.initialize(); }
     let pid = getpid();
     let beg = time();
     println!("[{:02}] Started: {:?}", pid, beg);

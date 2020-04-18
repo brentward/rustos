@@ -16,5 +16,5 @@ memcpy = true
 [dependencies]
 aarch64 = { path = "../../lib/aarch64/" }
 kernel_api = { path = "../../lib/kernel_api" }
-bw-allocator = { path = "../../lib/bw-allocator" }
+bw_allocator = { path = "../../lib/bw_allocator" }
 shim = { path = "../../lib/shim", features = ["no_std", "alloc"] }
