@@ -24,7 +24,6 @@ fn fib(n: u64) -> u64 {
 }
 
 fn main() {
-    // unsafe { A.initialize(); }
     let pid = getpid();
     let beg = time();
     println!("[{:02}] Started: {:?}", pid, beg);
