@@ -20,7 +20,7 @@ use crate::ALLOCATOR;
 use crate::FILESYSTEM;
 use crate::SCHEDULER;
 use crate::process::Process;
-use pi::{timer, gpio};
+use pi::{timer, gpio, rng};
 
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
@@ -189,8 +189,8 @@ pub fn shell(prefix: &str) {
                         kprintln!("Goodbye...");
                         break
                     },
-                    "blink" => {
-                        match Blink::new(None) {
+                    "rand" => {
+                        match Rand::new(None) {
                             Ok(ref mut executable) => executable
                                 .exec(&command, &mut cwd),
                             Err(e) => Err(e),
@@ -599,24 +599,29 @@ impl Executable for Cat {
     }
 }
 
-struct Blink;
+struct Rand;
 
-impl Executable for Blink {
-    fn new(_params: Option<&str>) -> ExecutableResult<Blink> {
-        Ok(Blink)
+impl Executable for Rand {
+    fn new(_params: Option<&str>) -> ExecutableResult<Self> {
+        Ok(Rand)
     }
 
     fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
-        let mut process_1 = Process::new().expect("Process::new() failed");
-        process_1.context.elr = run_blinky as u64;
-        process_1.context.sp = process_1.stack.top().as_u64();
-        process_1.context.spsr = 0b1_10100_0000;
-        SCHEDULER.add(process_1);
-        let result = String::new();
-        Ok(StdOut { result })
+        let mut result = String::new();
+        let rng = rng::Rng::new();
+        let entropy = rng.entropy();
+        writeln!(result, "entropy: {}", entropy)?;
+        let rand_num = rng.rand(0, 100);
+        writeln!(result, "Random number: {}", rand_num)?;
+        let rand_raw = rng.r_rand();
+        writeln!(result, "Raw Random number: {}", rand_raw)?;
+        let entropy = rng.entropy();
+        writeln!(result, "entropy: {}", entropy)?;
 
+        Ok(StdOut { result })
     }
 }
+
 
 fn set_working_dir(path: &Path, cwd: &mut PathBuf) {
     if path.is_absolute() {
