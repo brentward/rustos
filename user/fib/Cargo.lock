@@ -5,7 +5,7 @@ name = "aarch64"
 version = "0.1.0"
 
 [[package]]
-name = "bw-allocator"
+name = "bw_allocator"
 version = "0.1.0"
 dependencies = [
  "kernel_api 0.1.0",
@@ -29,7 +29,7 @@ name = "fib"
 version = "0.1.0"
 dependencies = [
  "aarch64 0.1.0",
- "bw-allocator 0.1.0",
+ "bw_allocator 0.1.0",
  "kernel_api 0.1.0",
  "shim 0.1.0",
 ]
