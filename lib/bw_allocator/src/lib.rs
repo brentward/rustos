@@ -21,24 +21,10 @@ pub trait LocalAlloc {
 pub struct Allocator(Mutex<Option<AllocatorImpl>>);
 
 impl Allocator {
-    /// Returns an uninitialized `Allocator`.
-    ///
-    /// The allocator must be initialized by calling `initialize()` before the
-    /// first memory allocation. Failure to do will result in panics.
+    /// Returns an `Allocator`.
     pub const fn new() -> Self {
         Allocator(Mutex::new(None))
     }
-    //
-    // /// Initializes the memory allocator.
-    // /// The caller should assure that the method is invoked only once during the
-    // /// kernel initialization.
-    // ///
-    // /// # Panics
-    // ///
-    // /// Panics if the system's memory map could not be retrieved.
-    // pub unsafe fn initialize(&self) {
-    //     *self.0.lock() = Some(AllocatorImpl::new());
-    // }
 }
 
 unsafe impl GlobalAlloc for Allocator {
