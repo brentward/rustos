@@ -140,7 +140,7 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
-        let process_0 = match Process::load("/fib") {
+        let process_0 = match Process::load("/sleep") {
             Ok(process) => process,
             Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
         };

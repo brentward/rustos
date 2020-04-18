@@ -57,8 +57,13 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             let syndrome = Syndrome::from(esr);
             match syndrome {
                 Syndrome::Brk(brk) => {
-                    kprintln!("BRK: {}", brk);
-                    shell::shell("!> ");
+                    use core::fmt::Write;
+                    use alloc::string::String;
+
+                    let mut prefix = String::new();
+                    write!(prefix, "brk: {} > ", brk).expect("write macro error");
+                    shell::shell(prefix.as_str());
+                    // shell::shell("> ");
                     tf.elr += 4;
 
                 }
