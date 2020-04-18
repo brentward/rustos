@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use core::time::Duration;
+use core::ops::Add;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
@@ -8,6 +9,7 @@ use crate::param::USER_IMG_BASE;
 use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::{ETHERNET, SCHEDULER};
+use crate::vm::{VirtualAddr, Page, PagePerm};
 
 use kernel_api::*;
 use pi::timer;
@@ -49,12 +51,6 @@ pub fn sys_time(tf: &mut TrapFrame) {
     tf.x[0] = seconds;
     tf.x[1] = nanoseconds;
     tf.x[7] = OsError::Ok as u64;
-    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-    //     p.context.x[0] = seconds;
-    //     p.context.x[1] = nanoseconds;
-    //     p.context.x[7] = 0;
-    //     true
-    // })), tf);
 }
 
 /// Kills the current process.
@@ -79,18 +75,6 @@ pub fn sys_write(b: u8, tf: &mut TrapFrame) {
     } else {
         tf.x[7] = OsError::IoErrorInvalidInput as u64;
     }
-
-
-    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-    //     if b.is_ascii() {
-    //         let ch = b as char;
-    //         kprint!("{}", ch);
-    //         p.context.x[7] = 0;
-    //     } else {
-    //         p.context.x[7] = 70;
-    //     }
-    //     true
-    // })), tf);
 }
 
 /// Returns the current process's ID.
@@ -102,12 +86,28 @@ pub fn sys_write(b: u8, tf: &mut TrapFrame) {
 pub fn sys_getpid(tf: &mut TrapFrame) {
     tf.x[0] = tf.tpidr;
     tf.x[7] = OsError::Ok as u64;
+}
 
-    // SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-    //     p.context.x[0] = pid;
-    //     p.context.x[7] = 0;
-    //     true
-    // })), tf);
+pub fn sys_sbrk(size: usize, tf: &mut TrapFrame)  {
+
+    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
+        let next_heap_ptr = p.heap_ptr.add(VirtualAddr::from(size));
+        while p.heap_page.add(VirtualAddr::from(Page::SIZE)).as_usize() < next_heap_ptr.as_usize() {
+            let next_heap_page = p.heap_page.add(VirtualAddr::from(Page::SIZE));
+            if next_heap_page.as_u64() >= ((p.context.sp - 1)& !(Page::SIZE as u64 - 1)) {
+                p.context.x[7] = OsError::NoVmSpace as u64;
+                return true
+            }
+            let _heap_page = p.vmap.alloc(next_heap_page, PagePerm::RW);
+            p.heap_page = next_heap_page;
+        }
+        p.context.x[0] = p.heap_ptr.as_u64();
+        p.context.x[7] = OsError::Ok as u64;
+        p.heap_ptr = next_heap_ptr;
+        true
+    })), tf);
+
+
 }
 
 /// Creates a socket and saves the socket handle in the current process's
@@ -296,6 +296,7 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         4 => sys_write(tf.x[0] as u8, tf),
         5 => sys_getpid(tf),
         6 => sys_write_str(tf.x[0] as usize, tf.x[1] as usize, tf),
+        7 => sys_sbrk(tf.x[0] as usize, tf),
         _ => tf.x[7] = OsError::Unknown as u64,
     }
 }

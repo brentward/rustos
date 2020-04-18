@@ -7,7 +7,6 @@ use shim::io;
 
 #[cfg(feature = "user-space")]
 pub mod syscall;
-
 pub type OsResult<T> = core::result::Result<T, OsError>;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -85,6 +84,7 @@ pub const NR_EXIT: usize = 3;
 pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
 pub const NR_WRITE_STR: usize = 6;
+pub const NR_SBRK: usize = 7;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SocketDescriptor(u64);

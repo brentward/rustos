@@ -32,6 +32,9 @@ pub struct Process {
     pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
+    pub stack_base: VirtualAddr,
+    pub heap_ptr: VirtualAddr,
+    pub heap_page: VirtualAddr,
     // Lab 5 2.C
     ///// Socket handles held by the current process
     // pub sockets: Vec<SocketHandle>,
@@ -54,6 +57,9 @@ impl Process {
             stack,
             vmap,
             state: State::Ready,
+            stack_base: Process::get_stack_base(),
+            heap_ptr: VirtualAddr::from(0),
+            heap_page: VirtualAddr::from(0),
         })
     }
 
@@ -104,12 +110,15 @@ impl Process {
         loop {
             let buf = p.vmap.alloc(current_address, PagePerm::RWX);
             let bytes = file.read(buf)?;
+            current_address.add_assign(VirtualAddr::from(Page::SIZE));
             if bytes == 0 {
                 break;
             }
-            current_address.add_assign(VirtualAddr::from(Page::SIZE));
         }
-         Ok(p)
+        let _heap_page = p.vmap.alloc(current_address, PagePerm::RW);
+        p.heap_ptr = current_address;
+        p.heap_page = current_address;
+        Ok(p)
     }
 
     /// Returns the highest `VirtualAddr` that is supported by this system.
