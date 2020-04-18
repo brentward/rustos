@@ -94,7 +94,7 @@ pub fn sys_sbrk(size: usize, tf: &mut TrapFrame)  {
         let next_heap_ptr = p.heap_ptr.add(VirtualAddr::from(size));
         while p.heap_page.add(VirtualAddr::from(Page::SIZE)).as_usize() < next_heap_ptr.as_usize() {
             let next_heap_page = p.heap_page.add(VirtualAddr::from(Page::SIZE));
-            if next_heap_page.as_u64() >= (p.context.sp & !(Page::SIZE as u64 - 1)) {
+            if next_heap_page.as_u64() >= ((p.context.sp - 1)& !(Page::SIZE as u64 - 1)) {
                 p.context.x[7] = OsError::NoVmSpace as u64;
                 return true
             }
