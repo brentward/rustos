@@ -40,6 +40,8 @@ use vm::VMManager;
 use console::kprintln;
 use pi;
 
+use core::time::Duration;
+
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
@@ -59,6 +61,7 @@ extern "C" {
 
 unsafe fn kmain() -> ! {
     crate::logger::init_logger();
+    pi::timer::spin_sleep(Duration::from_millis(75));
     info!(
         "text beg: {:016x}, end: {:016x}",
         &__text_beg as *const _ as u64, &__text_end as *const _ as u64
@@ -77,9 +80,5 @@ unsafe fn kmain() -> ! {
 
     kprintln!("Welcome to BrentOS!");
 
-    SCHEDULER.start();
-
-
-    shell::shell("> ");
-    loop {}
+    SCHEDULER.start()
 }

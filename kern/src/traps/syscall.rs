@@ -66,8 +66,6 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 ///
 /// It only returns the usual status value.
 pub fn sys_write(b: u8, tf: &mut TrapFrame) {
-    use crate::console::kprint;
-
     if b.is_ascii() {
         let ch = b as char;
         kprint!("{}", ch);
@@ -287,8 +285,6 @@ pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
 }
 
 pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
-    use crate::console::kprintln;
-
     match num {
         1 => sys_sleep(tf.x[0] as u32, tf),
         2 => sys_time(tf),

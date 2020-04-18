@@ -189,8 +189,8 @@ pub fn shell(prefix: &str) {
                         kprintln!("Goodbye...");
                         break
                     },
-                    "rand" => {
-                        match Rand::new(None) {
+                    "dice" => {
+                        match Dice::new(None) {
                             Ok(ref mut executable) => executable
                                 .exec(&command, &mut cwd),
                             Err(e) => Err(e),
@@ -599,25 +599,67 @@ impl Executable for Cat {
     }
 }
 
-struct Rand;
+struct Dice {
+    verbose: bool,
+    count: usize,
+}
 
-impl Executable for Rand {
+impl Executable for Dice {
     fn new(_params: Option<&str>) -> ExecutableResult<Self> {
-        Ok(Rand)
+        Ok(Dice {
+            verbose: true,
+            count: 1,
+        })
     }
 
-    fn exec(&mut self, _cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
+    fn exec(&mut self, cmd: &Command, _cwd: &mut PathBuf) -> StdResult {
         let mut result = String::new();
         let rng = rng::Rng::new();
-        let entropy = rng.entropy();
-        writeln!(result, "entropy: {}", entropy)?;
-        let rand_num = rng.rand(0, 100);
-        writeln!(result, "Random number: {}", rand_num)?;
-        let rand_raw = rng.r_rand();
-        writeln!(result, "Raw Random number: {}", rand_raw)?;
-        let entropy = rng.entropy();
-        writeln!(result, "entropy: {}", entropy)?;
 
+        if cmd.args.len() > 1 {
+            for arg_index in 1..cmd.args.len() {
+                if cmd.args[arg_index].len() > 2 && &cmd.args[arg_index][..2] == "--" {
+                    match &cmd.args[arg_index][2..] {
+                        "quiet" => self.verbose = false,
+                        "verbose" => self.verbose = true,
+                        option => {
+                            writeln!(result, "dice: invalid option: --{}", option)?;
+
+                            return Err(StdError { result, code: 1 });
+                        }
+                    }
+                } else if cmd.args[arg_index].len() > 1 && &cmd.args[arg_index][..1] == "-" {
+                    for arg in cmd.args[arg_index][1..].chars() {
+                        match arg {
+                            'q' => self.verbose = false,
+                            'v' => self.verbose = true,
+                            option => {
+                                writeln!(result, "dice: invalid option: -{}", option)?;
+
+                                return Err(StdError { result, code: 1 });
+                            }
+                        }
+                    }
+                } else {
+                    match cmd.args[arg_index].parse::<usize>() {
+                        Ok(count) => self.count = count,
+                        Err(e) => {
+                            writeln!(result, "dice: invalid argument, count should be a positive integer: {:?}", e)?;
+
+                            return Err(StdError { result, code: 1 })
+                        }
+                    }
+                }
+            }
+        }
+        for die in 0..self.count {
+            let rand_num = rng.rand(1, 7);
+            if self.verbose {
+                writeln!(result, "Die #{}: {}", die + 1, rand_num)?;
+            } else {
+                writeln!(result, "{}", rand_num)?;
+            }
+        }
         Ok(StdOut { result })
     }
 }
