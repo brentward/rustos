@@ -129,11 +129,14 @@ unsafe fn kinit2() -> ! {
 }
 
 unsafe fn kmain2() -> ! {
-    let core_index = affinity();
-    info!("core-{} started/@sp={:016x}", core_index, SP.get());
+    let core_index = MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize;
+    // let core_index = affinity();
     write_volatile(SPINNING_BASE.add(core_index), 0);
+    VMM.wait();
 
-    loop { asm::nop() }
+    loop {
+        // info!("core-{} looping", core_index);
+    }
 }
 
 /// Wakes up each app core by writing the address of `init::start2`

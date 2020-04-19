@@ -72,9 +72,9 @@ unsafe fn kmain() -> ! {
     );
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();
-    // GLOABAL_IRQ.initialize();
     VMM.initialize();
     SCHEDULER.initialize();
+
     init::initialize_app_cores();
     VMM.wait();
 

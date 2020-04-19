@@ -3,6 +3,9 @@ use core::fmt;
 use core::ops::{Deref, DerefMut, Drop};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+use aarch64;
+use crate::percore;
+
 #[repr(align(32))]
 pub struct Mutex<T> {
     data: UnsafeCell<T>,
@@ -34,14 +37,32 @@ impl<T> Mutex<T> {
     // Once MMU/cache is enabled, do the right thing here. For now, we don't
     // need any real synchronization.
     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
-        let this = 0;
-        if !self.lock.load(Ordering::Relaxed) || self.owner.load(Ordering::Relaxed) == this {
-            self.lock.store(true, Ordering::Relaxed);
-            self.owner.store(this, Ordering::Relaxed);
-            Some(MutexGuard { lock: &self })
-        } else {
-            None
+        match percore::is_mmu_ready() {
+            false => {
+                let this = percore::getcpu();
+                assert_eq!(this, 0);
+                if !self.lock.load(Ordering::Relaxed) || self.owner.load(Ordering::Relaxed) == this {
+                    self.lock.store(true, Ordering::Relaxed);
+                    self.owner.store(this, Ordering::Relaxed);
+                    Some(MutexGuard { lock: &self })
+                } else {
+                    None
+                }
+            }
+            true => {
+                let this = percore::getcpu();
+                if !self.lock.compare_and_swap(false, true, Ordering::AcqRel) {
+                    self.owner.store(this, Ordering::Release);
+                    Some(MutexGuard { lock: &self })
+                } else if self.owner.compare_and_swap(this, this, Ordering::AcqRel) == this {
+                    self.lock.store(true, Ordering::Release);
+                    Some(MutexGuard { lock: &self })
+                } else {
+                    None
+                }
+            }
         }
+
     }
 
     // Once MMU/cache is enabled, do the right thing here. For now, we don't
@@ -58,7 +79,14 @@ impl<T> Mutex<T> {
     }
 
     fn unlock(&self) {
-        self.lock.store(false, Ordering::Relaxed);
+        match percore::is_mmu_ready() {
+            false => self.lock.store(false, Ordering::Relaxed),
+            true => {
+                let this = aarch64::affinity();
+                percore::putcpu(this);
+                self.lock.store(false, Ordering::Release);
+            }
+        }
     }
 }
 
