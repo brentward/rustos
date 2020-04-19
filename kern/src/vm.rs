@@ -109,7 +109,7 @@ impl VMManager {
         info!("MMU is ready for core-{}/@sp={:016x}", affinity(), SP.get());
 
         while self.ready_core_cnt.load(Ordering::Acquire) < pi::common::NCORES {
-            asm::nop()
+            nop()
         }
     }
 
