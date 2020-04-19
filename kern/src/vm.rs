@@ -105,10 +105,12 @@ impl VMManager {
             self.setup();
         }
 
+        let _current_count = self.ready_core_cnt.fetch_add(1, Ordering::AcqRel);
         info!("MMU is ready for core-{}/@sp={:016x}", affinity(), SP.get());
 
-        // Lab 5 1.B
-        // unimplemented!("wait for other cores")
+        while self.ready_core_cnt.load(Ordering::Acquire) < pi::common::NCORES {
+            nop()
+        }
     }
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.
