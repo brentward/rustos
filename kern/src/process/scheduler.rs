@@ -8,7 +8,7 @@ use core::mem;
 use core::time::Duration;
 
 use aarch64::*;
-use pi::local_interrupt::LocalInterrupt;
+use pi::local_interrupt::{LocalInterrupt, LocalController};
 use smoltcp::time::Instant;
 use pi::{interrupt, timer};
 
@@ -95,18 +95,19 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal
     /// conditions.
     pub fn start(&self) -> ! {
-        unsafe {
-            asm!(
-                "mov SP, $0 // move tf of the first process into SP
-                 bl context_restore
-                 adr x0, _start // store _start address in x0
-                 mov SP, x0 // move _start address into SP
-                 mov x0, xzr // zero out the register used
-                 eret"
-                 :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
-                 :: "volatile"
-            );
-        }
+        self.switch_to(&mut *self.0.lock().as_mut().unwrap().processes[0].context);
+        // unsafe {
+        //     asm!(
+        //         "mov SP, $0 // move tf of the first process into SP
+        //          bl context_restore
+        //          adr x0, _start // store _start address in x0
+        //          mov SP, x0 // move _start address into SP
+        //          mov x0, xzr // zero out the register used
+        //          eret"
+        //          :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+        //          :: "volatile"
+        //     );
+        // }
         loop {}
     }
 
@@ -119,49 +120,61 @@ impl GlobalScheduler {
     /// Registers a timer handler with `Usb::start_kernel_timer` which will
     /// invoke `poll_ethernet` after 1 second.
     pub fn initialize_global_timer_interrupt(&self) {
-        let mut controller = interrupt::Controller::new();
-        controller.enable(interrupt::Interrupt::Timer1);
-        timer::tick_in(TICK);
-        GLOABAL_IRQ.register(interrupt::Interrupt::Timer1, Box::new(|tf|{
-            timer::tick_in(TICK);
-            SCHEDULER.switch(State::Ready, tf);
-        }));
+        // let mut controller = interrupt::Controller::new();
+        // controller.enable(interrupt::Interrupt::Timer1);
+        // timer::tick_in(TICK);
+        // GLOABAL_IRQ.register(interrupt::Interrupt::Timer1, Box::new(|tf|{
+        //     timer::tick_in(TICK);
+        //     SCHEDULER.switch(State::Ready, tf);
+        // }));
     }
 
     /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
     /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
     /// every `TICK` duration, which is defined in `param.rs`.
     pub fn initialize_local_timer_interrupt(&self) {
-        // Lab 5 2.C
-        unimplemented!("initialize_local_timer_interrupt()")
+        let mut local_controller = LocalController::new(affinity());
+        local_controller.enable_local_timer();
+        local_controller.tick_in(TICK);
+        local_irq().register(LocalInterrupt::CntpnsIrq, Box::new(|tf|{
+            LocalController::new(affinity()).tick_in(TICK);
+            SCHEDULER.switch(State::Ready, tf);
+        }));
+
+
+
     }
 
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
-        let process_0 = match Process::load("/sleep") {
+        let process_0 = match Process::load("/fib") {
             Ok(process) => process,
             Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
         };
-        // let process_1 = match Process::load("/fib") {
-        //     Ok(process) => process,
-        //     Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
-        // };
-        // let process_2 = match Process::load("/fib") {
-        //     Ok(process) => process,
-        //     Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
-        // };
-        // let process_3 = match Process::load("/fib") {
-        //     Ok(process) => process,
-        //     Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
-        // };
+        let process_1 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_2 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_3 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
 
         self.add(process_0);
-        // self.add(process_1);
-        // self.add(process_2);
-        // self.add(process_3);
-        self.initialize_global_timer_interrupt();
+        self.add(process_1);
+        self.add(process_2);
+        self.add(process_3);
+        if affinity() == 0 {
+            self.initialize_global_timer_interrupt();
+        }
+        self.initialize_local_timer_interrupt();
+
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);
         // timer::tick_in(TICK);
