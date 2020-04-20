@@ -61,7 +61,7 @@ extern "C" {
 
 unsafe fn kmain() -> ! {
     crate::logger::init_logger();
-    pi::timer::spin_sleep(Duration::from_millis(75));
+    pi::timer::spin_sleep(Duration::from_millis(150));
     info!(
         "text beg: {:016x}, end: {:016x}",
         &__text_beg as *const _ as u64, &__text_end as *const _ as u64

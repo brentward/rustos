@@ -76,8 +76,8 @@ impl GlobalScheduler {
                     tf.x[27]
                 );
                 return id;
-            } else {
-                unsafe { asm!("brk 1" :::: "volatile"); }
+            // } else {
+            //     unsafe { asm!("brk 1" :::: "volatile"); }
             }
 
             aarch64::wfi();
@@ -101,20 +101,24 @@ impl GlobalScheduler {
         }
         self.initialize_local_timer_interrupt();
 
-        let stack = (KERN_STACK_BASE - (KERN_STACK_SIZE * core)) as u64;
+        // let stack = (KERN_STACK_BASE - (KERN_STACK_SIZE * core)) as u64;
 
         unsafe {
             asm!(
                 "mov SP, $0 // move tf of the first process into SP
                  bl context_restore
-                 // adr x0, $1 // store stack address in x0
-                 mov SP, $1 // move stack address into SP
-                 // mov x0, xzr // zero out the register used
+                adr x0, _start // store stack address in x0
+                mov SP, x0 // move stack address into SP
+                mov x0, xzr // zero out the register used
                  eret"
-                 :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context), "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+                 :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
                  :: "volatile"
             );
         }
+        // adr x0, $1 // store stack address in x0
+        // mov SP, $1 // move stack address into SP
+        // mov x0, xzr // zero out the register used
+
         loop {}
     }
 
@@ -147,9 +151,6 @@ impl GlobalScheduler {
             LocalController::new(affinity()).tick_in(TICK);
             SCHEDULER.switch(State::Ready, tf);
         }));
-
-
-
     }
 
     /// Initializes the scheduler and add userspace processes to the Scheduler.

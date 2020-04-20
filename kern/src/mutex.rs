@@ -41,9 +41,9 @@ impl<T> Mutex<T> {
             false => {
                 let this = aarch64::affinity();
                 assert_eq!(this, 0);
-                if !self.lock.load(Ordering::Acquire) || self.owner.load(Ordering::Acquire) == this {
-                    self.lock.store(true, Ordering::Release);
-                    self.owner.store(this, Ordering::Release);
+                if !self.lock.load(Ordering::SeqCst) || self.owner.load(Ordering::SeqCst) == this {
+                    self.lock.store(true, Ordering::SeqCst);
+                    self.owner.store(this, Ordering::SeqCst);
                     Some(MutexGuard { lock: &self })
                 } else {
                     None
@@ -52,10 +52,10 @@ impl<T> Mutex<T> {
             true => {
                 let this = percore::getcpu();
                 if !self.lock.compare_and_swap(false, true, Ordering::SeqCst) {
-                    self.owner.store(this, Ordering::Release);
+                    self.owner.store(this, Ordering::SeqCst);
                     Some(MutexGuard { lock: &self })
                 } else if self.owner.compare_and_swap(this, this, Ordering::SeqCst) == this {
-                    self.lock.store(true, Ordering::Release);
+                    self.lock.store(true, Ordering::SeqCst);
                     Some(MutexGuard { lock: &self })
                 } else {
                     None
@@ -80,9 +80,9 @@ impl<T> Mutex<T> {
 
     fn unlock(&self) {
         match percore::is_mmu_ready() {
-            false => self.lock.store(false, Ordering::Release),
+            false => self.lock.store(false, Ordering::SeqCst),
             true => {
-                self.lock.store(false, Ordering::Release);
+                self.lock.store(false, Ordering::SeqCst);
                 percore::putcpu(aarch64::affinity());
             }
         }
