@@ -51,10 +51,10 @@ impl<T> Mutex<T> {
             }
             true => {
                 let this = percore::getcpu();
-                if !self.lock.compare_and_swap(false, true, Ordering::AcqRel) {
+                if !self.lock.compare_and_swap(false, true, Ordering::SeqCst) {
                     self.owner.store(this, Ordering::Release);
                     Some(MutexGuard { lock: &self })
-                } else if self.owner.compare_and_swap(this, this, Ordering::AcqRel) == this {
+                } else if self.owner.compare_and_swap(this, this, Ordering::SeqCst) == this {
                     self.lock.store(true, Ordering::Release);
                     Some(MutexGuard { lock: &self })
                 } else {

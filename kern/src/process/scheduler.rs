@@ -95,19 +95,26 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal
     /// conditions.
     pub fn start(&self) -> ! {
-        self.switch_to(&mut *self.0.lock().as_mut().unwrap().processes[0].context);
-        // unsafe {
-        //     asm!(
-        //         "mov SP, $0 // move tf of the first process into SP
-        //          bl context_restore
-        //          adr x0, _start // store _start address in x0
-        //          mov SP, x0 // move _start address into SP
-        //          mov x0, xzr // zero out the register used
-        //          eret"
-        //          :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
-        //          :: "volatile"
-        //     );
-        // }
+        let core = affinity();
+        if core == 0 {
+            self.initialize_global_timer_interrupt();
+        }
+        self.initialize_local_timer_interrupt();
+
+        let stack = (KERN_STACK_BASE - (KERN_STACK_SIZE * core)) as u64;
+
+        unsafe {
+            asm!(
+                "mov SP, $0 // move tf of the first process into SP
+                 bl context_restore
+                 // adr x0, $1 // store stack address in x0
+                 mov SP, $1 // move stack address into SP
+                 // mov x0, xzr // zero out the register used
+                 eret"
+                 :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context), "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+                 :: "volatile"
+            );
+        }
         loop {}
     }
 
@@ -170,11 +177,6 @@ impl GlobalScheduler {
         self.add(process_1);
         self.add(process_2);
         self.add(process_3);
-        if affinity() == 0 {
-            self.initialize_global_timer_interrupt();
-        }
-        self.initialize_local_timer_interrupt();
-
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);
         // timer::tick_in(TICK);
