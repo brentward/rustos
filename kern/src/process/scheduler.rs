@@ -8,7 +8,7 @@ use core::mem;
 use core::time::Duration;
 
 use aarch64::*;
-use pi::local_interrupt::{LocalInterrupt, LocalController};
+use pi::local_interrupt::{LocalInterrupt, LocalController, local_tick_in};
 use smoltcp::time::Instant;
 use pi::{interrupt, timer};
 
@@ -95,26 +95,66 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal
     /// conditions.
     pub fn start(&self) -> ! {
+        info!("SCHEDULER::start() for core-{}/@sp={:016x}", affinity(), SP.get());
         let core = affinity();
         if core == 0 {
             self.initialize_global_timer_interrupt();
         }
-        self.initialize_local_timer_interrupt();
+        info!("SCHEDULER before local int init for core-{}/@sp={:016x}", affinity(), SP.get());
 
-        // let stack = (KERN_STACK_BASE - (KERN_STACK_SIZE * core)) as u64;
+        self.initialize_local_timer_interrupt();
+        info!("SCHEDULER before adding trap frame for core-{}/@sp={:016x}", affinity(), SP.get());
+
+        let mut tf = TrapFrame::default();
+        info!("SCHEDULER before switch_to using 0 trapframe core-{}/@sp={:016x}", affinity(), SP.get());
+
+        self.switch_to(&mut tf);
+        info!("SCHEDULER after switch_to core-{}/@sp={:016x}", affinity(), SP.get());
+
+
+        // unsafe {
+        //     asm!(
+        //         "mov SP, $0 // move tf of the first process into SP
+        //          "
+        //          :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+        //          :: "volatile"
+        //     );
+        // }
+        let stack = KERN_STACK_BASE - KERN_STACK_SIZE * affinity();
 
         unsafe {
             asm!(
                 "mov SP, $0 // move tf of the first process into SP
                  bl context_restore
-                adr x0, _start // store stack address in x0
-                mov SP, x0 // move stack address into SP
-                mov x0, xzr // zero out the register used
+                 mov SP, $1 // move _start address into SP
                  eret"
-                 :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+                 :: "r"(&tf), "r"(stack)
                  :: "volatile"
             );
+            // asm!(
+            //     "mov SP, $0 // move tf of the first process into SP
+            //      bl context_restore
+            //      adr x0, _start // store _start address in x0
+            //      mov SP, x0 // move _start address into SP
+            //      mov x0, xzr // zero out the register used
+            //      eret"
+            //      :: "r"(&tf)
+            //      :: "volatile"
+            // );
         }
+        // info!("SCHEDULER after adding trap frame core-{}/@sp={:016x}", affinity(), SP.get());
+
+        // unsafe {
+        //     asm!(
+        //         "bl context_restore
+        //          mov SP, $0 // Restore stack
+        //          eret"
+        //          :: "r"(stack)
+        //          :: "volatile"
+        //     );
+        // }
+        info!("SCHEDULER after unsafe core-{}/@sp={:016x}", affinity(), SP.get());
+
         // adr x0, $1 // store stack address in x0
         // mov SP, $1 // move stack address into SP
         // mov x0, xzr // zero out the register used
@@ -147,8 +187,11 @@ impl GlobalScheduler {
         let mut local_controller = LocalController::new(affinity());
         local_controller.enable_local_timer();
         local_controller.tick_in(TICK);
+        // let local_irq = local_irq();
         local_irq().register(LocalInterrupt::CntpnsIrq, Box::new(|tf|{
-            LocalController::new(affinity()).tick_in(TICK);
+            // let mut local_controller = LocalController::new(affinity());
+            // local_controller.tick_in(TICK);
+            local_tick_in(affinity(), TICK);
             SCHEDULER.switch(State::Ready, tf);
         }));
     }
@@ -156,7 +199,15 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-
+        // let proc_count: usize = 32;
+        // for _proc in 0..proc_count {
+        //     let process = match Process::load("/fib") {
+        //         Ok(process) => process,
+        //         Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        //     };
+        //     self.add(process);
+        // }
+        //
         let process_0 = match Process::load("/fib") {
             Ok(process) => process,
             Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
@@ -173,11 +224,71 @@ impl GlobalScheduler {
             Ok(process) => process,
             Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
         };
+        let process_4 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        };
+        let process_5 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_6 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_7 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
+        let process_8 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        };
+        let process_9 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_10 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_11 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
+        let process_12 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        };
+        let process_13 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_14 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_15 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
 
         self.add(process_0);
         self.add(process_1);
         self.add(process_2);
         self.add(process_3);
+        self.add(process_4);
+        self.add(process_5);
+        self.add(process_6);
+        self.add(process_7);
+        self.add(process_8);
+        self.add(process_9);
+        self.add(process_10);
+        self.add(process_11);
+        self.add(process_12);
+        self.add(process_13);
+        self.add(process_14);
+        self.add(process_15);
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);
         // timer::tick_in(TICK);

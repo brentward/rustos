@@ -67,12 +67,12 @@ struct Registers {
     __r1: Reserved<u32>,
     core_timer_access_low: Volatile<u32>,
     core_timer_access_high: Volatile<u32>,
-    local_interrupt_0_routing: Volatile<u32>,
-    __r2_local_interrupt_1_routing: Reserved<u32>,
+    local_interrupt_routing: Volatile<u32>,
+    __r2: Reserved<u32>,
     axi_outstanding_counters: Volatile<u32>,
     axi_outstanding_irq: Volatile<u32>,
     local_timer_control_status: Volatile<u32>,
-    local_timer_write_flags: Volatile<u32>,
+    local_timer_clear_reload: Volatile<u32>,
     __r3: Reserved<u32>,
     core_timer_interrupt_control: [Volatile<u32>; 4],
     // core0_timer_interrupt_control: Volatile<u32>,
@@ -113,7 +113,12 @@ impl LocalController {
     }
 
     pub fn enable_local_timer(&mut self) {
-        unsafe { CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() | CNTP_CTL_EL0::ENABLE) };
+        unsafe {
+            CNTKCTL_EL1.set(CNTKCTL_EL1.get() | CNTKCTL_EL1::EL0PCTEN | CNTKCTL_EL1::EL0PTEN);
+            CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() | CNTP_CTL_EL0::ENABLE);
+        }
+        self.registers.local_interrupt_routing.write(self.core as u32);
+        self.registers.core_timer_interrupt_control[self.core].and_mask(!(1 << 4));
         self.registers.core_timer_interrupt_control[self.core].or_mask(1);
     }
 
@@ -126,12 +131,18 @@ impl LocalController {
         let time_low = self.registers.core_timer_access_low.read();
         let time_high = self.registers.core_timer_access_high.read();
         let current_time  = ((time_high as u64) << 32 | time_low as u64);
-        let tick_time = current_time + t.as_micros() as u64;
-        let tick_time_low = tick_time as u32;
-        let tick_time_high = (tick_time >> 32) as u32;
-        self.registers.core_timer_access_low.write(tick_time_low);
-        self.registers.core_timer_access_high.write(tick_time_high);
-        self.registers.core_timer_prescaler.write(0x06aa_aaab);
+        self.registers.local_timer_control_status.or_mask(0b11 << 28);
+        let timer_frequency = unsafe { CNTFRQ_EL0.get() };
+        let ticks = timer_frequency * t.as_secs() as u64;
+        let tick_time = current_time + ticks;
+
+        unsafe { CNTP_TVAL_EL0.set(CNTP_TVAL_EL0::TVAL & tick_time) };
+        self.registers.local_timer_clear_reload.write(0b11 << 30);
+        // let tick_time_low = tick_time as u32;
+        // let tick_time_high = (tick_time >> 32) as u32;
+        // self.registers.core_timer_access_low.write(tick_time_low);
+        // self.registers.core_timer_access_high.write(tick_time_high);
+        // self.registers.core_timer_prescaler.write(0x06aa_aaab);
         // unsafe { CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() & !CNTP_CTL_EL0::IMASK) };
     }
 }

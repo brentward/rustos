@@ -41,9 +41,9 @@ impl<T> Mutex<T> {
             false => {
                 let this = aarch64::affinity();
                 assert_eq!(this, 0);
-                if !self.lock.load(Ordering::SeqCst) || self.owner.load(Ordering::SeqCst) == this {
-                    self.lock.store(true, Ordering::SeqCst);
-                    self.owner.store(this, Ordering::SeqCst);
+                if !self.lock.load(Ordering::Acquire) || self.owner.load(Ordering::Acquire) == this {
+                    self.lock.store(true, Ordering::Release);
+                    self.owner.store(this, Ordering::Release);
                     Some(MutexGuard { lock: &self })
                 } else {
                     None
@@ -51,11 +51,11 @@ impl<T> Mutex<T> {
             }
             true => {
                 let this = percore::getcpu();
-                if !self.lock.compare_and_swap(false, true, Ordering::SeqCst) {
-                    self.owner.store(this, Ordering::SeqCst);
+                if !self.lock.compare_and_swap(false, true, Ordering::AcqRel) {
+                    self.owner.store(this, Ordering::Release);
                     Some(MutexGuard { lock: &self })
-                } else if self.owner.compare_and_swap(this, this, Ordering::SeqCst) == this {
-                    self.lock.store(true, Ordering::SeqCst);
+                } else if self.owner.compare_and_swap(this, this, Ordering::AcqRel) == this {
+                    self.lock.store(true, Ordering::Release);
                     Some(MutexGuard { lock: &self })
                 } else {
                     None
@@ -80,9 +80,9 @@ impl<T> Mutex<T> {
 
     fn unlock(&self) {
         match percore::is_mmu_ready() {
-            false => self.lock.store(false, Ordering::SeqCst),
+            false => self.lock.store(false, Ordering::Release),
             true => {
-                self.lock.store(false, Ordering::SeqCst);
+                self.lock.store(false, Ordering::Release);
                 percore::putcpu(aarch64::affinity());
             }
         }

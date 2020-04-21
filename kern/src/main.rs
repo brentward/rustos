@@ -39,6 +39,7 @@ use traps::irq::{Fiq, GlobalIrq};
 use vm::VMManager;
 use console::kprintln;
 use pi;
+use aarch64::affinity;
 
 use core::time::Duration;
 
@@ -74,11 +75,9 @@ unsafe fn kmain() -> ! {
     FILESYSTEM.initialize();
     VMM.initialize();
     SCHEDULER.initialize();
-
     init::initialize_app_cores();
+
     VMM.wait();
-
-    kprintln!("Welcome to BrentOS!");
-
+    info!("about to start scheduler for core {}", affinity());
     SCHEDULER.start()
 }

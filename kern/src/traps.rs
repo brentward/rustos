@@ -73,7 +73,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
         }
         Kind::Irq => {
             let core = aarch64::affinity();
-            let local_irq = percore::local_irq();
+            // let local_irq = percore::local_irq();
             if core == 0 {
                 let controller = Controller::new();
                 for int in Interrupt::iter() {
@@ -83,9 +83,10 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
 
                 }
             }
-            // let local_controller = LocalController::new(aarch64::affinity());
+            let local_controller = LocalController::new(aarch64::affinity());
             for local_int in LocalInterrupt::iter() {
-                if LocalController::new(aarch64::affinity()).is_pending(local_int) {
+                if local_controller.is_pending(local_int) {
+                    let local_irq = percore::local_irq();
                     local_irq.invoke(local_int, tf)
                 }
             }
