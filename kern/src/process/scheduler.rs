@@ -208,11 +208,71 @@ impl GlobalScheduler {
             Ok(process) => process,
             Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
         };
+        let process_4 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        };
+        let process_5 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_6 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_7 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
+        let process_8 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        };
+        let process_9 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_10 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_11 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
+        let process_12 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
+        };
+        let process_13 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
+        };
+        let process_14 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
+        };
+        let process_15 = match Process::load("/fib") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
+        };
 
         self.add(process_0);
         self.add(process_1);
         self.add(process_2);
         self.add(process_3);
+        self.add(process_4);
+        self.add(process_5);
+        self.add(process_6);
+        self.add(process_7);
+        self.add(process_8);
+        self.add(process_9);
+        self.add(process_10);
+        self.add(process_11);
+        self.add(process_12);
+        self.add(process_13);
+        self.add(process_14);
+        self.add(process_15);
         // self.initialize_global_timer_interrupt();
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);
