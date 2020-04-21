@@ -126,9 +126,9 @@ impl GlobalScheduler {
             asm!(
                 "mov SP, $0 // move tf of the first process into SP
                  bl context_restore
-                 mov SP, $1 // move _start address into SP
+                 mov SP, $1 // move address for the core into SP
                  eret"
-                 :: "r"(&tf), "r"(stack)
+                 :: "r"(&tf as *const TrapFrame), "ri"(stack)
                  :: "volatile"
             );
             // asm!(
