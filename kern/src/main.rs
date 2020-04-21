@@ -83,7 +83,5 @@ unsafe fn kmain() -> ! {
 
     SCHEDULER.start();
 
-
-    shell::shell("> ");
     loop {}
 }

@@ -93,18 +93,69 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal
     /// conditions.
     pub fn start(&self) -> ! {
+
+        info!("SCHEDULER::start() for core-{}/@sp={:016x}", affinity(), SP.get());
+        let core = affinity();
+        if core == 0 {
+            self.initialize_global_timer_interrupt();
+        }
+        info!("SCHEDULER before local int init for core-{}/@sp={:016x}", affinity(), SP.get());
+
+        // self.initialize_local_timer_interrupt();
+        // info!("SCHEDULER before adding trap frame for core-{}/@sp={:016x}", affinity(), SP.get());
+
+        let mut tf = TrapFrame::default();
+        info!("SCHEDULER before switch_to using 0 trapframe core-{}/@sp={:016x}", affinity(), SP.get());
+
+        // info!("before switch_to tf: {:?}", tf);
+        self.switch_to(&mut tf);
+        info!("SCHEDULER after switch_to core-{}/@sp={:016x}", affinity(), SP.get());
+
+        // info!("after switch_to tf: {:?}", tf);
+        // info!("tf addr: {:?}", &tf as *const TrapFrame);
+
+        // unsafe {
+        //     asm!(
+        //         "mov SP, $0 // move tf of the first process into SP
+        //          "
+        //          :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+        //          :: "volatile"
+        //     );
+        // }
+        let stack = KERN_STACK_BASE;
+
         unsafe {
+            // asm!(
+            //     "mov SP, $0 // move tf of the first process into SP
+            //      bl context_restore
+            //      mov SP, $1 // move _start address into SP
+            //      eret"
+            //      :: "r"(&tf as *const TrapFrame), "r"(stack)
+            //      :: "volatile"
+            // );
             asm!(
                 "mov SP, $0 // move tf of the first process into SP
                  bl context_restore
-                 adr x0, _start // store _start address in x0
-                 mov SP, x0 // move _start address into SP
-                 mov x0, xzr // zero out the register used
+                 mov SP, $1 // move _start address into SP
                  eret"
-                 :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+                 :: "r"(&tf as *const TrapFrame), "i"(stack)
                  :: "volatile"
             );
         }
+
+
+        // unsafe {
+        //     asm!(
+        //         "mov SP, $0 // move tf of the first process into SP
+        //          bl context_restore
+        //          adr x0, _start // store _start address in x0
+        //          mov SP, x0 // move _start address into SP
+        //          mov x0, xzr // zero out the register used
+        //          eret"
+        //          :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
+        //          :: "volatile"
+        //     );
+        // }
         loop {}
     }
 
@@ -159,7 +210,7 @@ impl GlobalScheduler {
         self.add(process_1);
         self.add(process_2);
         self.add(process_3);
-        self.initialize_global_timer_interrupt();
+        // self.initialize_global_timer_interrupt();
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);
         // timer::tick_in(TICK);
