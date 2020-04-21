@@ -99,17 +99,14 @@ impl GlobalScheduler {
         if core == 0 {
             self.initialize_global_timer_interrupt();
         }
-        info!("SCHEDULER before local int init for core-{}/@sp={:016x}", affinity(), SP.get());
 
         // self.initialize_local_timer_interrupt();
         // info!("SCHEDULER before adding trap frame for core-{}/@sp={:016x}", affinity(), SP.get());
 
         let mut tf = TrapFrame::default();
-        info!("SCHEDULER before switch_to using 0 trapframe core-{}/@sp={:016x}", affinity(), SP.get());
 
         // info!("before switch_to tf: {:?}", tf);
         self.switch_to(&mut tf);
-        info!("SCHEDULER after switch_to core-{}/@sp={:016x}", affinity(), SP.get());
 
         // info!("after switch_to tf: {:?}", tf);
         // info!("tf addr: {:?}", &tf as *const TrapFrame);
@@ -122,8 +119,7 @@ impl GlobalScheduler {
         //          :: "volatile"
         //     );
         // }
-        let stack = KERN_STACK_BASE;
-
+        let core = affinity() as u64;
         unsafe {
             // asm!(
             //     "mov SP, $0 // move tf of the first process into SP
@@ -136,9 +132,16 @@ impl GlobalScheduler {
             asm!(
                 "mov SP, $0 // move tf of the first process into SP
                  bl context_restore
-                 mov SP, $1 // move _start address into SP
+                 mov x0, $1
+                 mov x1, $2
+                 mov x2, $3
+                 madd x0, x0, x3, x2
+                 mov SP, x0 // move _start address into SP
+                 mov x0, xzr
+                 mov x1, xzr
+                 mov x2, xzr
                  eret"
-                 :: "r"(&tf as *const TrapFrame), "i"(stack)
+                 :: "r"(&tf as *const TrapFrame), "r"(core), "i"(KERN_STACK_BASE), "i"(PAGE_SIZE)
                  :: "volatile"
             );
         }
