@@ -32,9 +32,9 @@ pub struct Process {
     pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
-    pub stack_base: VirtualAddr,
-    pub heap_ptr: VirtualAddr,
-    pub heap_page: VirtualAddr,
+    // pub stack_base: VirtualAddr,
+    // pub heap_ptr: VirtualAddr,
+    // pub heap_page: VirtualAddr,
     // Lab 5 2.C
     ///// Socket handles held by the current process
     // pub sockets: Vec<SocketHandle>,
@@ -57,9 +57,9 @@ impl Process {
             stack,
             vmap,
             state: State::Ready,
-            stack_base: Process::get_stack_base(),
-            heap_ptr: VirtualAddr::from(0),
-            heap_page: VirtualAddr::from(0),
+            // stack_base: Process::get_stack_base(),
+            // heap_ptr: VirtualAddr::from(0),
+            // heap_page: VirtualAddr::from(0),
         })
     }
 
@@ -115,9 +115,9 @@ impl Process {
                 break;
             }
         }
-        let _heap_page = p.vmap.alloc(current_address, PagePerm::RW);
-        p.heap_ptr = current_address;
-        p.heap_page = current_address;
+        // let _heap_page = p.vmap.alloc(current_address, PagePerm::RW);
+        // p.heap_ptr = current_address;
+        // p.heap_page = current_address;
         Ok(p)
     }
 

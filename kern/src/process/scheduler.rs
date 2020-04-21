@@ -96,7 +96,7 @@ impl GlobalScheduler {
     /// conditions.
     pub fn start(&self) -> ! {
         info!("SCHEDULER::start() for core-{}/@sp={:016x}", affinity(), SP.get());
-        let core = affinity();
+        let core = affinity() as u64;
         if core == 0 {
             self.initialize_global_timer_interrupt();
         }
@@ -111,53 +111,29 @@ impl GlobalScheduler {
         self.switch_to(&mut tf);
         info!("SCHEDULER after switch_to core-{}/@sp={:016x}", affinity(), SP.get());
 
-
-        // unsafe {
-        //     asm!(
-        //         "mov SP, $0 // move tf of the first process into SP
-        //          "
-        //          :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
-        //          :: "volatile"
-        //     );
-        // }
-        let stack = KERN_STACK_BASE - KERN_STACK_SIZE * affinity();
-
+        info!("TF: {:?}", tf);
+        // let random = pi::rng::Rng::new().rand(0, 4000);
+        // info!("random: {}", random);
+        pi::timer::spin_sleep(Duration::from_millis((4 - core as u64) * 1000));
         unsafe {
             asm!(
-                "mov SP, $0 // move tf of the first process into SP
-                 bl context_restore
-                 mov SP, $1 // move address for the core into SP
+                "mov SP, $0 // move tf of the first ready process into SP
+                 bl context_restore // restore tf as into running context
+                 mov x0, $1 // store the core number
+                 mov x1, $2 // store the kernel stack base
+                 mov x2, $3 // store the kernel stack size
+                 madd x0, x0, x3, x2 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
+                 mov SP, x0 // move the calculated stack for the core address into SP
+                 mov x0, xzr // zero out all registers used
+                 mov x1, xzr
+                 mov x2, xzr
                  eret"
-                 :: "r"(&tf as *const TrapFrame), "ri"(stack)
+                 :: "r"(&tf as *const TrapFrame), "r"(core), "i"(KERN_STACK_BASE), "i"(KERN_STACK_SIZE)
                  :: "volatile"
             );
-            // asm!(
-            //     "mov SP, $0 // move tf of the first process into SP
-            //      bl context_restore
-            //      adr x0, _start // store _start address in x0
-            //      mov SP, x0 // move _start address into SP
-            //      mov x0, xzr // zero out the register used
-            //      eret"
-            //      :: "r"(&tf)
-            //      :: "volatile"
-            // );
         }
-        // info!("SCHEDULER after adding trap frame core-{}/@sp={:016x}", affinity(), SP.get());
 
-        // unsafe {
-        //     asm!(
-        //         "bl context_restore
-        //          mov SP, $0 // Restore stack
-        //          eret"
-        //          :: "r"(stack)
-        //          :: "volatile"
-        //     );
-        // }
         info!("SCHEDULER after unsafe core-{}/@sp={:016x}", affinity(), SP.get());
-
-        // adr x0, $1 // store stack address in x0
-        // mov SP, $1 // move stack address into SP
-        // mov x0, xzr // zero out the register used
 
         loop {}
     }
@@ -184,16 +160,18 @@ impl GlobalScheduler {
     /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
     /// every `TICK` duration, which is defined in `param.rs`.
     pub fn initialize_local_timer_interrupt(&self) {
-        let mut local_controller = LocalController::new(affinity());
-        local_controller.enable_local_timer();
-        local_controller.tick_in(TICK);
-        // let local_irq = local_irq();
-        local_irq().register(LocalInterrupt::CntpnsIrq, Box::new(|tf|{
-            // let mut local_controller = LocalController::new(affinity());
-            // local_controller.tick_in(TICK);
-            local_tick_in(affinity(), TICK);
-            SCHEDULER.switch(State::Ready, tf);
-        }));
+        // let mut local_controller = LocalController::new(affinity());
+        // // local_controller.enable_local_timer();
+        // // local_controller.tick_in(TICK);
+        // local_tick_in(affinity(), TICK);
+        // // let local_irq = local_irq();
+        // local_irq().register(LocalInterrupt::CntpnsIrq, Box::new(|tf|{
+        //     let core = affinity();
+        //     // let mut local_controller = LocalController::new(affinity());
+        //     // local_controller.tick_in(TICK);
+        //     local_tick_in(core, TICK);
+        //     SCHEDULER.switch(State::Ready, tf);
+        // }));
     }
 
     /// Initializes the scheduler and add userspace processes to the Scheduler.

@@ -106,10 +106,12 @@ pub struct LocalController {
 impl LocalController {
     /// Returns a new handle to the interrupt controller.
     pub fn new(core: usize) -> LocalController {
-        LocalController {
+        let mut local_controller = LocalController {
             core: core,
             registers: unsafe { &mut *(INT_BASE as *mut Registers) },
-        }
+        };
+        local_controller.enable_local_timer();
+        local_controller
     }
 
     pub fn enable_local_timer(&mut self) {
@@ -118,8 +120,8 @@ impl LocalController {
             CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() | CNTP_CTL_EL0::ENABLE);
         }
         self.registers.local_interrupt_routing.write(self.core as u32);
-        self.registers.core_timer_interrupt_control[self.core].and_mask(!(1 << 4));
-        self.registers.core_timer_interrupt_control[self.core].or_mask(1);
+        self.registers.core_timer_interrupt_control[self.core].and_mask(!(1 << 5));
+        self.registers.core_timer_interrupt_control[self.core].or_mask(1 << 1);
     }
 
     pub fn is_pending(&self, int: LocalInterrupt) -> bool {
@@ -128,15 +130,19 @@ impl LocalController {
     }
 
     pub fn tick_in(&mut self, t: Duration) {
-        let time_low = self.registers.core_timer_access_low.read();
-        let time_high = self.registers.core_timer_access_high.read();
-        let current_time  = ((time_high as u64) << 32 | time_low as u64);
+        // let time_low = self.registers.core_timer_access_low.read();
+        // let time_high = self.registers.core_timer_access_high.read();
+        // let current_time  = ((time_high as u64) << 32 | time_low as u64);
         self.registers.local_timer_control_status.or_mask(0b11 << 28);
-        let timer_frequency = unsafe { CNTFRQ_EL0.get() };
-        let ticks = timer_frequency * t.as_secs() as u64;
-        let tick_time = current_time + ticks;
+        unsafe {
+            CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() & !CNTP_CTL_EL0::IMASK);
+        }
 
-        unsafe { CNTP_TVAL_EL0.set(CNTP_TVAL_EL0::TVAL & tick_time) };
+        let timer_frequency = unsafe { CNTFRQ_EL0.get() };
+        let ticks = timer_frequency * t.as_micros() as u64;
+        // let tick_time = current_time + ticks;
+
+        unsafe { CNTP_TVAL_EL0.set(CNTP_TVAL_EL0::TVAL & ticks) };
         self.registers.local_timer_clear_reload.write(0b11 << 30);
         // let tick_time_low = tick_time as u32;
         // let tick_time_high = (tick_time >> 32) as u32;
