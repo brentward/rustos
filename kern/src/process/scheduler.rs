@@ -122,7 +122,8 @@ impl GlobalScheduler {
                  mov x0, $1 // store the core number
                  mov x1, $2 // store the kernel stack base
                  mov x2, $3 // store the kernel stack size
-                 madd x0, x0, x3, x2 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
+                 mul x0, x0, x3
+                 sub x0, x1, x0 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
                  mov SP, x0 // move the calculated stack for the core address into SP
                  mov x0, xzr // zero out all registers used
                  mov x1, xzr
