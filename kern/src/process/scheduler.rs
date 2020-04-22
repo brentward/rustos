@@ -119,32 +119,31 @@ impl GlobalScheduler {
         //          :: "volatile"
         //     );
         // }
-        let core = affinity() as u64;
+        let core = 4usize;
+        const OVERBASE: usize = KERN_STACK_SIZE * 4;
+        const BASE: usize = KERN_STACK_BASE + OVERBASE;
         unsafe {
-            // asm!(
-            //     "mov SP, $0 // move tf of the first process into SP
-            //      bl context_restore
-            //      mov SP, $1 // move _start address into SP
-            //      eret"
-            //      :: "r"(&tf as *const TrapFrame), "r"(stack)
-            //      :: "volatile"
-            // );
             asm!(
-                "mov SP, $0 // move tf of the first process into SP
-                 bl context_restore
-                 mov x0, $1
-                 mov x1, $2
-                 mov x2, $3
-                 madd x0, x0, x3, x2
-                 mov SP, x0 // move _start address into SP
-                 mov x0, xzr
+                "mov SP, $0 // move tf of the first ready process into SP
+                 bl context_restore // restore tf as into running context
+                 mov x2, $2
+                 mov x3, $3
+                 mul x1, $1, x3
+                 sub x0, x2, x1
+                 mov SP, x0 // move the calculated stack for the core address into SP
+                 mov x0, xzr // zero out all registers used
                  mov x1, xzr
                  mov x2, xzr
+                 mov x3, xzr
                  eret"
-                 :: "r"(&tf as *const TrapFrame), "r"(core), "i"(KERN_STACK_BASE), "i"(PAGE_SIZE)
+                 :: "r"(&tf as *const TrapFrame), "r"(core), "i"(BASE), "i"(KERN_STACK_SIZE)
                  :: "volatile"
             );
         }
+        // mov x2, $2
+        // mov x3, $3
+        // mul x1, $1, x3
+        // sub x0, x2, x1
 
 
         // unsafe {
