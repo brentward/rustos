@@ -120,8 +120,8 @@ impl LocalController {
             CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() | CNTP_CTL_EL0::ENABLE);
         }
         self.registers.local_interrupt_routing.write(self.core as u32);
-        self.registers.core_timer_interrupt_control[self.core].and_mask(!(1 << 5));
-        self.registers.core_timer_interrupt_control[self.core].or_mask(1 << 1);
+        self.registers.core_timer_interrupt_control[self.core].and_mask(!(1 << 4));
+        self.registers.core_timer_interrupt_control[self.core].or_mask(1);
     }
 
     pub fn is_pending(&self, int: LocalInterrupt) -> bool {
