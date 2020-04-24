@@ -7,7 +7,6 @@ pub use self::frame::TrapFrame;
 pub use crate::console;
 pub use crate::shell;
 
-use aarch64::*;
 use pi::interrupt::{Controller, Interrupt};
 use pi::local_interrupt::{LocalController, LocalInterrupt};
 
@@ -87,8 +86,6 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             for local_int in LocalInterrupt::iter() {
                 if local_controller.is_pending(local_int) {
                     // let local_irq = percore::local_irq();
-                    info!("handle local_int on core-{}, SP: {:016x}, local_int: {:?}", affinity(), SP.get(), local_int);
-
                     percore::local_irq().invoke(local_int, tf)
                 }
             }
