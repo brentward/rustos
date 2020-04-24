@@ -116,7 +116,6 @@ impl VMManager {
                 nop()
             }
         }
-        info!("MMU is exiting wait for core-{}/@sp={:016x}", affinity(), SP.get());
     }
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.

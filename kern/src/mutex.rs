@@ -47,21 +47,10 @@ impl<T> Mutex<T> {
                     self.owner.store(this, Ordering::Relaxed);
                     Some(MutexGuard { lock: &self })
                 } else {
-                    // percore::putcpu(this);
                     None
                 }
             }
             true => {
-                // let this = percore::getcpu();
-                // if !self.lock.load(Ordering::SeqCst) || self.owner.load(Ordering::SeqCst) == this {
-                //     self.lock.store(true, Ordering::SeqCst);
-                //     self.owner.store(this, Ordering::SeqCst);
-                //     Some(MutexGuard { lock: &self })
-                // } else {
-                //     percore::putcpu(this);
-                //     None
-                // }
-                // let this = aarch64::affinity();
                 if !self.lock.compare_and_swap(false, true, Ordering::AcqRel) {
                     self.owner.store(percore::getcpu(), Ordering::Release);
                     Some(MutexGuard { lock: &self })
@@ -91,7 +80,6 @@ impl<T> Mutex<T> {
         match percore::is_mmu_ready() {
             false => {
                 assert_eq!(this, 0);
-                // percore::putcpu(this);
                 self.lock.store(false, Ordering::Relaxed);
             },
             true => {

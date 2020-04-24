@@ -25,14 +25,14 @@ fn fib(n: u64) -> u64 {
 
 fn main() {
     print!("Message from a process\r\n");
-    // let pid = getpid();
-    // let beg = time();
-    // println!("[{:02}] Started: {:?}", pid, beg);
-    // // let heap_string = String::from("this is from the heap");
-    // // println!("{}", heap_string);
-    // let rtn = fib(40);
-    //
-    // let end = time();
-    // println!("[{:02}] Ended: {:?}", pid, end);
-    // println!("[{:02}] Result: {} ({:?})", pid, rtn, end - beg);
+    let pid = getpid();
+    let beg = time();
+    println!("[{:02}] Started: {:?}", pid, beg);
+    // let heap_string = String::from("this is from the heap");
+    // println!("{}", heap_string);
+    let rtn = fib(40);
+
+    let end = time();
+    println!("[{:02}] Ended: {:?}", pid, end);
+    println!("[{:02}] Result: {} ({:?})", pid, rtn, end - beg);
 }
