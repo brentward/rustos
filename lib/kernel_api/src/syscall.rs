@@ -138,6 +138,56 @@ pub fn sbrk(size: usize) -> OsResult<*mut u8> {
     err_or!(ecode, ptr)
 }
 
+pub fn rand(min: u32, max: u32) -> u32 {
+    let mut _ecode: u64;
+    let mut rand: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              svc $4
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(rand), "=r"(_ecode)
+             : "r"(min as u64), "r"(max as u64), "i"(NR_RAND)
+             : "x0", "x1", "x7"
+             : "volatile");
+    }
+    rand as u32
+}
+
+pub fn rrand() -> u32 {
+    let mut _ecode: u64;
+    let mut rrand: u64;
+
+    unsafe {
+        asm!("svc $2
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(rrand), "=r"(_ecode)
+             : "i"(NR_RAND)
+             : "x0", "x7"
+             : "volatile");
+    }
+    rrand as u32
+}
+
+pub fn entropy() -> u32 {
+    let mut _ecode: u64;
+    let mut entropy: u64;
+
+    unsafe {
+        asm!("svc $2
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(entropy), "=r"(_ecode)
+             : "i"(NR_RAND)
+             : "x0", "x7"
+             : "volatile");
+    }
+    entropy as u32
+}
+
 pub fn sock_create() -> SocketDescriptor {
     // Lab 5 2.D
     unimplemented!("sock_create")
