@@ -163,7 +163,7 @@ impl GlobalScheduler {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
         let proc_count: usize = 8;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib") {
+            let process = match Process::load("/fib_heap") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
