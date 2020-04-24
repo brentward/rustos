@@ -1,4 +1,4 @@
-use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::Layout;
 use core::fmt;
 use crate::allocator::util::*;
 use crate::allocator::linked_list::LinkedList;

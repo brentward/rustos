@@ -39,23 +39,20 @@ impl<T> Mutex<T> {
     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
         match percore::is_mmu_ready() {
             false => {
+                // let this = percore::getcpu();
                 let this = aarch64::affinity();
                 assert_eq!(this, 0);
-                if !self.lock.load(Ordering::Acquire) || self.owner.load(Ordering::Acquire) == this {
-                    self.lock.store(true, Ordering::Release);
-                    self.owner.store(this, Ordering::Release);
+                if !self.lock.load(Ordering::Relaxed) || self.owner.load(Ordering::Relaxed) == this {
+                    self.lock.store(true, Ordering::Relaxed);
+                    self.owner.store(this, Ordering::Relaxed);
                     Some(MutexGuard { lock: &self })
                 } else {
                     None
                 }
             }
             true => {
-                let this = percore::getcpu();
                 if !self.lock.compare_and_swap(false, true, Ordering::AcqRel) {
-                    self.owner.store(this, Ordering::Release);
-                    Some(MutexGuard { lock: &self })
-                } else if self.owner.compare_and_swap(this, this, Ordering::AcqRel) == this {
-                    self.lock.store(true, Ordering::Release);
+                    self.owner.store(percore::getcpu(), Ordering::Release);
                     Some(MutexGuard { lock: &self })
                 } else {
                     None
@@ -79,11 +76,20 @@ impl<T> Mutex<T> {
     }
 
     fn unlock(&self) {
+        let this = aarch64::affinity();
         match percore::is_mmu_ready() {
-            false => self.lock.store(false, Ordering::Release),
+            false => {
+                assert_eq!(this, 0);
+                self.lock.store(false, Ordering::Relaxed);
+            },
             true => {
-                self.lock.store(false, Ordering::Release);
-                percore::putcpu(aarch64::affinity());
+                if self.owner.load(Ordering::Acquire) == this {
+                    self.lock.store(false, Ordering::Release);
+                    if this != 0 || percore::get_preemptive_counter() !=0 {
+                        percore::putcpu(this);
+                    }
+                }
+
             }
         }
     }
