@@ -119,24 +119,24 @@ pub fn getpid() -> u64 {
 
     pid
 }
-//
-// pub fn sbrk(size: usize) -> OsResult<*mut u8> {
-//     let mut ecode: u64;
-//     let mut ptr: u64;
-//
-//     unsafe {
-//         asm!("mov x0, $2
-//               svc $3
-//               mov $0, x0
-//               mov $1, x7"
-//              : "=r"(ptr), "=r"(ecode)
-//              : "r"(size as u64), "i"(NR_SBRK)
-//              : "x0", "x7"
-//              : "volatile");
-//     }
-//     let ptr = ptr as *mut u8;
-//     err_or!(ecode, ptr)
-// }
+
+pub fn sbrk(size: usize) -> OsResult<*mut u8> {
+    let mut ecode: u64;
+    let mut ptr: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              svc $3
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(ptr), "=r"(ecode)
+             : "r"(size as u64), "i"(NR_SBRK)
+             : "x0", "x7"
+             : "volatile");
+    }
+    let ptr = ptr as *mut u8;
+    err_or!(ecode, ptr)
+}
 
 pub fn sock_create() -> SocketDescriptor {
     // Lab 5 2.D
