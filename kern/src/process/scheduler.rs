@@ -107,14 +107,20 @@ impl GlobalScheduler {
         unsafe {
             asm!(
                 "mov SP, $0 // move tf of the first ready process into SP
-                 bl context_restore // restore tf as into running context
-                 mrs x0, MPIDR_EL1
-                 and x0, x1, #0xff
-                 msub x0, x0, $2, $1 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
+                 bl context_restore // restore tf as into running context"
+                 :: "r"(&tf as *const TrapFrame)
+                 :: "volatile"
+            );
+        }
+        unsafe {
+            asm!(
+                "mrs x0, MPIDR_EL1
+                 and x0, x0, #0xff
+                 msub x0, x0, $1, $0
                  mov SP, x0 // move the calculated stack for the core address into SP
                  mov x0, xzr // zero out all registers used
                  eret"
-                 :: "r"(&tf as *const TrapFrame), "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
+                 :: "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
                  : "x0"
                  : "volatile"
             );
@@ -124,12 +130,12 @@ impl GlobalScheduler {
         //         "mov SP, $0 // move tf of the first ready process into SP
         //          bl context_restore // restore tf as into running context
         //          mrs x0, MPIDR_EL1
-        //          and x0, x1, #0xff
+        //          and x0, x0, #0xff
         //          msub x0, x0, $2, $1 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
         //          mov SP, x0 // move the calculated stack for the core address into SP
         //          mov x0, xzr // zero out all registers used
         //          eret"
-        //          :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context), "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
+        //          :: "r"(&tf as *const TrapFrame), "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
         //          : "x0"
         //          : "volatile"
         //     );
