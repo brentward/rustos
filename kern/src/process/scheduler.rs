@@ -95,46 +95,62 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal
     /// conditions.
     pub fn start(&self) -> ! {
-        info!("SCHEDULER::start() for core-{}/@sp={:016x}", affinity(), SP.get());
-        let core = affinity() as u64;
+        // info!("SCHEDULER::start() for core-{}/@sp={:016x}", affinity(), SP.get());
+        let core = affinity();
         if core == 0 {
             self.initialize_global_timer_interrupt();
         }
-        info!("SCHEDULER before local int init for core-{}/@sp={:016x}", affinity(), SP.get());
+
+        // if core != 1 {
+        //     pi::timer::spin_sleep(Duration::from_secs(5));
+        // }
+
+        // info!("SCHEDULER before local int init for core-{}/@sp={:016x}", affinity(), SP.get());
 
         self.initialize_local_timer_interrupt();
-        info!("SCHEDULER before adding trap frame for core-{}/@sp={:016x}", affinity(), SP.get());
+        // info!("SCHEDULER before adding trap frame for core-{}/@sp={:016x}", affinity(), SP.get());
 
         let mut tf = TrapFrame::default();
-        info!("SCHEDULER before switch_to using 0 trapframe core-{}/@sp={:016x}", affinity(), SP.get());
+        // info!("SCHEDULER before switch_to using 0 trapframe core-{}/@sp={:016x}", affinity(), SP.get());
 
         self.switch_to(&mut tf);
-        info!("SCHEDULER after switch_to core-{}/@sp={:016x}", affinity(), SP.get());
+        // info!("SCHEDULER after switch_to core-{}/@sp={:016x}", affinity(), SP.get());
 
-        info!("TF: {:?}", tf);
-        // let random = pi::rng::Rng::new().rand(0, 4000);
-        // info!("random: {}", random);
-        pi::timer::spin_sleep(Duration::from_millis((4 - core as u64) * 1000));
+        info!("before unsafe core-{}/@sp={:016x}", core, SP.get());
+
+        // let core_stack = KERN_STACK_BASE - (KERN_STACK_SIZE * core);
+
         unsafe {
             asm!(
                 "mov SP, $0 // move tf of the first ready process into SP
                  bl context_restore // restore tf as into running context
-                 mov x0, $1 // store the core number
-                 mov x1, $2 // store the kernel stack base
-                 mov x2, $3 // store the kernel stack size
-                 mul x0, x0, x3
-                 sub x0, x1, x0 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
+                 mrs x0, MPIDR_EL1
+                 and x0, x1, #0xff
+                 msub x0, x0, $2, $1 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
                  mov SP, x0 // move the calculated stack for the core address into SP
                  mov x0, xzr // zero out all registers used
-                 mov x1, xzr
-                 mov x2, xzr
                  eret"
-                 :: "r"(&tf as *const TrapFrame), "r"(core), "i"(KERN_STACK_BASE), "i"(KERN_STACK_SIZE)
-                 :: "volatile"
+                 :: "r"(&tf as *const TrapFrame), "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
+                 : "x0"
+                 : "volatile"
             );
         }
-
-        info!("SCHEDULER after unsafe core-{}/@sp={:016x}", affinity(), SP.get());
+        // unsafe {
+        //     asm!(
+        //         "mov
+        //          mov SP, $0 // move tf of the first ready process into SP
+        //          bl context_restore // restore tf as into running context
+        //          mrs x0, MPIDR_EL1
+        //          and x0, x1, #0xff
+        //          msub x0, x0, $2, $1 // multiply the core number by the kernel stack size and add to kernel stack base and store in x0
+        //          mov SP, x0 // move the calculated stack for the core address into SP
+        //          mov x0, xzr // zero out all registers used
+        //          eret"
+        //          :: "r"(&tf as *const TrapFrame), "r"(core_stack)
+        //          : "x0"
+        //          : "volatile"
+        //     );
+        // }
 
         loop {}
     }
@@ -161,7 +177,7 @@ impl GlobalScheduler {
     /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
     /// every `TICK` duration, which is defined in `param.rs`.
     pub fn initialize_local_timer_interrupt(&self) {
-        // let mut local_controller = LocalController::new(affinity());
+        // // let mut local_controller = LocalController::new(affinity());
         // // local_controller.enable_local_timer();
         // // local_controller.tick_in(TICK);
         // local_tick_in(affinity(), TICK);
