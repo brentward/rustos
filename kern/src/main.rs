@@ -78,6 +78,5 @@ unsafe fn kmain() -> ! {
     init::initialize_app_cores();
 
     VMM.wait();
-    info!("about to start scheduler for core {}", affinity());
     SCHEDULER.start()
 }

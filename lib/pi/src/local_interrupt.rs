@@ -75,25 +75,9 @@ struct Registers {
     local_timer_clear_reload: Volatile<u32>,
     __r3: Reserved<u32>,
     core_timer_interrupt_control: [Volatile<u32>; 4],
-    // core0_timer_interrupt_control: Volatile<u32>,
-    // core1_timer_interrupt_control: Volatile<u32>,
-    // core2_timer_interrupt_control: Volatile<u32>,
-    // core3_timer_interrupt_control: Volatile<u32>,
     core_mailboxes_interrupt_control: [Volatile<u32>; 4],
-    // core0_mailboxes_interrupt_control: Volatile<u32>,
-    // core1_mailboxes_interrupt_control: Volatile<u32>,
-    // core2_mailboxes_interrupt_control: Volatile<u32>,
-    // core3_mailboxes_interrupt_control: Volatile<u32>,
     core_irq_source: [Volatile<u32>; 4],
-    // core0_irq_source: Volatile<u32>,
-    // core1_irq_source: Volatile<u32>,
-    // core2_irq_source: Volatile<u32>,
-    // core3_irq_source: Volatile<u32>,
     core_fiq_source: [Volatile<u32>; 4],
-    // core0_fiq_source: Volatile<u32>,
-    // core1_fiq_source: Volatile<u32>,
-    // core2_fiq_source: Volatile<u32>,
-    // core3_fiq_source: Volatile<u32>,
 }
 const_assert_size!(Registers, 0x4000_0080 - 0x4000_0000);
 
@@ -116,11 +100,8 @@ impl LocalController {
 
     pub fn enable_local_timer(&mut self) {
         unsafe {
-            // CNTKCTL_EL1.set(CNTKCTL_EL1.get() | CNTKCTL_EL1::EL0PCTEN | CNTKCTL_EL1::EL0PTEN);
             CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() | CNTP_CTL_EL0::ENABLE);
         }
-        // self.registers.local_interrupt_routing.write(self.core as u32);
-        // self.registers.core_timer_interrupt_control[self.core].and_mask(!(1 << 4));
         self.registers.core_timer_interrupt_control[self.core].write(1 << 1);
     }
 
@@ -130,27 +111,12 @@ impl LocalController {
     }
 
     pub fn tick_in(&mut self, t: Duration) {
-        // let time_low = self.registers.core_timer_access_low.read();
-        // let time_high = self.registers.core_timer_access_high.read();
-        // let current_time  = ((time_high as u64) << 32 | time_low as u64);
-        // self.registers.local_timer_control_status.or_mask(0b11 << 28);
-
         let timer_frequency = unsafe { CNTFRQ_EL0.get() };
-        let ticks = timer_frequency * t.as_secs() as u64;
-        // let tick_time = current_time + ticks;
-
-        // self.registers.local_timer_clear_reload.write(0b11 << 30);
+        let ticks = timer_frequency / 1000 * t.as_millis() as u64;
         unsafe {
             CNTP_TVAL_EL0.set(CNTP_TVAL_EL0::TVAL & ticks);
             CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() & !CNTP_CTL_EL0::IMASK);
         }
-
-        // let tick_time_low = tick_time as u32;
-        // let tick_time_high = (tick_time >> 32) as u32;
-        // self.registers.core_timer_access_low.write(tick_time_low);
-        // self.registers.core_timer_access_high.write(tick_time_high);
-        // self.registers.core_timer_prescaler.write(0x06aa_aaab);
-        // unsafe { CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() & !CNTP_CTL_EL0::IMASK) };
     }
 }
 
