@@ -142,17 +142,12 @@ pub unsafe fn initialize_app_cores() {
         let core_spin_ptr = SPINNING_BASE.add(core_index);
         write_volatile(core_spin_ptr, start2 as usize);
         asm::sev();
-        while read_volatile(core_spin_ptr as *const usize) != 0  {
+    }
+    for core_index in 1..NCORES {
+        let core_spin_ptr = SPINNING_BASE.add(core_index);
+        while read_volatile(core_spin_ptr as *const usize) !=0  {
             //spin
         }
     }
-    // asm::sev();
-    // for core_index in 1..NCORES {
-    //     let core_spin_ptr = SPINNING_BASE.add(core_index);
-    //     while read_volatile(core_spin_ptr as *const usize) !=0  {
-    //         //spin
-    //     }
-    //
-    // }
 
 }
