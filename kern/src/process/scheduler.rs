@@ -20,6 +20,7 @@ use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::{TrapFrame, irq};
 use crate::{VMM, GLOABAL_IRQ, SCHEDULER, ETHERNET, USB};
+use crate::rng::RNG;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -104,7 +105,12 @@ impl GlobalScheduler {
         let mut tf = TrapFrame::default();
         self.switch_to(&mut tf);
         info!("SCHEDULER::start() on core-{}/@sp={:016x}", affinity(), SP.get());
-        pi::timer::spin_sleep(Duration::from_millis(core as u64 * 42));
+        // let rand = {
+        //     let mut rng = RNG.lock();
+        //     rng.rand(0, 100)
+        // };
+        // info!("core-{} with rand: {}", affinity(), rand);
+        // pi::timer::spin_sleep(Duration::from_millis(core as u64 * 42));
         unsafe {
             asm!(
                 "mov SP, $0 // move tf of the first ready process into SP
@@ -161,9 +167,9 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 8;
+        let proc_count: usize = 32;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib_heap") {
+            let process = match Process::load("/fib_rand") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };

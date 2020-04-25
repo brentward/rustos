@@ -85,6 +85,10 @@ pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
 pub const NR_WRITE_STR: usize = 6;
 pub const NR_SBRK: usize = 7;
+pub const NR_RAND: usize = 8;
+pub const NR_RRAND: usize = 9;
+pub const NR_ENTROPY: usize = 10;
+
 
 #[derive(Clone, Copy, Debug)]
 pub struct SocketDescriptor(u64);

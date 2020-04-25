@@ -29,6 +29,7 @@ pub mod process;
 pub mod shell;
 pub mod traps;
 pub mod vm;
+pub mod rng;
 
 use allocator::Allocator;
 use fs::FileSystem;

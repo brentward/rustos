@@ -104,10 +104,34 @@ pub fn sys_sbrk(size: usize, tf: &mut TrapFrame)  {
         p.heap_ptr = next_heap_ptr;
         true
     })), tf);
-
-
 }
 
+pub fn sys_rand(min: u32, max: u32, tf: &mut TrapFrame) {
+    let rand = {
+        let mut rng = crate::rng::RNG.lock();
+        rng.rand(min, max)
+    };
+    tf.x[0] = rand as u64;
+    tf.x[7] = OsError::Ok as u64;
+}
+
+pub fn sys_rrand(tf: &mut TrapFrame) {
+    let rrand = {
+        let mut rng = crate::rng::RNG.lock();
+        rng.r_rand()
+    };
+    tf.x[0] = rrand as u64;
+    tf.x[7] = OsError::Ok as u64;
+}
+
+pub fn sys_entropy(tf: &mut TrapFrame) {
+    let entropy = {
+        let mut rng = crate::rng::RNG.lock();
+        rng.entropy()
+    };
+    tf.x[0] = entropy as u64;
+    tf.x[7] = OsError::Ok as u64;
+}
 /// Creates a socket and saves the socket handle in the current process's
 /// socket list.
 ///
@@ -293,6 +317,9 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         5 => sys_getpid(tf),
         6 => sys_write_str(tf.x[0] as usize, tf.x[1] as usize, tf),
         7 => sys_sbrk(tf.x[0] as usize, tf),
+        8 => sys_rand(tf.x[0] as u32, tf.x[1] as u32, tf),
+        9 => sys_rrand(tf),
+        10 => sys_entropy(tf),
         _ => tf.x[7] = OsError::Unknown as u64,
     }
 }
