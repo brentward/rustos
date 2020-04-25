@@ -111,24 +111,57 @@ impl GlobalScheduler {
         // };
         // info!("core-{} with rand: {}", affinity(), rand);
         // pi::timer::spin_sleep(Duration::from_millis(core as u64 * 42));
+        // unsafe {
+        //     asm!(
+        //         "mov SP, $0 // move tf of the first ready process into SP
+        //          bl context_restore // restore tf as into running context"
+        //          :: "r"(&tf as *const TrapFrame)
+        //          :: "volatile"
+        //     );
+        //     asm!(
+        //         "mrs x0, MPIDR_EL1
+        //          and x0, x0, #0xff
+        //          msub x0, x0, $1, $0
+        //          mov SP, x0 // move the calculated stack for the core address into SP
+        //          mov x0, xzr // zero out all registers used
+        //          eret"
+        //          :: "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
+        //          : "x0"
+        //          : "volatile"
+        //     );
+        // }
+
+        let mut x_0 = Box::new(0u64);
+        let mut x_1 = Box::new(0u64);
+        let mut x_2 = Box::new(0u64);
+
+        info!("box before: {}, {}, {}", x_0, x_1, x_2);
         unsafe {
             asm!(
-                "mov SP, $0 // move tf of the first ready process into SP
-                 bl context_restore // restore tf as into running context"
-                 :: "r"(&tf as *const TrapFrame)
-                 :: "volatile"
-            );
+        "mov SP, $3 // move tf of the first ready process into SP
+         bl context_restore // restore tf as into running context
+         str x0, $0
+         str x1, $1
+         str x2, $2"
+         : "=m"(x_0), "=m"(x_1), "=m"(x_2)
+         : "r"(&tf as *const TrapFrame)
+         :
+         : "volatile"
+    );
+            info!("box middle: {}, {}, {}", x_0, x_1, x_2);
             asm!(
-                "mrs x0, MPIDR_EL1
-                 and x0, x0, #0xff
-                 msub x0, x0, $1, $0
-                 mov SP, x0 // move the calculated stack for the core address into SP
-                 mov x0, xzr // zero out all registers used
-                 eret"
-                 :: "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
-                 : "x0"
-                 : "volatile"
-            );
+        "mrs x0, MPIDR_EL1
+         and x0, x0, #0xff
+         msub x0, x0, $4, $3
+         mov SP, x0 // move the calculated stack for the core address into SP
+        ldr x0, $0
+        ldr x1, $1
+        ldr x2, $2
+         eret"
+        :: "m"(x_0), "m"(x_1), "m"(x_2), "l"(KERN_STACK_BASE), "l"(KERN_STACK_SIZE)
+         : "x0", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"
+         : "volatile"
+    );
         }
 
         loop {}
@@ -167,7 +200,7 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 32;
+        let proc_count: usize = 2;
         for proc in 0..proc_count {
             let process = match Process::load("/fib_rand") {
                 Ok(process) => process,
