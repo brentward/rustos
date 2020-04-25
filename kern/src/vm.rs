@@ -111,11 +111,11 @@ impl VMManager {
         while self.ready_core_cnt.load(Ordering::Acquire) < pi::common::NCORES {
             nop()
         }
-        if affinity() == 0 {
-            while get_preemptive_counter() != 0 {
-                nop()
-            }
-        }
+        // if affinity() == 0 {
+        //     while get_preemptive_counter() != 0 {
+        //         nop()
+        //     }
+        // }
     }
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.

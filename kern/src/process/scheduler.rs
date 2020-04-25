@@ -104,13 +104,69 @@ impl GlobalScheduler {
         self.initialize_local_timer_interrupt();
         let mut tf = TrapFrame::default();
         self.switch_to(&mut tf);
+        let mut x_regs = Box::new([0u64; 29]);
+        for reg in 0..29 {
+            x_regs[reg] = tf.x[reg];
+        }
         info!("SCHEDULER::start() on core-{}/@sp={:016x}", affinity(), SP.get());
         // let rand = {
         //     let mut rng = RNG.lock();
         //     rng.rand(0, 100)
         // };
         // info!("core-{} with rand: {}", affinity(), rand);
-        // pi::timer::spin_sleep(Duration::from_millis(core as u64 * 42));
+        pi::timer::spin_sleep(Duration::from_millis(core as u64 * 42));
+        unsafe {
+            asm!(
+                "mov SP, $0 // move tf of the first ready process into SP
+                 bl context_restore // restore tf as into running context"
+                 :: "r"(&tf as *const TrapFrame)
+                 :: "volatile"
+            );
+            asm!(
+                "mrs x0, MPIDR_EL1
+                 and x0, x0, #0xff
+                 msub x0, x0, $1, $0
+                 mov SP, x0 // move the calculated stack for the core address into SP"
+                 :: "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
+                 : "x0"
+                 : "volatile"
+            );
+            asm!(
+                "eret"
+                 :
+                 "={x0}"(x_regs[0]),
+                 "={x1}"(x_regs[1]),
+                 "={x2}"(x_regs[2]),
+                 "={x3}"(x_regs[3]),
+                 "={x4}"(x_regs[4]),
+                 "={x5}"(x_regs[5]),
+                 "={x6}"(x_regs[6]),
+                 "={x7}"(x_regs[7]),
+                 "={x8}"(x_regs[8]),
+                 "={x9}"(x_regs[9]),
+                 "={x10}"(x_regs[10]),
+                 "={x11}"(x_regs[11]),
+                 "={x12}"(x_regs[12]),
+                 "={x13}"(x_regs[13]),
+                 "={x14}"(x_regs[14]),
+                 "={x15}"(x_regs[15]),
+                 "={x16}"(x_regs[16]),
+                 "={x17}"(x_regs[17]),
+                 "={x18}"(x_regs[18]),
+                 "={x19}"(x_regs[19]),
+                 "={x20}"(x_regs[20]),
+                 "={x21}"(x_regs[21]),
+                 "={x22}"(x_regs[22]),
+                 "={x23}"(x_regs[23]),
+                 "={x24}"(x_regs[24]),
+                 "={x25}"(x_regs[25]),
+                 "={x26}"(x_regs[26]),
+                 "={x27}"(x_regs[27]),
+                 "={x28}"(x_regs[28])
+                 ::: "volatile"
+            );
+
+        }
         // unsafe {
         //     asm!(
         //         "mov SP, $0 // move tf of the first ready process into SP
@@ -130,39 +186,48 @@ impl GlobalScheduler {
         //          : "volatile"
         //     );
         // }
-
-        let mut x_0 = Box::new(0u64);
-        let mut x_1 = Box::new(0u64);
-        let mut x_2 = Box::new(0u64);
-
-        info!("box before: {}, {}, {}", x_0, x_1, x_2);
-        unsafe {
-            asm!(
-        "mov SP, $3 // move tf of the first ready process into SP
-         bl context_restore // restore tf as into running context
-         str x0, $0
-         str x1, $1
-         str x2, $2"
-         : "=m"(x_0), "=m"(x_1), "=m"(x_2)
-         : "r"(&tf as *const TrapFrame)
-         :
-         : "volatile"
-    );
-            info!("box middle: {}, {}, {}", x_0, x_1, x_2);
-            asm!(
-        "mrs x0, MPIDR_EL1
-         and x0, x0, #0xff
-         msub x0, x0, $4, $3
-         mov SP, x0 // move the calculated stack for the core address into SP
-        ldr x0, $0
-        ldr x1, $1
-        ldr x2, $2
-         eret"
-        :: "m"(x_0), "m"(x_1), "m"(x_2), "l"(KERN_STACK_BASE), "l"(KERN_STACK_SIZE)
-         : "x0", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"
-         : "volatile"
-    );
-        }
+        // unsafe {
+        //     asm!(
+        //     "mov SP, $0 // move tf of the first ready process into SP
+        //     bl context_restore // restore tf as into running context
+        //     eret"
+        //     :: "r"(&tf as *const TrapFrame)
+        //     : "volatile"
+        //     );
+        // }
+        //
+    //     let mut x_0 = Box::new(0u64);
+    //     let mut x_1 = Box::new(0u64);
+    //     let mut x_2 = Box::new(0u64);
+    //
+    //     info!("box before: {}, {}, {}", x_0, x_1, x_2);
+    //     unsafe {
+    //         asm!(
+    //     "mov SP, $3 // move tf of the first ready process into SP
+    //      bl context_restore // restore tf as into running context
+    //      str x0, $[0]
+    //      str x1, $1
+    //      str x2, $2"
+    //      : "=m"(x_0), "=m"(x_1), "=m"(x_2)
+    //      : "r"(&tf as *const TrapFrame)
+    //      :
+    //      : "volatile"
+    // );
+    //         info!("box middle: {}, {}, {}", x_0, x_1, x_2);
+    //         asm!(
+    //     "mrs x0, MPIDR_EL1
+    //      and x0, x0, #0xff
+    //      msub x0, x0, $4, $3
+    //      mov SP, x0 // move the calculated stack for the core address into SP
+    //     ldr x0, $0
+    //     ldr x1, $1
+    //     ldr x2, $2
+    //      eret"
+    //     :: "m"(x_0), "m"(x_1), "m"(x_2), "l"(KERN_STACK_BASE), "l"(KERN_STACK_SIZE)
+    //      : "x0", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"
+    //      : "volatile"
+    // );
+    //     }
 
         loop {}
     }
