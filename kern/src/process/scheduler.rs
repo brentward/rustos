@@ -111,22 +111,96 @@ impl GlobalScheduler {
         // };
         // info!("core-{} with rand: {}", affinity(), rand);
         // pi::timer::spin_sleep(Duration::from_millis(core as u64 * 42));
+        let xs = Box::new([0u64; 31]);
+        info!("box before: {:?}", xs);
         unsafe {
             asm!(
-                "mov SP, $0 // move tf of the first ready process into SP
-                 bl context_restore // restore tf as into running context"
-                 :: "r"(&tf as *const TrapFrame)
+                "mov SP, $31 // move tf of the first ready process into SP
+                 bl context_restore // restore tf as into running context
+                 mov $0, x0
+                 mov $1, x1
+                 mov $2, x2
+                 mov $3, x3
+                 mov $4, x4
+                 mov $5, x5
+                 mov $6, x6
+                 mov $7, x7
+                 mov $8, x8
+                 mov $9, x9
+                 mov $10, x10
+                 mov $11, x11
+                 mov $12, x12
+                 mov $13, x13
+                 mov $14, x14
+                 mov $15, x15
+                 mov $16, x16
+                 mov $17, x17
+                 mov $18, x18
+                 mov $19, x19
+                 mov $20, x20
+                 mov $21, x21
+                 mov $22, x22
+                 mov $23, x23
+                 mov $24, x24
+                 mov $25, x25
+                 mov $26, x26
+                 mov $27, x27
+                 mov $28, x28
+                 mov $29, x29
+                 mov $30, x30"
+                 : "=m"(xs[0]), "=m"(xs[1]), "=m"(xs[2]), "=m"(xs[3]), "=m"(xs[4]), "=m"(xs[5]),
+                 "=m"(xs[6]), "=m"(xs[7]), "=m"(xs[8]), "=m"(xs[9]), "=m"(xs[10]), "=m"(xs[11]),
+                 "=m"(xs[12]), "=m"(xs[13]), "=m"(xs[14]), "=m"(xs[15]), "=m"(xs[16]), "=m"(xs[17]),
+                 "=m"(xs[18]), "=m"(xs[19]), "=m"(xs[20]), "=m"(xs[21]), "=m"(xs[22]), "=m"(xs[23]),
+                 "=m"(xs[24]), "=m"(xs[25]), "=m"(xs[26]), "=m"(xs[27]), "=m"(xs[28]), "=m"(xs[29]),
+                 "=m"(xs[30])
+                 : "r"(&tf as *const TrapFrame)
                  :: "volatile"
             );
+            info!("box middle: {:?}", xs);
             asm!(
                 "mrs x0, MPIDR_EL1
                  and x0, x0, #0xff
-                 msub x0, x0, $1, $0
+                 msub x0, x0, $32, $31
                  mov SP, x0 // move the calculated stack for the core address into SP
-                 mov x0, xzr // zero out all registers used
+                mov x0, $0
+                mov x1, $1
+                mov x2, $2
+                mov x3, $3
+                mov x4, $4
+                mov x5, $5
+                mov x6, $6
+                mov x7, $7
+                mov x8, $8
+                mov x9, $9
+                mov x10, $10
+                mov x11, $11
+                mov x12, $12
+                mov x13, $13
+                mov x14, $14
+                mov x15, $15
+                mov x16, $16
+                mov x17, $17
+                mov x18, $18
+                mov x19, $19
+                mov x20, $20
+                mov x21, $21
+                mov x22, $22
+                mov x23, $23
+                mov x24, $24
+                mov x25, $25
+                mov x26, $26
+                mov x27, $27
+                mov x28, $28
+                mov x29, $29
+                mov x30, $30
                  eret"
-                 :: "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
-                 : "x0"
+                 :: "m"(xs[0]), "m"(xs[1]), "m"(xs[2]), "m"(xs[3]), "m"(xs[4]), "m"(xs[5]),
+                "m"(xs[6]), "m"(xs[7]), "m"(xs[8]), "m"(xs[9]), "m"(xs[10]), "m"(xs[11]),
+                "m"(xs[12]), "m"(xs[13]), "m"(xs[14]), "m"(xs[15]), "m"(xs[16]), "m"(xs[17]),
+                "m"(xs[18]), "m"(xs[19]), "m"(xs[20]), "m"(xs[21]), "m"(xs[22]), "m"(xs[23]),
+                "m"(xs[24]), "m"(xs[25]), "m"(xs[26]), "m"(xs[27]), "m"(xs[28]), "m"(xs[29]),
+                "m"(xs[30]), "r"(KERN_STACK_BASE), "r"(KERN_STACK_SIZE)
                  : "volatile"
             );
         }

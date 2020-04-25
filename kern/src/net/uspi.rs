@@ -5,6 +5,7 @@ use alloc::string::String;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::c_void;
 use core::slice;
+use core::str::{from_utf8, Utf8Error};
 use core::time::Duration;
 
 use pi::interrupt::{Controller, Interrupt};
@@ -150,38 +151,40 @@ unsafe fn layout(size: usize) -> Layout {
 
 #[no_mangle]
 fn malloc(size: u32) -> *mut c_void {
-    // Lab 5 2.B
-    unimplemented!("malloc")
+    let layout = unsafe { layout(size as usize) };
+    let ptr = unsafe { ALLOCATOR.alloc(layout) };
+    let allocated = unsafe { ptr.offset(core::mem::size_of::<usize>() as isize) };
+    let alloc_size = ptr as *mut usize;
+    unsafe { *alloc_size = size as usize };
+    allocated as *mut c_void
 }
 
 #[no_mangle]
 fn free(ptr: *mut c_void) {
-    // Lab 5 2.B
-    unimplemented!("free")
+    let alloc_size_ptr = unsafe { ptr.offset( 0 - core::mem::size_of::<usize>() as isize) };
+    let alloc_size = alloc_size_ptr as *mut usize;
+    let layout = unsafe { layout(*alloc_size) };
+    unsafe { ALLOCATOR.dealloc(alloc_size as *mut u8, layout) };
 }
 
 #[no_mangle]
 pub fn TimerSimpleMsDelay(nMilliSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("TimerSimpleMsDelay")
+    pi::timer::spin_sleep(Duration::from_millis(nMilliSeconds as u64));
 }
 
 #[no_mangle]
 pub fn TimerSimpleusDelay(nMicroSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("TimerSimpleusDelay")
+    pi::timer::spin_sleep(Duration::from_micros(nMicroSeconds as u64));
 }
 
 #[no_mangle]
 pub fn MsDelay(nMilliSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("MsDelay")
+    TimerSimpleMsDelay(nMilliSeconds);
 }
 
 #[no_mangle]
 pub fn usDelay(nMicroSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("usDelay")
+    TimerSimpleusDelay(nMicroSeconds);
 }
 
 /// Registers `pHandler` to the kernel's IRQ handler registry.
@@ -192,15 +195,44 @@ pub fn usDelay(nMicroSeconds: u32) {
 /// registry. Otherwise, register the handler to the global IRQ interrupt handler.
 #[no_mangle]
 pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *mut c_void) {
-    // Lab 5 2.B
-    unimplemented!("ConnectInterrupt")
+    let int = Interrupt::from(nIRQ as usize);
+    match int {
+        Interrupt::Timer3 => {
+            crate::FIQ.register((), Box::new(|tf|{
+                pHandler(pParam);
+            }));
+        }
+        Interrupt::Usb => {
+            crate::GLOABAL_IRQ.register(int, Box::new(|tf|{
+                pHandler(pParam);
+            }));
+        }
+        int => panic!("FIQ is {:?}, only Timer3 and Usb: supported", int);
+    }
 }
 
 /// Writes a log message from USPi using `uspi_trace!` macro.
 #[no_mangle]
 pub unsafe fn DoLogWrite(_pSource: *const u8, _Severity: u32, pMessage: *const u8) {
-    // Lab 5 2.B
-    unimplemented!("DoLogWrite")
+    let message_result = unsafe { match cstr(pMessage) {
+        Ok(str) => str,
+        Err(_) => "pMessage sent to DoLogWrite() is not valid UTF-8"
+    } };
+    uspi_trace!("USPi Message: {}", message);
+}
+
+unsafe fn cstr_len(cstr_ptr: *const u8) -> usize {
+    let mut index = 0;
+    while *cstr_ptr.offset(index) != 0 {
+        index += 1;
+    }
+    index as usize
+}
+
+unsafe fn cstr(cstr_ptr: *const u8) -> Result<&str, Utf8Error> {
+    let len = cstr_len(cstr_ptr);
+    let slice = slice::from_raw_parts(cstr_ptr, len);
+    from_utf8(slice)
 }
 
 #[no_mangle]
@@ -211,7 +243,15 @@ pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8)
 #[no_mangle]
 pub unsafe fn uspi_assertion_failed(pExpr: *const u8, pFile: *const u8, nLine: u32) {
     // Lab 5 2.B
-    unimplemented!("uspi_assertion_failed")
+    let expr = unsafe { match cstr(pExpr) {
+        Ok(str) => str,
+        Err(_) => "pExpr sent to uspi_assertion_failed() is not valid UTF-8"
+    } };
+    let file = unsafe { match cstr(pFile) {
+        Ok(str) => str,
+        Err(_) => "pFile sent to uspi_assertion_failed() is not valid UTF-8"
+    } };
+    uspi_trace!("USPi Assertion Failed: Expression: {}, File: {}, Line: {}", expr, file, nLine);
 }
 
 pub struct Usb(pub Mutex<Option<USPi>>);

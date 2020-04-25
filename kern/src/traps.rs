@@ -89,8 +89,14 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                     percore::local_irq().invoke(local_int, tf)
                 }
             }
-
-
+        }
+        Kind::Fiq => {
+            let controller = Controller::new();
+            for int in Interrupt::iter() {
+                if controller.is_pending(int) {
+                    GLOABAL_IRQ.invoke(int, tf)
+                }
+            }
         }
         _ => (),
     }

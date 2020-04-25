@@ -50,7 +50,7 @@ impl From<usize> for Interrupt {
 struct Registers {
     pending_basic: Reserved<u32>,
     pending: [ReadVolatile<u32>; 2],
-    fiq_control: Reserved<u32>,
+    fiq_control: Volatile<u32>,
     enable: [Volatile<u32>; 2],
     enable_basic: Reserved<u32>,
     disable: [Volatile<u32>; 2],
@@ -103,7 +103,7 @@ impl Controller {
 
     /// Enables the interrupt as FIQ interrupt
     pub fn enable_fiq(&mut self, int: Interrupt) {
-        // Lab 5 2.B
-        unimplemented!("enable_fiq")
+        let index = int as usize;
+        self.registers.fiq_control.write((1 << 7) | (index & 0x7f));
     }
 }
