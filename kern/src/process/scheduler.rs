@@ -104,12 +104,10 @@ impl GlobalScheduler {
         self.initialize_local_timer_interrupt();
         let mut tf = TrapFrame::default();
         let proc_id = self.switch_to(&mut tf);
-        info!("SCHEDULER::start() core-{}/first-process={}", core, proc_id);
         let x_regs_ptr = tf.x.as_ptr() as usize;
         let q_regs_ptr = tf.q.as_ptr() as usize;
-        // info!("SCHEDULER::start() on core-{}/@sp={:016x}", affinity(), SP.get());
-        // info!("core-{}, starting tf: {:?}", core, tf);
-        // pi::timer::spin_sleep(Duration::from_millis(core as u64 * 42));
+        info!("SCHEDULER::start() core-{}/first-process={}", core, proc_id);
+        trace!("SCHEDULER::start() core-{}/tf={:?}", core, tf);
         unsafe {
             asm!(
                 "mrs x0, MPIDR_EL1 // calcluate core stack: store register containing core affinity in x0
@@ -235,7 +233,7 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 8;
+        let proc_count: usize = 32;
         for proc in 0..proc_count {
             let process = match Process::load("/fib_rand") {
                 Ok(process) => process,
