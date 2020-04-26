@@ -31,10 +31,10 @@ fn main() {
     write!(string_out, "[{:02}] Started: {:?}\n\r", pid, beg).expect("write macro error");
     // println!("[{:02}] Started: {:?}", pid, beg);
     print!("{}", string_out);
-    let die_throw = rand(1, 7);
-    string_out.clear();
-    write!(string_out, "[{:02}] Die: {}\n\r", pid, die_throw).expect("write macro error");
-    print!("{}", string_out);
+    // let die_throw = rand(1, 7);
+    // string_out.clear();
+    // write!(string_out, "[{:02}] Die: {}\n\r", pid, die_throw).expect("write macro error");
+    // print!("{}", string_out);
 
     let rtn = fib(40);
 
