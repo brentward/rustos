@@ -7,6 +7,7 @@ use core::ffi::c_void;
 use core::slice;
 use core::str::{from_utf8, Utf8Error};
 use core::time::Duration;
+use core::ptr::Unique;
 
 use pi::interrupt::{Controller, Interrupt};
 use pi::timer::spin_sleep;
@@ -29,6 +30,10 @@ pub type TKernelTimerHandler = Option<
     unsafe extern "C" fn(hTimer: TKernelTimerHandle, pParam: *mut c_void, pContext: *mut c_void),
 >;
 pub type TInterruptHandler = Option<unsafe extern "C" fn(pParam: *mut c_void)>;
+//
+// pub type send_c_void = *mut c_void;
+//
+// unsafe impl Send for send_c_void {}
 
 mod inner {
     use core::convert::TryInto;
@@ -196,27 +201,35 @@ pub fn usDelay(nMicroSeconds: u32) {
 #[no_mangle]
 pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *mut c_void) {
     let int = Interrupt::from(nIRQ as usize);
+    // struct WrapCVoid(*mut c_void);
+    // // unsafe impl Sync for WrapCVoid {};
+    // unsafe impl Send for WrapCVoid {};
+
+    // let handler = pHandler.unwrap();
     match int {
-        Interrupt::Timer3 => {
-            crate::FIQ.register((), Box::new(|tf|{
-                pHandler(pParam);
-            }));
-        }
         Interrupt::Usb => {
-            crate::GLOABAL_IRQ.register(int, Box::new(|tf|{
-                pHandler(pParam);
-            }));
+            let mut interrupt_controller = Controller::new();
+            interrupt_controller.enable_fiq(int);
+            let handler = pHandler.unwrap();
+            crate::FIQ.register((), Box::new(|_|handler(pParam)));
         }
-        int => panic!("FIQ is {:?}, only Timer3 and Usb: supported", int);
+        Interrupt::Timer3 => {
+            let mut interrupt_controller = Controller::new();
+            interrupt_controller.enable(int);
+            let handler = pHandler.unwrap();
+
+            crate::GLOABAL_IRQ.register(int, Box::new(|_|handler(pParam)));
+        }
+        int => panic!("FIQ is {:?}, only Timer3 and Usb: supported", int),
     }
 }
 
 /// Writes a log message from USPi using `uspi_trace!` macro.
 #[no_mangle]
 pub unsafe fn DoLogWrite(_pSource: *const u8, _Severity: u32, pMessage: *const u8) {
-    let message_result = unsafe { match cstr(pMessage) {
-        Ok(str) => str,
-        Err(_) => "pMessage sent to DoLogWrite() is not valid UTF-8"
+    let message = unsafe { match cstring(pMessage) {
+        Ok(message_string) => message_string,
+        Err(_) => String::from("pMessage sent to DoLogWrite() is not valid UTF-8"),
     } };
     uspi_trace!("USPi Message: {}", message);
 }
@@ -229,11 +242,13 @@ unsafe fn cstr_len(cstr_ptr: *const u8) -> usize {
     index as usize
 }
 
-unsafe fn cstr(cstr_ptr: *const u8) -> Result<&str, Utf8Error> {
+unsafe fn cstring(cstr_ptr: *const u8) -> Result<String, Utf8Error> {
     let len = cstr_len(cstr_ptr);
     let slice = slice::from_raw_parts(cstr_ptr, len);
-    from_utf8(slice)
+    Ok(String::from(from_utf8(slice)?))
 }
+
+
 
 #[no_mangle]
 pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8) {
@@ -243,13 +258,13 @@ pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8)
 #[no_mangle]
 pub unsafe fn uspi_assertion_failed(pExpr: *const u8, pFile: *const u8, nLine: u32) {
     // Lab 5 2.B
-    let expr = unsafe { match cstr(pExpr) {
-        Ok(str) => str,
-        Err(_) => "pExpr sent to uspi_assertion_failed() is not valid UTF-8"
+    let expr = unsafe { match cstring(pExpr) {
+        Ok(expr_string) => expr_string,
+        Err(_) => String::from("pExpr sent to uspi_assertion_failed() is not valid UTF-8"),
     } };
-    let file = unsafe { match cstr(pFile) {
-        Ok(str) => str,
-        Err(_) => "pFile sent to uspi_assertion_failed() is not valid UTF-8"
+    let file = unsafe { match cstring(pFile) {
+        Ok(file_string) => file_string,
+        Err(_) => String::from("pFile sent to uspi_assertion_failed() is not valid UTF-8"),
     } };
     uspi_trace!("USPi Assertion Failed: Expression: {}, File: {}, Line: {}", expr, file, nLine);
 }
@@ -318,3 +333,5 @@ impl Usb {
             .start_kernel_timer(delay, handler)
     }
 }
+
+// unsafe impl core::marker::Send for &*mut core::ffi::c_void { }

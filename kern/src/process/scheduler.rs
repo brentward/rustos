@@ -103,6 +103,7 @@ impl GlobalScheduler {
 
         self.initialize_local_timer_interrupt();
         let mut tf = TrapFrame::default();
+        enable_fiq_interrupt();
         let proc_id = self.switch_to(&mut tf);
         let x_regs_ptr = tf.x.as_ptr() as usize;
         let q_regs_ptr = tf.q.as_ptr() as usize;

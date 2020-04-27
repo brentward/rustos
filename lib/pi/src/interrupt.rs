@@ -73,7 +73,7 @@ impl Controller {
 
     /// Enables the interrupt `int`.
     pub fn enable(&mut self, int: Interrupt) {
-        let index = int as usize;
+        let index = int as u32;
         if index < 32 {
             self.registers.enable[0].or_mask(1 << index);
         } else {
@@ -83,7 +83,7 @@ impl Controller {
 
     /// Disables the interrupt `int`.
     pub fn disable(&mut self, int: Interrupt) {
-        let index = int as usize;
+        let index = int as u32;
         if index < 32 {
             self.registers.disable[0].or_mask(1 << index);
         } else {
@@ -93,7 +93,7 @@ impl Controller {
 
     /// Returns `true` if `int` is pending. Otherwise, returns `false`.
     pub fn is_pending(&self, int: Interrupt) -> bool {
-        let index = int as usize;
+        let index = int as u32;
         if index < 32 {
             self.registers.pending[0].has_mask(1 << index)
         } else {
@@ -103,7 +103,7 @@ impl Controller {
 
     /// Enables the interrupt as FIQ interrupt
     pub fn enable_fiq(&mut self, int: Interrupt) {
-        let index = int as usize;
+        let index = int as u32;
         self.registers.fiq_control.write((1 << 7) | (index & 0x7f));
     }
 }

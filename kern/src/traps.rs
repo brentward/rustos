@@ -66,12 +66,16 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                     tf.elr += 4;
 
                 }
-                Syndrome::Svc(num) => handle_syscall(num, tf),
+                Syndrome::Svc(num) => {
+                    aarch64::enable_fiq_interrupt();
+                    handle_syscall(num, tf);
+                },
                 _ => (),
             }
         }
         Kind::Irq => {
             let core = aarch64::affinity();
+            aarch64::enable_fiq_interrupt();
             // let local_irq = percore::local_irq();
             if core == 0 {
                 let controller = Controller::new();
@@ -90,14 +94,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 }
             }
         }
-        Kind::Fiq => {
-            let controller = Controller::new();
-            for int in Interrupt::iter() {
-                if controller.is_pending(int) {
-                    GLOABAL_IRQ.invoke(int, tf)
-                }
-            }
-        }
+        Kind::Fiq => crate::FIQ.invoke((), tf),
         _ => (),
     }
 }
