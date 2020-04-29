@@ -137,8 +137,18 @@ impl phy::TxToken for TxToken {
 
 /// Creates and returns a new ethernet interface using `UsbEthernet` struct.
 pub fn create_interface() -> EthernetInterface<UsbEthernet> {
-    // Lab 5 2.B
-    unimplemented!("create_interface")
+    let device = UsbEthernet;
+    let hw_addr = USB.get_eth_addr();
+    let neighbor_cache = NeighborCache::new(BTreeMap::new());
+    let private_address = IpAddress::v4(169, 254, 32, 10);
+    let private_cidr = IpCidr::new(private_address, 16);
+    let local_address = IpAddress::v4(217, 0,0, 1);
+    let local_cidr = IpCidr::new(local_address, 8);
+    EthernetInterfaceBuilder::new(device)
+        .ethernet_addr(hw_addr)
+        .neighbor_cache(neighbor_cache)
+        .ip_addrs([private_cidr, local_cidr])
+        .finalize()
 }
 
 const PORT_MAP_SIZE: usize = 65536 / 64;
@@ -155,41 +165,79 @@ pub struct EthernetDriver {
 impl EthernetDriver {
     /// Creates a fresh ethernet driver.
     fn new() -> EthernetDriver {
-        // Lab 5 2.B
-        unimplemented!("new")
+        EthernetDriver {
+            socket_set: SocketSet::new(Vec::new()),
+            port_map: [0; PORT_MAP_SIZE],
+            ethernet: create_interface(),
+        }
     }
 
     /// Polls the ethernet interface.
     /// See also `smoltcp::iface::EthernetInterface::poll()`.
     fn poll(&mut self, timestamp: Instant) {
-        // Lab 5 2.B
-        unimplemented!("poll")
+        match self.ethernet.poll(&mut self.socket_set, timestamp) {
+            Ok(packets_processed) => {
+                if packets_processed {
+                    info!("EthernetDriver::poll() packets processed");
+                } else {
+                    info!("EthernetDriver::poll() no packets processed");
+                }
+            }
+            Err(e) => info!("EthernetDriver::poll() error: {:?}", e),
+        }
     }
 
     /// Returns an advisory wait time to call `poll()` the next time.
     /// See also `smoltcp::iface::EthernetInterface::poll_delay()`.
     fn poll_delay(&mut self, timestamp: Instant) -> Duration {
-        // Lab 5 2.B
-        unimplemented!("poll_delay")
+        match self.ethernet.poll_delay(&self.socket_set, timestamp) {
+            Some(delay) => delay.into(),
+            None => Duration::from_secs(0),
+        }
     }
 
     /// Marks a port as used. Returns `Some(port)` on success, `None` on failure.
     pub fn mark_port(&mut self, port: u16) -> Option<u16> {
-        // Lab 5 2.B
-        unimplemented!("mark_port")
+        if port != 0 {
+            let port_map_index = port as usize / 64;
+            let entry_bit_shift = port as u64 % 64;
+            if (self.port_map[port_map_index] & (1 << entry_bit_shift)) >> entry_bit_shift == 0 {
+                self.port_map[port_map_index] |= 1 << entry_bit_shift;
+                Some(port)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     /// Clears used bit of a port. Returns `Some(port)` on success, `None` on failure.
     pub fn erase_port(&mut self, port: u16) -> Option<u16> {
-        // Lab 5 2.B
-        unimplemented!("erase_port")
+        if port != 0 {
+            let port_map_index = port as usize / 64;
+            let entry_bit_shift = port as u64 % 64;
+            if (self.port_map[port_map_index] & (1 << entry_bit_shift)) >> entry_bit_shift == 1 {
+                self.port_map[port_map_index] &= !(1 << entry_bit_shift);
+                Some(port)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     /// Returns the first open port between the ephemeral port range 49152 ~ 65535.
     /// Note that this function does not mark the returned port.
     pub fn get_ephemeral_port(&mut self) -> Option<u16> {
-        // Lab 5 2.B
-        unimplemented!("get_ephemeral_port")
+        for port_map_index in 768usize..1024 {
+            let first_unset_bit = (!self.port_map[port_map_index]).trailing_zeros();
+            if first_unset_bit < 64 {
+                return Some((port_map_index as u16 * 64) + first_unset_bit as u16)
+            }
+        }
+        None
     }
 
     /// Finds a socket with a `SocketHandle`.
@@ -231,8 +279,15 @@ impl GlobalEthernetDriver {
     }
 
     pub fn poll(&self, timestamp: Instant) {
-        // Lab 5 2.B
-        unimplemented!("poll")
+        let core = aarch64::affinity();
+        assert_eq!(core, 0);
+        let lock_count = crate::percore::get_preemptive_counter();
+        assert!(lock_count > 0);
+        self.0
+            .lock()
+            .as_mut()
+            .expect("Uninitialized EthernetDriver")
+            .poll(timestamp)
     }
 
     pub fn poll_delay(&self, timestamp: Instant) -> Duration {
