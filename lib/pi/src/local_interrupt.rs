@@ -1,3 +1,5 @@
+use crate::common::IO_BASE;
+
 use core::time::Duration;
 
 use shim::const_assert_size;
@@ -6,7 +8,8 @@ use volatile::prelude::*;
 use volatile::{Volatile, Reserved};
 use aarch64::*;
 
-const INT_BASE: usize = 0x40000000;
+// const INT_BASE: usize = 0x40000000;
+const INT_BASE: usize = IO_BASE + 0x100_0000;
 
 /// Core interrupt sources (QA7: 4.10)
 #[derive(Copy, Clone, Debug, PartialEq)]
