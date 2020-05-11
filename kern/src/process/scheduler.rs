@@ -104,6 +104,7 @@ impl GlobalScheduler {
         self.initialize_local_timer_interrupt();
         let mut tf = TrapFrame::default();
         enable_fiq_interrupt();
+        trace!("SCHEDULER::start() enable_fiq_interrupt() core-{}", core);
         let proc_id = self.switch_to(&mut tf);
         let x_regs_ptr = tf.x.as_ptr() as usize;
         let q_regs_ptr = tf.q.as_ptr() as usize;
@@ -192,7 +193,8 @@ impl GlobalScheduler {
                 ldr lr, [x1, #240]
                 ldr x1, [x1, #8]
                 eret"
-                :: "r"(&tf as *const TrapFrame),  "r"(x_regs_ptr), "r"(q_regs_ptr),
+                :
+                : "r"(&tf as *const TrapFrame),  "r"(x_regs_ptr), "r"(q_regs_ptr),
                     "i"(KERN_STACK_BASE), "i"(KERN_STACK_SIZE)
                 : "x0", "x1", "x2"
                 : "volatile"
@@ -210,7 +212,7 @@ impl GlobalScheduler {
     /// Registers a timer handler with `Usb::start_kernel_timer` which will
     /// invoke `poll_ethernet` after 1 second.
     pub fn initialize_global_timer_interrupt(&self) {
-        USB.start_kernel_timer(Duration::from_secs(1), Some(poll_ethernet));
+        USB.start_kernel_timer(Duration::from_millis(1000), Some(poll_ethernet));
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);
         // timer::tick_in(TICK);
@@ -224,7 +226,11 @@ impl GlobalScheduler {
     /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
     /// every `TICK` duration, which is defined in `param.rs`.
     pub fn initialize_local_timer_interrupt(&self) {
-        local_tick_in(affinity(), TICK);
+        let core = affinity();
+        let mut local_controller = LocalController::new(core);
+        local_controller.enable_local_timer();
+        local_controller.tick_in(TICK);
+        // local_tick_in(affinity(), TICK);
         local_irq().register(LocalInterrupt::CntpnsIrq, Box::new(|tf|{
             let core = affinity();
             local_tick_in(core, TICK);
@@ -235,9 +241,9 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 32;
+        let proc_count: usize = 4;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib_rand") {
+            let process = match Process::load("/fib") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
@@ -262,16 +268,19 @@ impl GlobalScheduler {
     //     page[0..24].copy_from_slice(text);
     // }
 }
-//pub type TKernelTimerHandler = Option<
+//
+// pub type TKernelTimerHandler = Option<
 //     unsafe extern "C" fn(hTimer: TKernelTimerHandle, pParam: *mut c_void, pContext: *mut c_void),
 // >;
 /// Poll the ethernet driver and re-register a timer handler using
 /// `Usb::start_kernel_timer`.
 extern "C" fn poll_ethernet(_: TKernelTimerHandle, _: *mut c_void, _: *mut c_void) {
+    trace!("starting poll_ethernet()");
     ETHERNET.poll(Instant::from_millis(timer::current_time().as_millis() as i64));
     let delay = ETHERNET.poll_delay(
         Instant::from_millis(timer::current_time().as_millis() as i64)
     );
+    // let delay = Duration::from_millis(250);
     USB.start_kernel_timer(delay, Some(poll_ethernet));
 }
 

@@ -97,7 +97,7 @@ impl LocalController {
             core: core,
             registers: unsafe { &mut *(INT_BASE as *mut Registers) },
         };
-        local_controller.enable_local_timer();
+        // local_controller.enable_local_timer();
         local_controller
     }
 
@@ -115,7 +115,7 @@ impl LocalController {
 
     pub fn tick_in(&mut self, t: Duration) {
         let timer_frequency = unsafe { CNTFRQ_EL0.get() };
-        let ticks = timer_frequency / 1000 * t.as_millis() as u64;
+        let ticks = (timer_frequency * t.as_nanos() as u64) / 1000000000;
         unsafe {
             CNTP_TVAL_EL0.set(CNTP_TVAL_EL0::TVAL & ticks);
             CNTP_CTL_EL0.set(CNTP_CTL_EL0.get() & !CNTP_CTL_EL0::IMASK);

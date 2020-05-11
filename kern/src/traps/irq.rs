@@ -135,7 +135,7 @@ where
         let mut irq_handler_mutex = self.index(int).lock();
         match &mut *irq_handler_mutex {
             Some(handler) => handler(tf),
-            None => panic!("IrqHandlerRegistry::invoke() mutex has No IrqHandler"),
+            None => trace!("IrqHandlerRegistry::invoke() mutex has No IrqHandler"),
         }
     }
 }

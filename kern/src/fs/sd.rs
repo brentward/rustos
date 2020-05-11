@@ -32,7 +32,7 @@ extern "C" {
 
 #[no_mangle]
 pub extern "C" fn wait_micros(us: u32) {
-    spin_sleep(Duration::from_micros(us as u64 * 100));
+    spin_sleep(Duration::from_millis(us as u64));
 }
 // FIXME: Define a `#[no_mangle]` `wait_micros` function for use by `libsd`.
 // The `wait_micros` C signature is: `void wait_micros(unsigned int);`

@@ -78,9 +78,7 @@ mod inner {
         /// The caller should assure that this function is called only once
         /// during the lifetime of the kernel.
         pub unsafe fn initialize() -> Self {
-            info!("in USPi init");
             assert!(USPiInitialize() != 0);
-            info!("assert passed");
             USPi(())
         }
 
@@ -151,7 +149,7 @@ mod inner {
 pub use inner::USPi;
 
 unsafe fn layout(size: usize) -> Layout {
-    Layout::from_size_align_unchecked(size + core::mem::size_of::<usize>(), 16)
+    Layout::from_size_align_unchecked(size + 16, 16)
 }
 
 #[no_mangle]
@@ -161,7 +159,7 @@ fn malloc(size: u32) -> *mut c_void {
     // uspi_trace!("malloc layout: {:?}", layout);
     let ptr = unsafe { ALLOCATOR.alloc(layout) };
     // uspi_trace!("malloc ptr: {:?}", ptr);
-    let allocated = unsafe { ptr.offset(core::mem::size_of::<usize>() as isize) };
+    let allocated = unsafe { ptr.offset(16) };
     // uspi_trace!("malloc allocated: {:?}", allocated);
     let alloc_size = ptr as *mut usize;
     unsafe { *alloc_size = size as usize };
@@ -171,7 +169,7 @@ fn malloc(size: u32) -> *mut c_void {
 #[no_mangle]
 fn free(ptr: *mut c_void) {
     // uspi_trace!("free ptr: {:?}", ptr);
-    let alloc_size_ptr = unsafe { ptr.offset( 0 - core::mem::size_of::<usize>() as isize) };
+    let alloc_size_ptr = unsafe { ptr.offset( -16) };
     let alloc_size = alloc_size_ptr as *mut usize;
     let layout = unsafe { layout(*alloc_size) };
     // uspi_trace!("free layout: {:?}", layout);
@@ -181,33 +179,45 @@ fn free(ptr: *mut c_void) {
 #[no_mangle]
 pub fn TimerSimpleMsDelay(nMilliSeconds: u32) {
     // uspi_trace!("TimerSimpleMsDelay(nMilliSeconds: {})", nMilliSeconds);
-    let durration = Duration::from_millis(nMilliSeconds as u64);
+    // let durration = Duration::from_millis(nMilliSeconds as u64);
     // uspi_trace!("TimerSimpleMsDelay() durration: {:?})", durration);
-    pi::timer::spin_sleep(durration);
+    if nMilliSeconds > 0 {
+        pi::timer::spin_sleep(Duration::from_millis(nMilliSeconds as u64));
+    }
 }
 
 #[no_mangle]
 pub fn TimerSimpleusDelay(nMicroSeconds: u32) {
     // uspi_trace!("TimerSimpleusDelay(nMicroSeconds: {})", nMicroSeconds);
-    let durration = Duration::from_micros(nMicroSeconds as u64);
+    // let durration = Duration::from_micros(nMicroSeconds as u64);
     // uspi_trace!("TimerSimpleusDelay() durration: {:?})", durration);
-    pi::timer::spin_sleep(durration);
+    if nMicroSeconds > 0 {
+        pi::timer::spin_sleep(Duration::from_micros(nMicroSeconds as u64));
+    }
 }
 
 #[no_mangle]
 pub fn MsDelay(nMilliSeconds: u32) {
-    // uspi_trace!("MsDelay(nMilliSeconds: {})", nMilliSeconds);
-    let durration = Duration::from_millis(nMilliSeconds as u64);
-    // uspi_trace!("MsDelay() durration: {:?})", durration);
-    pi::timer::spin_sleep(durration);
+    // // uspi_trace!("MsDelay(nMilliSeconds: {})", nMilliSeconds);
+    // let durration = Duration::from_millis(nMilliSeconds as u64);
+    // // uspi_trace!("MsDelay() durration: {:?})", durration);
+    // pi::timer::spin_sleep(durration);
+    // TimerSimpleMsDelay(nMilliSeconds);
+    if nMilliSeconds > 0 {
+        pi::timer::spin_sleep(Duration::from_millis(nMilliSeconds as u64));
+    }
 }
 
 #[no_mangle]
 pub fn usDelay(nMicroSeconds: u32) {
-    // uspi_trace!("usDelay(nMicroSeconds: {})", nMicroSeconds);
-    let durration = Duration::from_millis(nMicroSeconds as u64);
-    // uspi_trace!("usDelay() durration: {:?})", durration);
-    pi::timer::spin_sleep(durration);
+    // // uspi_trace!("usDelay(nMicroSeconds: {})", nMicroSeconds);
+    // let durration = Duration::from_millis(nMicroSeconds as u64);
+    // // uspi_trace!("usDelay() durration: {:?})", durration);
+    // pi::timer::spin_sleep(durration);
+    // TimerSimpleusDelay(nMicroSeconds);
+    if nMicroSeconds > 0 {
+        pi::timer::spin_sleep(Duration::from_micros(nMicroSeconds as u64));
+    }
 }
 
 /// Registers `pHandler` to the kernel's IRQ handler registry.
@@ -219,32 +229,29 @@ pub fn usDelay(nMicroSeconds: u32) {
 #[no_mangle]
 pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *mut c_void) {
     let int = Interrupt::from(nIRQ as usize);
-    uspi_trace!("ConnectInterrupt() int: {:?}", int);
     let handler = pHandler.unwrap();
-    uspi_trace!("ConnectInterrupt() after handler_arc:");
+    // let param = Box::new(Mutex::new(pParam));
+    struct Param(*mut c_void);
+    unsafe impl Send for Param {};
+    unsafe impl Sync for Param {};
+    let param = Param(pParam);
 
     match int {
         Interrupt::Usb => {
-            uspi_trace!("ConnectInterrupt() matching Usb");
             let mut interrupt_controller = Controller::new();
-            uspi_trace!("ConnectInterrupt() new interrupt_controller");
             interrupt_controller.enable_fiq(int);
-            uspi_trace!("ConnetInterrupt() Usb after enable_fiq()");
-            let param_interrupt_arc = Arc::new(Unique::new(pParam).unwrap());
-            uspi_trace!("ConnetInterrupt() param_interrupt_arc: {:?}", param_interrupt_arc);
-            crate::FIQ.register((), Box::new(move |_tf|{
-                handler(param_interrupt_arc.as_ptr());
-            }));
+            // let param_interrupt_arc = Arc::new(Unique::new(pParam).unwrap());
+            // crate::FIQ.register((), Box::new(move |_tf|handler(param_interrupt_arc.clone().as_ptr())));
+            // let param = Param(pParam);
+            crate::FIQ.register((), Box::new(move |_tf|handler(param.0)));
         }
         Interrupt::Timer3 => {
             let mut interrupt_controller = Controller::new();
-            let param_interrupt_arc = Arc::new(Unique::new(pParam).unwrap());;
-            uspi_trace!("ConnetInterrupt() Timer3 before enable_fiq()");
             interrupt_controller.enable(int);
-            uspi_trace!("ConnetInterrupt() Timer3 after enable_fiq()");
-            crate::GLOABAL_IRQ.register(int, Box::new(move |_tf|{
-                handler(param_interrupt_arc.as_ptr());
-            }));
+            // let param_interrupt_arc = Arc::new(Unique::new(pParam).unwrap());;
+            // crate::GLOABAL_IRQ.register(int, Box::new(move |_tf|handler(param_interrupt_arc.clone().as_ptr())));
+            // let param = Param(pParam);
+            crate::GLOABAL_IRQ.register(int, Box::new(move |_tf|handler(param.0)));
         }
         int => panic!("FIQ is {:?}, only Timer3 and Usb supported", int),
     }
@@ -253,10 +260,10 @@ pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *
 /// Writes a log message from USPi using `uspi_trace!` macro.
 #[no_mangle]
 pub unsafe fn DoLogWrite(_pSource: *const u8, _Severity: u32, pMessage: *const u8) {
-    let message = unsafe { match cstring(pMessage) {
+    let message =  match cstring(pMessage) {
         Ok(message_string) => message_string,
         Err(_) => String::from("pMessage sent to DoLogWrite() is not valid UTF-8"),
-    } };
+    };
     uspi_trace!("[USPi Log] {}", message);
 }
 
@@ -284,14 +291,14 @@ pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8)
 #[no_mangle]
 pub unsafe fn uspi_assertion_failed(pExpr: *const u8, pFile: *const u8, nLine: u32) {
     // Lab 5 2.B
-    let expr = unsafe { match cstring(pExpr) {
+    let expr = match cstring(pExpr) {
         Ok(expr_string) => expr_string,
         Err(_) => String::from("pExpr sent to uspi_assertion_failed() is not valid UTF-8"),
-    } };
-    let file = unsafe { match cstring(pFile) {
+    };
+    let file = match cstring(pFile) {
         Ok(file_string) => file_string,
         Err(_) => String::from("pFile sent to uspi_assertion_failed() is not valid UTF-8"),
-    } };
+    };
     uspi_trace!("USPi Assertion Failed: Expression: {}, File: {}, Line: {}", expr, file, nLine);
 }
 
@@ -303,7 +310,6 @@ impl Usb {
     }
 
     pub fn initialize(&self) {
-        info!("in usb init");
         let mut inner = self.0.lock();
         if let None = *inner {
             *inner = Some(unsafe { USPi::initialize() });

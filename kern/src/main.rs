@@ -93,7 +93,7 @@ unsafe fn kmain() -> ! {
     }
     info!("yup");
     aarch64::disable_fiq_interrupt();
-    info!("fiq disabled");
+    info!("kmain() fiq disabled");
     init::initialize_app_cores();
 
     VMM.wait();

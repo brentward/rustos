@@ -68,19 +68,23 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 }
                 Syndrome::Svc(num) => {
                     aarch64::enable_fiq_interrupt();
+                    trace!("handle_exception() Syndrome::Svc enable_fiq_interrupt()");
                     handle_syscall(num, tf);
+                    trace!("handle_exception() Syndrome::Svc exit");
                 },
                 _ => (),
             }
         }
         Kind::Irq => {
-            let core = aarch64::affinity();
             aarch64::enable_fiq_interrupt();
+            let core = aarch64::affinity();
+            trace!("core-{} handle_exception() Kind::Irq enable_fiq_interrupt()", core);
             if core == 0 {
                 let controller = Controller::new();
                 for int in Interrupt::iter() {
                     if controller.is_pending(int) {
-                        GLOABAL_IRQ.invoke(int, tf)
+                        trace!("calling GLOBAL_IRQ::invoke() with {:?}", int);
+                        GLOABAL_IRQ.invoke(int, tf);
                     }
 
                 }
@@ -88,11 +92,17 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             let local_controller = LocalController::new(core);
             for local_int in LocalInterrupt::iter() {
                 if local_controller.is_pending(local_int) {
-                    percore::local_irq().invoke(local_int, tf)
+                    trace!("core-{} calling local_irq().invoke() with {:?}", core, local_int);
+                    percore::local_irq().invoke(local_int, tf);
                 }
             }
+            // aarch64::disable_fiq_interrupt();
+            trace!("core-{} exit Kind::Irq", core);
         }
-        Kind::Fiq => crate::FIQ.invoke((), tf),
+        Kind::Fiq => {
+            trace!("core-{} FIQ.invoke()", aarch64::affinity());
+            crate::FIQ.invoke((), tf);
+        },
         _ => (),
     }
 }

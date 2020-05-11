@@ -85,9 +85,9 @@ impl Controller {
     pub fn disable(&mut self, int: Interrupt) {
         let index = int as u32;
         if index < 32 {
-            self.registers.disable[0].or_mask(1 << index);
+            self.registers.disable[0].write(1 << index);
         } else {
-            self.registers.disable[1].or_mask(1 << index - 32);
+            self.registers.disable[1].write(1 << index - 32);
         }
     }
 
@@ -103,7 +103,8 @@ impl Controller {
 
     /// Enables the interrupt as FIQ interrupt
     pub fn enable_fiq(&mut self, int: Interrupt) {
+        self.disable(int);
         let index = int as u32;
-        self.registers.fiq_control.write((1 << 7) | (index & 0x7f));
+        self.registers.fiq_control.write((1 << 7) | (index));
     }
 }
