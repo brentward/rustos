@@ -32,6 +32,6 @@ smoltcp = { version = "0.6", default-features = false, features = [
 
 [dev-dependencies]
 shim = { path = "../lib/shim", features = ["alloc"] }
-
-[profile.release]
-debug = true
+#
+#[profile.release]
+#debug = true

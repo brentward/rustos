@@ -8,7 +8,7 @@ use core::mem;
 use core::time::Duration;
 
 use aarch64::*;
-use pi::local_interrupt::LocalInterrupt;
+use pi::local_interrupt::{LocalInterrupt, LocalController, local_tick_in};
 use smoltcp::time::Instant;
 use pi::{interrupt, timer};
 
@@ -20,6 +20,7 @@ use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::{TrapFrame, irq};
 use crate::{VMM, GLOABAL_IRQ, SCHEDULER, ETHERNET, USB};
+use crate::rng::RNG;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -76,8 +77,8 @@ impl GlobalScheduler {
                     tf.x[27]
                 );
                 return id;
-            } else {
-                unsafe { asm!("brk 1" :::: "volatile"); }
+            // } else {
+            //     unsafe { asm!("brk 1" :::: "volatile"); }
             }
 
             aarch64::wfi();
@@ -95,16 +96,105 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal
     /// conditions.
     pub fn start(&self) -> ! {
+        let core = affinity();
+        if core == 0 {
+            self.initialize_global_timer_interrupt();
+        }
+
+        self.initialize_local_timer_interrupt();
+        let mut tf = TrapFrame::default();
+        let proc_id = self.switch_to(&mut tf);
+        let x_regs_ptr = tf.x.as_ptr() as usize;
+        let q_regs_ptr = tf.q.as_ptr() as usize;
+        info!("SCHEDULER::start() core-{}/first-process={}", core, proc_id);
+        trace!("SCHEDULER::start() core-{}/tf={:?}", core, tf);
         unsafe {
             asm!(
-                "mov SP, $0 // move tf of the first process into SP
-                 bl context_restore
-                 adr x0, _start // store _start address in x0
-                 mov SP, x0 // move _start address into SP
-                 mov x0, xzr // zero out the register used
-                 eret"
-                 :: "r"(&*self.0.lock().as_mut().unwrap().processes[0].context)
-                 :: "volatile"
+                "mrs x0, MPIDR_EL1 // calcluate core stack: store register containing core affinity in x0
+                and x0, x0, #0xff // mask to get core_n
+                mov x1, $3 // move KERNEL_STACK_BASE into x1: 0x80_000
+                mov x2, $4 // move KERNEL_STACK_SIZE into x2: 0x10_000
+                msub x0, x0, x2, x1 // calculate stack for core and store in x0 (KERNEL_STACK_BASE - (core_n * KERNEL_STACK_SIZE)
+                str $1, [x0] // store address of tf.x into address at x0 (the calulated stack pointer)
+                str $2, [x0, #-8] // store address of tf.q into the address at x0-8
+                mov SP, $0 // move address of tf into the stack pointer
+                bl context_restore // restore tf to prepare it to run
+                mrs x0, MPIDR_EL1 // repeat steps to calculate core stack pointer
+                and x0, x0, #0xff // this is required because all of the registers are now set to
+                mov x1, $3 // the tf so our calcuated SP is overwriten
+                mov x2, $4
+                msub x0, x0, x2, x1
+                mov SP, x0 // set the stack pointer to the new calculated core stack pointer
+                ldr x1, [x0] // load the value in the address at x0 into x1, this contains the address tf.x
+                ldr x2, [x0, #-8] // load the value in the address at x0 - 8 into x2, this contains the address of tf.q
+                ldr q0, [x2] // restore q registers from the address of tf.q
+                ldr q1, [x2, #16]
+                ldr q2, [x2, #32]
+                ldr q3, [x2, #48]
+                ldr q4, [x2, #64]
+                ldr q5, [x2, #80]
+                ldr q6, [x2, #96]
+                ldr q7, [x2, #112]
+                ldr q8, [x2, #128]
+                ldr q9, [x2, #144]
+                ldr q10, [x2, #160]
+                ldr q11, [x2, #176]
+                ldr q12, [x2, #192]
+                ldr q13, [x2, #208]
+                ldr q14, [x2, #224]
+                ldr q15, [x2, #240]
+                ldr q16, [x2, #256]
+                ldr q17, [x2, #272]
+                ldr q18, [x2, #288]
+                ldr q19, [x2, #304]
+                ldr q20, [x2, #320]
+                ldr q21, [x2, #336]
+                ldr q22, [x2, #352]
+                ldr q23, [x2, #368]
+                ldr q24, [x2, #384]
+                ldr q25, [x2, #400]
+                ldr q26, [x2, #416]
+                ldr q27, [x2, #432]
+                ldr q28, [x2, #448]
+                ldr q29, [x2, #464]
+                ldr q30, [x2, #480]
+                ldr q31, [x2, #496]
+                ldr x0, [x1] // restore x registers from the address of tf.x
+                ldr x2, [x1, #16] // skip restoring x1 until last since it contains the address we are loading from
+                ldr x3, [x1, #24]
+                ldr x4, [x1, #32]
+                ldr x5, [x1, #40]
+                ldr x6, [x1, #48]
+                ldr x7, [x1, #56]
+                ldr x8, [x1, #64]
+                ldr x9, [x1, #72]
+                ldr x10, [x1, #80]
+                ldr x11, [x1, #88]
+                ldr x12, [x1, #96]
+                ldr x13, [x1, #104]
+                ldr x14, [x1, #112]
+                ldr x15, [x1, #120]
+                ldr x16, [x1, #128]
+                ldr x17, [x1, #136]
+                ldr x18, [x1, #144]
+                ldr x19, [x1, #152]
+                ldr x20, [x1, #160]
+                ldr x21, [x1, #168]
+                ldr x22, [x1, #176]
+                ldr x23, [x1, #184]
+                ldr x24, [x1, #192]
+                ldr x25, [x1, #200]
+                ldr x26, [x1, #208]
+                ldr x27, [x1, #216]
+                ldr x28, [x1, #224]
+                ldr x29, [x1, #232]
+                ldr lr, [x1, #240]
+                ldr x1, [x1, #8]
+                eret"
+                :: "r"(&tf as *const TrapFrame),  "r"(x_regs_ptr), "r"(q_regs_ptr),
+                    "i"(KERN_STACK_BASE), "i"(KERN_STACK_SIZE)
+                : "x0", "x1", "x2"
+                : "volatile"
             );
         }
         loop {}
@@ -119,49 +209,6 @@ impl GlobalScheduler {
     /// Registers a timer handler with `Usb::start_kernel_timer` which will
     /// invoke `poll_ethernet` after 1 second.
     pub fn initialize_global_timer_interrupt(&self) {
-        let mut controller = interrupt::Controller::new();
-        controller.enable(interrupt::Interrupt::Timer1);
-        timer::tick_in(TICK);
-        GLOABAL_IRQ.register(interrupt::Interrupt::Timer1, Box::new(|tf|{
-            timer::tick_in(TICK);
-            SCHEDULER.switch(State::Ready, tf);
-        }));
-    }
-
-    /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
-    /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
-    /// every `TICK` duration, which is defined in `param.rs`.
-    pub fn initialize_local_timer_interrupt(&self) {
-        // Lab 5 2.C
-        unimplemented!("initialize_local_timer_interrupt()")
-    }
-
-    /// Initializes the scheduler and add userspace processes to the Scheduler.
-    pub unsafe fn initialize(&self) {
-        *self.0.lock() = Some(Box::new(Scheduler::new()));
-
-        let process_0 = match Process::load("/sleep") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() process_0::load(): {:#?}", e),
-        };
-        // let process_1 = match Process::load("/fib") {
-        //     Ok(process) => process,
-        //     Err(e) => panic!("GlobalScheduler::initialize() process_1::load(): {:#?}", e),
-        // };
-        // let process_2 = match Process::load("/fib") {
-        //     Ok(process) => process,
-        //     Err(e) => panic!("GlobalScheduler::initialize() process_2::load(): {:#?}", e),
-        // };
-        // let process_3 = match Process::load("/fib") {
-        //     Ok(process) => process,
-        //     Err(e) => panic!("GlobalScheduler::initialize() process_3::load(): {:#?}", e),
-        // };
-
-        self.add(process_0);
-        // self.add(process_1);
-        // self.add(process_2);
-        // self.add(process_3);
-        self.initialize_global_timer_interrupt();
         // let mut controller = interrupt::Controller::new();
         // controller.enable(interrupt::Interrupt::Timer1);
         // timer::tick_in(TICK);
@@ -169,6 +216,31 @@ impl GlobalScheduler {
         //     timer::tick_in(TICK);
         //     SCHEDULER.switch(State::Ready, tf);
         // }));
+    }
+
+    /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
+    /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
+    /// every `TICK` duration, which is defined in `param.rs`.
+    pub fn initialize_local_timer_interrupt(&self) {
+        local_tick_in(affinity(), TICK);
+        local_irq().register(LocalInterrupt::CntpnsIrq, Box::new(|tf|{
+            let core = affinity();
+            local_tick_in(core, TICK);
+            SCHEDULER.switch(State::Ready, tf);
+        }));
+    }
+
+    /// Initializes the scheduler and add userspace processes to the Scheduler.
+    pub unsafe fn initialize(&self) {
+        *self.0.lock() = Some(Box::new(Scheduler::new()));
+        let proc_count: usize = 32;
+        for proc in 0..proc_count {
+            let process = match Process::load("/fib_rand") {
+                Ok(process) => process,
+                Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
+            };
+            self.add(process);
+        }
     }
 
     // The following method may be useful for testing Lab 4 Phase 3:

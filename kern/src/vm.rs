@@ -9,7 +9,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::mutex::Mutex;
 use crate::param::{KERNEL_MASK_BITS, USER_MASK_BITS};
-use crate::percore::{is_mmu_ready, set_mmu_ready};
+use crate::percore::{is_mmu_ready, set_mmu_ready, get_preemptive_counter};
 
 pub struct VMManager {
     kern_pt: Mutex<Option<KernPageTable>>,
@@ -110,6 +110,11 @@ impl VMManager {
 
         while self.ready_core_cnt.load(Ordering::Acquire) < pi::common::NCORES {
             nop()
+        }
+        if affinity() == 0 {
+            while get_preemptive_counter() != 0 {
+                nop()
+            }
         }
     }
 

@@ -9,7 +9,7 @@ mod panic;
 
 use crate::kmain;
 use crate::param::*;
-use crate::VMM;
+use crate::{VMM, SCHEDULER};
 use crate::console::kprintln;
 
 global_asm!(include_str!("init/vectors.s"));
@@ -132,10 +132,7 @@ unsafe fn kmain2() -> ! {
     let core_index = affinity();
     write_volatile(SPINNING_BASE.add(core_index), 0);
     VMM.wait();
-
-    loop {
-        // spin
-    }
+    SCHEDULER.start()
 }
 
 /// Wakes up each app core by writing the address of `init::start2`
@@ -145,8 +142,12 @@ pub unsafe fn initialize_app_cores() {
         let core_spin_ptr = SPINNING_BASE.add(core_index);
         write_volatile(core_spin_ptr, start2 as usize);
         asm::sev();
+    }
+    for core_index in 1..NCORES {
+        let core_spin_ptr = SPINNING_BASE.add(core_index);
         while read_volatile(core_spin_ptr as *const usize) !=0  {
             //spin
         }
     }
+
 }

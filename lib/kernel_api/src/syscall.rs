@@ -39,7 +39,7 @@ pub fn sleep(span: Duration) -> OsResult<Duration> {
 }
 
 pub fn time() -> Duration {
-    let mut ecode: u64 = 0;
+    let mut _ecode: u64 = 0;
     let mut elapsed_s: u64 = 0;
     let mut fractional_ns: u64 = 0;
 
@@ -48,7 +48,7 @@ pub fn time() -> Duration {
               mov $0, x0
               mov $1, x1
               mov $2, x7"
-             : "=r"(elapsed_s), "=r"(fractional_ns), "=r"(ecode)
+             : "=r"(elapsed_s), "=r"(fractional_ns), "=r"(_ecode)
              : "i"(NR_TIME)
              : "x0", "x1", "x7"
              : "volatile");
@@ -68,24 +68,25 @@ pub fn write(b: u8) {
     if !b.is_ascii() {
         panic!("{} is not valid ascii", b)
     }
-    let mut ecode: u64;
+    let mut _ecode: u64;
 
     unsafe {
         asm!("mov x0, $1
               svc $2
               mov $1, x7"
-             : "=r"(ecode)
+             : "=r"(_ecode)
              : "r"(b), "i"(NR_WRITE)
              : "x0", "x7"
              : "volatile");
     }
 }
 
-pub fn write_str(msg: &str) -> OsResult<usize> {
+// pub fn write_str(msg: &str) -> OsResult<usize> {
+pub fn write_str(msg: &str) {
     let msg_ptr = msg.as_ptr() as u64;
     let msg_len = msg.len() as u64;
-    let mut ecode: u64;
-    let mut len: u64;
+    let mut _ecode: u64;
+    let mut _len: u64;
 
     unsafe {
         asm!("mov x0, $2
@@ -93,24 +94,24 @@ pub fn write_str(msg: &str) -> OsResult<usize> {
               svc $4
               mov $0, x0
               mov $1, x7"
-             : "=r"(len), "=r"(ecode)
+             : "=r"(_len), "=r"(_ecode)
              : "r"(msg_ptr), "r"(msg_len), "i"(NR_WRITE_STR)
-             : "x0", "x7"
+             : "x0", "x1", "x7"
              : "volatile");
     }
 
-    err_or!(ecode, len as usize)
+    // err_or!(ecode, len as usize)
 }
 
 pub fn getpid() -> u64 {
-    let mut ecode: u64;
+    let mut _ecode: u64;
     let mut pid: u64;
 
     unsafe {
         asm!("svc $2
               mov $0, x0
               mov $1, x7"
-             : "=r"(pid), "=r"(ecode)
+             : "=r"(pid), "=r"(_ecode)
              : "i"(NR_GETPID)
              : "x0", "x7"
              : "volatile");
@@ -135,6 +136,56 @@ pub fn sbrk(size: usize) -> OsResult<*mut u8> {
     }
     let ptr = ptr as *mut u8;
     err_or!(ecode, ptr)
+}
+
+pub fn rand(min: u32, max: u32) -> u32 {
+    let mut _ecode: u64;
+    let mut rand: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              svc $4
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(rand), "=r"(_ecode)
+             : "r"(min as u64), "r"(max as u64), "i"(NR_RAND)
+             : "x0", "x1", "x7"
+             : "volatile");
+    }
+    rand as u32
+}
+
+pub fn rrand() -> u32 {
+    let mut _ecode: u64;
+    let mut rrand: u64;
+
+    unsafe {
+        asm!("svc $2
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(rrand), "=r"(_ecode)
+             : "i"(NR_RAND)
+             : "x0", "x7"
+             : "volatile");
+    }
+    rrand as u32
+}
+
+pub fn entropy() -> u32 {
+    let mut _ecode: u64;
+    let mut entropy: u64;
+
+    unsafe {
+        asm!("svc $2
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(entropy), "=r"(_ecode)
+             : "i"(NR_RAND)
+             : "x0", "x7"
+             : "volatile");
+    }
+    entropy as u32
 }
 
 pub fn sock_create() -> SocketDescriptor {
@@ -171,7 +222,7 @@ struct Console;
 
 impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        write_str(s)?;
+        write_str(s);
         Ok(())
     }
 }
