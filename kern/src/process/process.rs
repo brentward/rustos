@@ -37,7 +37,7 @@ pub struct Process {
     pub heap_page: VirtualAddr,
     // Lab 5 2.C
     ///// Socket handles held by the current process
-    // pub sockets: Vec<SocketHandle>,
+    pub sockets: Vec<SocketHandle>,
 }
 
 impl Process {
@@ -52,6 +52,7 @@ impl Process {
             None => return Err(OsError::NoMemory),
         };
         let vmap = Box::new(UserPageTable::new());
+        let sockets: Vec<SocketHandle> = Vec::new();
         Ok(Process {
             context: Box::new(TrapFrame::default()),
             stack,
@@ -60,6 +61,7 @@ impl Process {
             stack_base: Process::get_stack_base(),
             heap_ptr: VirtualAddr::from(0),
             heap_page: VirtualAddr::from(0),
+            sockets,
         })
     }
 

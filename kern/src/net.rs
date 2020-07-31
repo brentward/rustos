@@ -140,8 +140,8 @@ pub fn create_interface() -> EthernetInterface<UsbEthernet> {
     let device = UsbEthernet;
     let hw_addr = USB.get_eth_addr();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
-    let private_cidr = IpCidr::new(IpAddress::v4(169, 254, 32, 10), 16);
-    // let private_cidr = IpCidr::new(IpAddress::v4(192, 168, 254, 11), 24);
+    // let private_cidr = IpCidr::new(IpAddress::v4(169, 254, 32, 10), 16);
+    let private_cidr = IpCidr::new(IpAddress::v4(192, 168, 254, 11), 24);
     let local_cidr = IpCidr::new(IpAddress::v4(127, 0,0, 1), 8);
     EthernetInterfaceBuilder::new(device)
         .ethernet_addr(hw_addr)
@@ -205,7 +205,7 @@ impl EthernetDriver {
             },
             None => {
                 trace!("EthernetDriver::poll_delay() delay is None");
-                Duration::from_millis(10)
+                Duration::from_millis(0)
             },
         }
     }
