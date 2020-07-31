@@ -231,9 +231,9 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 12;
+        let proc_count: usize = 6;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib") {
+            let process = match Process::load("/fib_rand") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
@@ -358,7 +358,7 @@ impl Scheduler {
         match next_process_index {
             Some(index) => {
                 let mut next_process = self.processes.remove(index)
-                    .expect("Unexpected invalid index in Schedule.processes");
+                    .expect("Scheduler::switch_to(): Unexpected invalid index in Schedule.processes");
                 next_process.state = State::Running;
 
                 *tf = *next_process.context;
@@ -374,9 +374,10 @@ impl Scheduler {
     /// removes the dead process from the queue, drops the dead process's
     /// instance, and returns the dead process's process ID.
     fn kill(&mut self, tf: &mut TrapFrame) -> Option<Id> {
+        self.release_process_resources(tf);
         if self.schedule_out(State::Dead, tf) {
             let dead_process = self.processes.pop_back()
-                .expect("Unexpected empty Schedule.process");
+                .expect("Scheduler::kill(): Unexpected empty Schedule.process");
             let dead_process_id = dead_process.context.tpidr.clone();
             drop(dead_process_id);
             Some(dead_process_id)
@@ -388,7 +389,15 @@ impl Scheduler {
     /// Releases all process resources held by the current process such as sockets.
     fn release_process_resources(&mut self, tf: &mut TrapFrame) {
         // Lab 5 2.C
-        unimplemented!("release_process_resources")
+        let mut process = self.find_process(tf);
+        for handle in &process.sockets {
+            let port = ETHERNET.with_socket(*handle, |socket| socket.local_endpoint().port);
+            ETHERNET.critical(|ethernet|{
+                let _erase_port_result = ethernet.erase_port(port);
+                ethernet.release(*handle);
+                ethernet.prune();
+            });
+        }
     }
 
     /// Finds a process corresponding with tpidr saved in a trap frame.
