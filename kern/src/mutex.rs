@@ -86,11 +86,9 @@ impl<T> Mutex<T> {
             true => {
                 if self.owner.load(Ordering::Acquire) == this {
                     self.lock.store(false, Ordering::Release);
-                    percore::putcpu(this);
-                    //
-                    // if this != 0 || percore::get_preemptive_counter() !=0 {
-                    //     percore::putcpu(this);
-                    // }
+                    if this != 0 || percore::get_preemptive_counter() !=0 {
+                        percore::putcpu(this);
+                    }
                 }
 
             }
