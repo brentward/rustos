@@ -80,7 +80,9 @@ impl GlobalScheduler {
             // } else {
             //     unsafe { asm!("brk 1" :::: "volatile"); }
             }
-
+            // if affinity() != 0 {
+            //     aarch64::wfi();
+            // }
             aarch64::wfi();
         }
     }
@@ -106,6 +108,7 @@ impl GlobalScheduler {
         enable_fiq_interrupt();
         trace!("SCHEDULER::start() enable_fiq_interrupt() core-{}", core);
         let proc_id = self.switch_to(&mut tf);
+        // disable_fiq_interrupt();
         let x_regs_ptr = tf.x.as_ptr() as usize;
         let q_regs_ptr = tf.q.as_ptr() as usize;
         info!("SCHEDULER::start() core-{}/first-process={}", core, proc_id);
@@ -123,7 +126,7 @@ impl GlobalScheduler {
                 bl context_restore // restore tf to prepare it to run
                 mrs x0, MPIDR_EL1 // repeat steps to calculate core stack pointer
                 and x0, x0, #0xff // this is required because all of the registers are now set to
-                mov x1, $3 // the tf so our calcuated SP is overwriten
+                mov x1, $3 // the tf so our calculated SP is overwritten
                 mov x2, $4
                 msub x0, x0, x2, x1
                 mov SP, x0 // set the stack pointer to the new calculated core stack pointer
@@ -241,7 +244,7 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 4;
+        let proc_count: usize = 12;
         for proc in 0..proc_count {
             let process = match Process::load("/fib") {
                 Ok(process) => process,
@@ -280,7 +283,7 @@ extern "C" fn poll_ethernet(_: TKernelTimerHandle, _: *mut c_void, _: *mut c_voi
     let delay = ETHERNET.poll_delay(
         Instant::from_millis(timer::current_time().as_millis() as i64)
     );
-    // let delay = Duration::from_millis(250);
+    // info!("creating new poll_ethernet() handle for USB.start_kernel_timer()");
     USB.start_kernel_timer(delay, Some(poll_ethernet));
 }
 
@@ -326,28 +329,46 @@ impl Scheduler {
     /// If the `processes` queue is empty or there is no current process,
     /// returns `false`. Otherwise, returns `true`.
     fn schedule_out(&mut self, new_state: State, tf: &mut TrapFrame) -> bool {
-        if self.processes.len() == 0 {
-            false
-        } else {
-            let running_process_id = tf.tpidr;
-            let mut running_process_index = self.processes.len();
-            for (index, process) in self.processes.iter().enumerate() {
-                if process.context.tpidr == running_process_id {
-                    running_process_index = index;
-                    break;
-                }
-            };
-            if running_process_index == self.processes.len() {
-                false
-            } else {
-                let mut running_process = self.processes.remove(running_process_index)
+        let running_process_id = tf.tpidr;
+        let mut running_process_index = None;
+        for (index, process) in self.processes.iter().enumerate() {
+            if process.context.tpidr == running_process_id {
+                running_process_index = Some(index);
+                break;
+            }
+        };
+        match running_process_index {
+            Some(index) => {
+                let mut running_process = self.processes.remove(index)
                     .expect("Unexpected invalid index in Schedule.processes");
                 running_process.state = new_state;
                 running_process.context = Box::new(*tf);
                 self.processes.push_back(running_process);
+                // aarch64::sev();
                 true
             }
+            None => {
+                // aarch64::sev();
+                false
+            }
         }
+            // let mut running_process_index = self.processes.len();
+            // for (index, process) in self.processes.iter().enumerate() {
+            //     if process.context.tpidr == running_process_id {
+            //         running_process_index = index;
+            //         break;
+            //     }
+            // };
+            // if running_process_index == self.processes.len() {
+            //     false
+            // } else {
+            //     let mut running_process = self.processes.remove(running_process_index)
+            //         .expect("Unexpected invalid index in Schedule.processes");
+            //     running_process.state = new_state;
+            //     running_process.context = Box::new(*tf);
+            //     self.processes.push_back(running_process);
+            //     true
+            // }
     }
 
     /// Finds the next process to switch to, brings the next process to the
@@ -358,24 +379,36 @@ impl Scheduler {
     /// If there is no process to switch to, returns `None`. Otherwise, returns
     /// `Some` of the next process`s process ID.
     fn switch_to(&mut self, tf: &mut TrapFrame) -> Option<Id> {
-        let mut next_process_index = self.processes.len();
+        let mut next_process_index = None;
         for (index, process) in self.processes.iter_mut().enumerate() {
             if process.is_ready() {
-                next_process_index = index;
+                next_process_index = Some(index);
                 break
             }
         }
-        if next_process_index == self.processes.len() {
-            None
-        } else {
-            let mut next_process = self.processes.remove(next_process_index)
-                .expect("Unexpected invalid index in Schedule.processes");
-            next_process.state = State::Running;
+        match next_process_index {
+            Some(index) => {
+                let mut next_process = self.processes.remove(index)
+                    .expect("Unexpected invalid index in Schedule.processes");
+                next_process.state = State::Running;
 
-            *tf = *next_process.context;
-            self.processes.push_front(next_process);
-            Some(tf.tpidr)
+                *tf = *next_process.context;
+                self.processes.push_front(next_process);
+                Some(tf.tpidr)
+            }
+            None => None,
         }
+        // if next_process_index == self.processes.len() {
+        //     None
+        // } else {
+        //     let mut next_process = self.processes.remove(next_process_index)
+        //         .expect("Unexpected invalid index in Schedule.processes");
+        //     next_process.state = State::Running;
+        //
+        //     *tf = *next_process.context;
+        //     self.processes.push_front(next_process);
+        //     Some(tf.tpidr)
+        // }
     }
 
     /// Kills currently running process by scheduling out the current process

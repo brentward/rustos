@@ -57,7 +57,11 @@ impl Allocator {
                 return index
             }
         }
-        panic!("layout will cause memory address overflow");
+        panic!(
+            "layout will cause memory address overflow, size: {}, align: {}",
+            layout.size(),
+            layout.align()
+        );
     }
 }
 

@@ -70,7 +70,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                     aarch64::enable_fiq_interrupt();
                     trace!("handle_exception() Syndrome::Svc enable_fiq_interrupt()");
                     handle_syscall(num, tf);
-                    trace!("handle_exception() Syndrome::Svc exit");
+                    // aarch64::disable_fiq_interrupt();
                 },
                 _ => (),
             }
@@ -83,7 +83,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 let controller = Controller::new();
                 for int in Interrupt::iter() {
                     if controller.is_pending(int) {
-                        trace!("calling GLOBAL_IRQ::invoke() with {:?}", int);
+                        // info!("calling GLOBAL_IRQ::invoke() with {:?}", int);
                         GLOABAL_IRQ.invoke(int, tf);
                     }
 

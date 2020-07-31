@@ -76,24 +76,16 @@ unsafe fn kmain() -> ! {
     FILESYSTEM.initialize();
     VMM.initialize();
     SCHEDULER.initialize();
-    info!("enable fiq");
     aarch64::enable_fiq_interrupt();
     info!("USB init");
     USB.initialize();
-    info!("ETHERENET init");
-
+    info!("ETHERNET init");
     ETHERNET.initialize();
-    info!("is eth available?");
-
     assert!(USB.is_eth_available());
-    info!("sho nuf");
-    info!("is eth link up?");
     while !USB.is_eth_link_up() {
         // spin
     }
-    info!("yup");
     aarch64::disable_fiq_interrupt();
-    info!("kmain() fiq disabled");
     init::initialize_app_cores();
 
     VMM.wait();

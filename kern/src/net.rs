@@ -141,6 +141,7 @@ pub fn create_interface() -> EthernetInterface<UsbEthernet> {
     let hw_addr = USB.get_eth_addr();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let private_cidr = IpCidr::new(IpAddress::v4(169, 254, 32, 10), 16);
+    // let private_cidr = IpCidr::new(IpAddress::v4(192, 168, 254, 11), 24);
     let local_cidr = IpCidr::new(IpAddress::v4(127, 0,0, 1), 8);
     EthernetInterfaceBuilder::new(device)
         .ethernet_addr(hw_addr)
@@ -163,23 +164,6 @@ pub struct EthernetDriver {
 impl EthernetDriver {
     /// Creates a fresh ethernet driver.
     fn new() -> EthernetDriver {
-        // let server_socket = {
-        //     let tcp_rx_buffer = TcpSocketBuffer::new(Vec::new());
-        //     let tcp_tx_buffer = TcpSocketBuffer::new(Vec::new());
-        //     TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer)
-        // };
-        //
-        // let client_socket = {
-        //     let tcp_rx_buffer = TcpSocketBuffer::new(Vec::new());
-        //     let tcp_tx_buffer = TcpSocketBuffer::new(Vec::new());
-        //     TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer)
-        // };
-        //
-        // let mut socket_set_entries= Vec::new();
-        // let mut socket_set = SocketSet::new(socket_set_entries);
-        // let server_handle = socket_set.add(server_socket);
-        // let client_handle = socket_set.add(client_socket);
-
         EthernetDriver {
             socket_set: SocketSet::new(Vec::new()),
             port_map: [0; PORT_MAP_SIZE],
@@ -221,7 +205,7 @@ impl EthernetDriver {
             },
             None => {
                 trace!("EthernetDriver::poll_delay() delay is None");
-                Duration::from_micros(0)
+                Duration::from_millis(10)
             },
         }
     }
@@ -302,10 +286,9 @@ impl GlobalEthernetDriver {
 
     pub fn poll(&self, timestamp: Instant) {
         let core = aarch64::affinity();
-        trace!("GlobalEthernetDriver::poll() from core {}", core);
-        assert_eq!(core, 0);
         let lock_count = crate::percore::get_preemptive_counter();
-        trace!("GlobalEthernetDriver::poll() with lock_count {}", lock_count);
+        trace!("GlobalEthernetDriver::poll() from core_{} w lock_count {}", core, lock_count);
+        assert_eq!(core, 0);
         assert!(lock_count > 0);
         self.0
             .lock()
