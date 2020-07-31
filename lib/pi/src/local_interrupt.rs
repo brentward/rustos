@@ -97,7 +97,6 @@ impl LocalController {
             core: core,
             registers: unsafe { &mut *(INT_BASE as *mut Registers) },
         };
-        // local_controller.enable_local_timer();
         local_controller
     }
 

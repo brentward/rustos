@@ -244,8 +244,6 @@ unsafe fn cstring(cstr_ptr: *const u8) -> Result<String, Utf8Error> {
     Ok(String::from(from_utf8(slice)?))
 }
 
-
-
 #[no_mangle]
 pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8) {
     unimplemented!("You don't have to implement this")

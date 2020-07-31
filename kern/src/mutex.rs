@@ -45,7 +45,6 @@ impl<T> Mutex<T> {
                 if !self.lock.load(Ordering::Relaxed) {
                     self.lock.store(true, Ordering::Relaxed);
                     self.owner.store(this, Ordering::Relaxed);
-
                     Some(MutexGuard { lock: &self })
                 } else {
                     None
