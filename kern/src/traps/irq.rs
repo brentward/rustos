@@ -108,8 +108,7 @@ impl Index<()> for Fiq {
     type Output = IrqHandlerMutex;
 
     fn index(&self, _: ()) -> &IrqHandlerMutex {
-        // Lab 5 2.B
-        unimplemented!("FIQ Index")
+        &self.0
     }
 }
 
@@ -136,7 +135,7 @@ where
         let mut irq_handler_mutex = self.index(int).lock();
         match &mut *irq_handler_mutex {
             Some(handler) => handler(tf),
-            None => panic!("IrqHandlerRegistry::invoke() mutex has No IrqHandler"),
+            None => trace!("IrqHandlerRegistry::invoke() mutex has No IrqHandler"),
         }
     }
 }

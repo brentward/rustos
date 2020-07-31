@@ -5,6 +5,7 @@ use alloc::string::String;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::c_void;
 use core::slice;
+use core::str::{from_utf8, Utf8Error};
 use core::time::Duration;
 
 use pi::interrupt::{Controller, Interrupt};
@@ -146,42 +147,47 @@ pub use inner::USPi;
 
 unsafe fn layout(size: usize) -> Layout {
     Layout::from_size_align_unchecked(size + core::mem::size_of::<usize>(), 16)
+    // Layout::from_size_align_unchecked(size + 16, 16)
 }
 
 #[no_mangle]
 fn malloc(size: u32) -> *mut c_void {
-    // Lab 5 2.B
-    unimplemented!("malloc")
+    let layout = unsafe { layout(size as usize) };
+    let kernel_ptr = unsafe { ALLOCATOR.alloc(layout) };
+    let ptr = unsafe { kernel_ptr.offset(core::mem::size_of::<usize>() as isize) };
+    // let ptr = unsafe { kernel_ptr.offset(16) };
+    let ptr_size_ptr = kernel_ptr as *mut usize;
+    unsafe { *ptr_size_ptr = size as usize };
+    ptr as *mut c_void
 }
 
 #[no_mangle]
 fn free(ptr: *mut c_void) {
-    // Lab 5 2.B
-    unimplemented!("free")
+    let kernel_ptr = unsafe { ptr.offset( 0 - (core::mem::size_of::<usize>() as isize)) };
+    // let kernel_ptr = unsafe { ptr.offset(-16) };
+    let ptr_size_ptr = kernel_ptr as *mut usize;
+    let layout = unsafe { layout(*ptr_size_ptr) };
+    unsafe { ALLOCATOR.dealloc(kernel_ptr as *mut u8, layout) };
 }
 
 #[no_mangle]
 pub fn TimerSimpleMsDelay(nMilliSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("TimerSimpleMsDelay")
+    pi::timer::spin_sleep(Duration::from_millis(nMilliSeconds as u64));
 }
 
 #[no_mangle]
 pub fn TimerSimpleusDelay(nMicroSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("TimerSimpleusDelay")
+    pi::timer::spin_sleep(Duration::from_micros(nMicroSeconds as u64));
 }
 
 #[no_mangle]
 pub fn MsDelay(nMilliSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("MsDelay")
+    TimerSimpleMsDelay(nMilliSeconds);
 }
 
 #[no_mangle]
 pub fn usDelay(nMicroSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("usDelay")
+    TimerSimpleusDelay(nMicroSeconds);
 }
 
 /// Registers `pHandler` to the kernel's IRQ handler registry.
@@ -192,15 +198,50 @@ pub fn usDelay(nMicroSeconds: u32) {
 /// registry. Otherwise, register the handler to the global IRQ interrupt handler.
 #[no_mangle]
 pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *mut c_void) {
-    // Lab 5 2.B
-    unimplemented!("ConnectInterrupt")
+    let int = Interrupt::from(nIRQ as usize);
+    let handler = pHandler.unwrap();
+    struct Param(*mut c_void);
+    unsafe impl Send for Param {};
+    unsafe impl Sync for Param {};
+    let param = Param(pParam);
+
+    match int {
+        Interrupt::Usb => {
+            let mut interrupt_controller = Controller::new();
+            interrupt_controller.enable_fiq(int);
+            crate::FIQ.register((), Box::new(move |_tf|handler(param.0)));
+        }
+        Interrupt::Timer3 => {
+            let mut interrupt_controller = Controller::new();
+            interrupt_controller.enable(int);
+            crate::GLOABAL_IRQ.register(int, Box::new(move |_tf|handler(param.0)));
+        }
+        int => panic!("FIQ is {:?}, only Timer3 and Usb supported", int),
+    }
 }
 
 /// Writes a log message from USPi using `uspi_trace!` macro.
 #[no_mangle]
 pub unsafe fn DoLogWrite(_pSource: *const u8, _Severity: u32, pMessage: *const u8) {
-    // Lab 5 2.B
-    unimplemented!("DoLogWrite")
+    let message =  match cstring(pMessage) {
+        Ok(message_string) => message_string,
+        Err(_) => String::from("pMessage sent to DoLogWrite() is not valid UTF-8"),
+    };
+    uspi_trace!("[USPi Log] {}", message);
+}
+
+unsafe fn cstr_len(cstr_ptr: *const u8) -> usize {
+    let mut index = 0;
+    while *cstr_ptr.offset(index) != 0 {
+        index += 1;
+    }
+    index as usize
+}
+
+unsafe fn cstring(cstr_ptr: *const u8) -> Result<String, Utf8Error> {
+    let len = cstr_len(cstr_ptr);
+    let slice = slice::from_raw_parts(cstr_ptr, len);
+    Ok(String::from(from_utf8(slice)?))
 }
 
 #[no_mangle]
@@ -211,7 +252,15 @@ pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8)
 #[no_mangle]
 pub unsafe fn uspi_assertion_failed(pExpr: *const u8, pFile: *const u8, nLine: u32) {
     // Lab 5 2.B
-    unimplemented!("uspi_assertion_failed")
+    let expr = match cstring(pExpr) {
+        Ok(expr_string) => expr_string,
+        Err(_) => String::from("pExpr sent to uspi_assertion_failed() is not valid UTF-8"),
+    };
+    let file = match cstring(pFile) {
+        Ok(file_string) => file_string,
+        Err(_) => String::from("pFile sent to uspi_assertion_failed() is not valid UTF-8"),
+    };
+    uspi_trace!("USPi Assertion Failed: Expression: {}, File: {}, Line: {}", expr, file, nLine);
 }
 
 pub struct Usb(pub Mutex<Option<USPi>>);
