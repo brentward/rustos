@@ -77,12 +77,7 @@ impl GlobalScheduler {
                     tf.x[27]
                 );
                 return id;
-            // } else {
-            //     unsafe { asm!("brk 1" :::: "volatile"); }
             }
-            // if affinity() != 0 {
-            //     aarch64::wfi();
-            // }
             aarch64::wfi();
         }
     }
@@ -216,13 +211,6 @@ impl GlobalScheduler {
     /// invoke `poll_ethernet` after 1 second.
     pub fn initialize_global_timer_interrupt(&self) {
         USB.start_kernel_timer(Duration::from_millis(1000), Some(poll_ethernet));
-        // let mut controller = interrupt::Controller::new();
-        // controller.enable(interrupt::Interrupt::Timer1);
-        // timer::tick_in(TICK);
-        // GLOABAL_IRQ.register(interrupt::Interrupt::Timer1, Box::new(|tf|{
-        //     timer::tick_in(TICK);
-        //     SCHEDULER.switch(State::Ready, tf);
-        // }));
     }
 
     /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
@@ -233,7 +221,6 @@ impl GlobalScheduler {
         let mut local_controller = LocalController::new(core);
         local_controller.enable_local_timer();
         local_controller.tick_in(TICK);
-        // local_tick_in(affinity(), TICK);
         local_irq().register(LocalInterrupt::CntpnsIrq, Box::new(|tf|{
             let core = affinity();
             local_tick_in(core, TICK);
@@ -283,7 +270,6 @@ extern "C" fn poll_ethernet(_: TKernelTimerHandle, _: *mut c_void, _: *mut c_voi
     let delay = ETHERNET.poll_delay(
         Instant::from_millis(timer::current_time().as_millis() as i64)
     );
-    // info!("creating new poll_ethernet() handle for USB.start_kernel_timer()");
     USB.start_kernel_timer(delay, Some(poll_ethernet));
 }
 
@@ -352,23 +338,6 @@ impl Scheduler {
                 false
             }
         }
-            // let mut running_process_index = self.processes.len();
-            // for (index, process) in self.processes.iter().enumerate() {
-            //     if process.context.tpidr == running_process_id {
-            //         running_process_index = index;
-            //         break;
-            //     }
-            // };
-            // if running_process_index == self.processes.len() {
-            //     false
-            // } else {
-            //     let mut running_process = self.processes.remove(running_process_index)
-            //         .expect("Unexpected invalid index in Schedule.processes");
-            //     running_process.state = new_state;
-            //     running_process.context = Box::new(*tf);
-            //     self.processes.push_back(running_process);
-            //     true
-            // }
     }
 
     /// Finds the next process to switch to, brings the next process to the
@@ -398,17 +367,6 @@ impl Scheduler {
             }
             None => None,
         }
-        // if next_process_index == self.processes.len() {
-        //     None
-        // } else {
-        //     let mut next_process = self.processes.remove(next_process_index)
-        //         .expect("Unexpected invalid index in Schedule.processes");
-        //     next_process.state = State::Running;
-        //
-        //     *tf = *next_process.context;
-        //     self.processes.push_front(next_process);
-        //     Some(tf.tpidr)
-        // }
     }
 
     /// Kills currently running process by scheduling out the current process

@@ -83,7 +83,6 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 let controller = Controller::new();
                 for int in Interrupt::iter() {
                     if controller.is_pending(int) {
-                        // info!("calling GLOBAL_IRQ::invoke() with {:?}", int);
                         GLOABAL_IRQ.invoke(int, tf);
                     }
 

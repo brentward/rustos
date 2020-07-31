@@ -2,14 +2,11 @@
 
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::sync::Arc;
-use alloc::rc::Rc;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::c_void;
 use core::slice;
 use core::str::{from_utf8, Utf8Error};
 use core::time::Duration;
-// use core::ptr::Unique;
 
 use pi::interrupt::{Controller, Interrupt};
 use pi::timer::spin_sleep;
@@ -17,10 +14,10 @@ use smoltcp::wire::EthernetAddress;
 
 use crate::mutex::Mutex;
 use crate::net::Frame;
-use crate::traps::irq::{IrqHandlerRegistry, IrqHandler};
+use crate::traps::irq::IrqHandlerRegistry;
 use crate::ALLOCATOR;
 
-const DEBUG_USPI: bool = true;
+const DEBUG_USPI: bool = false;
 pub macro uspi_trace {
     () => (if DEBUG_USPI { trace!("\n") } ),
     ($fmt:expr) => (if DEBUG_USPI { trace!(concat!($fmt, "\n")) }),
@@ -211,14 +208,12 @@ pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *
     match int {
         Interrupt::Usb => {
             let mut interrupt_controller = Controller::new();
-            info!("register Usb");
             interrupt_controller.enable_fiq(int);
             crate::FIQ.register((), Box::new(move |_tf|handler(param.0)));
         }
         Interrupt::Timer3 => {
             let mut interrupt_controller = Controller::new();
             interrupt_controller.enable(int);
-            info!("register Timer3");
             crate::GLOABAL_IRQ.register(int, Box::new(move |_tf|handler(param.0)));
         }
         int => panic!("FIQ is {:?}, only Timer3 and Usb supported", int),
