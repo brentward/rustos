@@ -44,8 +44,6 @@ impl Allocator {
             end,
             bins,
         }
-        // let _256k_alloc = unsafe { allocator.alloc(Layout::from_size_align_unchecked(1 << 18, 16)) };
-        // allocator
     }
 
     fn bin_size(index: usize) -> usize {
