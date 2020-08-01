@@ -146,16 +146,16 @@ mod inner {
 pub use inner::USPi;
 
 unsafe fn layout(size: usize) -> Layout {
-    Layout::from_size_align_unchecked(size + core::mem::size_of::<usize>(), 16)
-    // Layout::from_size_align_unchecked(size + 16, 16)
+    // Layout::from_size_align_unchecked(size + core::mem::size_of::<usize>(), 16)
+    Layout::from_size_align_unchecked(size + 16, 16)
 }
 
 #[no_mangle]
 fn malloc(size: u32) -> *mut c_void {
     let layout = unsafe { layout(size as usize) };
     let kernel_ptr = unsafe { ALLOCATOR.alloc(layout) };
-    let ptr = unsafe { kernel_ptr.offset(core::mem::size_of::<usize>() as isize) };
-    // let ptr = unsafe { kernel_ptr.offset(16) };
+    // let ptr = unsafe { kernel_ptr.offset(core::mem::size_of::<usize>() as isize) };
+    let ptr = unsafe { kernel_ptr.offset(16) };
     let ptr_size_ptr = kernel_ptr as *mut usize;
     unsafe { *ptr_size_ptr = size as usize };
     ptr as *mut c_void
@@ -163,8 +163,8 @@ fn malloc(size: u32) -> *mut c_void {
 
 #[no_mangle]
 fn free(ptr: *mut c_void) {
-    let kernel_ptr = unsafe { ptr.offset( 0 - (core::mem::size_of::<usize>() as isize)) };
-    // let kernel_ptr = unsafe { ptr.offset(-16) };
+    // let kernel_ptr = unsafe { ptr.offset( 0 - (core::mem::size_of::<usize>() as isize)) };
+    let kernel_ptr = unsafe { ptr.offset(-16) };
     let ptr_size_ptr = kernel_ptr as *mut usize;
     let layout = unsafe { layout(*ptr_size_ptr) };
     unsafe { ALLOCATOR.dealloc(kernel_ptr as *mut u8, layout) };
