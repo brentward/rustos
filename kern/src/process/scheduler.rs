@@ -78,7 +78,7 @@ impl GlobalScheduler {
                 );
                 return id;
             }
-            aarch64::wfi();
+            aarch64::wfe();
         }
     }
 
@@ -103,7 +103,7 @@ impl GlobalScheduler {
         enable_fiq_interrupt();
         trace!("SCHEDULER::start() enable_fiq_interrupt() core-{}", core);
         let proc_id = self.switch_to(&mut tf);
-        // disable_fiq_interrupt();
+        disable_fiq_interrupt();
         let x_regs_ptr = tf.x.as_ptr() as usize;
         let q_regs_ptr = tf.q.as_ptr() as usize;
         info!("SCHEDULER::start() core-{}/first-process={}", core, proc_id);
@@ -231,9 +231,9 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 6;
+        let proc_count: usize = 8;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib_rand") {
+            let process = match Process::load("/fib") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
@@ -330,11 +330,11 @@ impl Scheduler {
                 running_process.state = new_state;
                 running_process.context = Box::new(*tf);
                 self.processes.push_back(running_process);
-                // aarch64::sev();
+                aarch64::sev();
                 true
             }
             None => {
-                // aarch64::sev();
+                aarch64::sev();
                 false
             }
         }

@@ -11,7 +11,7 @@ use aarch64;
 use smoltcp::socket::SocketHandle;
 
 use crate::param::*;
-use crate::process::{Stack, State};
+use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::vm::*;
 use crate::FILESYSTEM;
@@ -26,8 +26,6 @@ pub type Id = u64;
 pub struct Process {
     /// The saved trap frame of a process.
     pub context: Box<TrapFrame>,
-    /// The memory allocation used for the process's stack.
-    pub stack: Stack,
     /// The page table describing the Virtual Memory of the process
     pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
@@ -47,15 +45,10 @@ impl Process {
     /// If enough memory could not be allocated to start the process, returns
     /// `Err(OsError)`. Otherwise returns `Ok` of the new `Process`.
     pub fn new() -> OsResult<Process> {
-        let stack = match Stack::new() {
-            Some(stack) => stack,
-            None => return Err(OsError::NoMemory),
-        };
         let vmap = Box::new(UserPageTable::new());
         let sockets: Vec<SocketHandle> = Vec::new();
         Ok(Process {
             context: Box::new(TrapFrame::default()),
-            stack,
             vmap,
             state: State::Ready,
             stack_base: Process::get_stack_base(),
@@ -86,7 +79,6 @@ impl Process {
             aarch64::SPSR_EL1::D |
             aarch64::SPSR_EL1::A |
             aarch64::SPSR_EL1::F;
-        // FIXME: Set trapframe for the process.
         Ok(p)
     }
 
@@ -98,7 +90,9 @@ impl Process {
         use core::ops::AddAssign;
 
         let mut p = Process::new()?;
-        let _stack_page = p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
+        for page in 0..USER_STACK_PAGE_COUNT {
+            let _stack_page = p.vmap.alloc(Process::get_stack_base() + VirtualAddr::from(page * Page::SIZE), PagePerm::RW);
+        }
         let pn = pn.as_ref();
         let entry = FILESYSTEM.open(pn)?;
 
@@ -143,7 +137,7 @@ impl Process {
     /// Returns the `VirtualAddr` represents the top of the user process's
     /// stack.
     pub fn get_stack_top() -> VirtualAddr {
-        VirtualAddr::from(USER_STACK_BASE + (Page::SIZE - 16))
+        VirtualAddr::from(USER_STACK_BASE + (USER_STACK_SIZE - 16))
     }
 
     /// Returns `true` if this process is ready to be scheduled.

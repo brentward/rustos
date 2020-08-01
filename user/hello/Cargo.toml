@@ -1,5 +1,5 @@
 [package]
-name = "fib"
+name = "hello"
 version = "0.1.0"
 authors = [
     "Sergio Benitez <sb@sergio.bz>",
@@ -14,7 +14,6 @@ edition = "2018"
 memcpy = true
 
 [dependencies]
-aarch64 = { path = "../../lib/aarch64/" }
 kernel_api = { path = "../../lib/kernel_api" }
 bw_allocator = { path = "../../lib/bw_allocator" }
 shim = { path = "../../lib/shim", features = ["no_std"] }

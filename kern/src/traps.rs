@@ -70,7 +70,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                     aarch64::enable_fiq_interrupt();
                     trace!("handle_exception() Syndrome::Svc enable_fiq_interrupt()");
                     handle_syscall(num, tf);
-                    // aarch64::disable_fiq_interrupt();
+                    aarch64::disable_fiq_interrupt();
                 },
                 _ => (),
             }
@@ -95,7 +95,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                     percore::local_irq().invoke(local_int, tf);
                 }
             }
-            // aarch64::disable_fiq_interrupt();
+            aarch64::disable_fiq_interrupt();
             trace!("core-{} exit Kind::Irq", core);
         }
         Kind::Fiq => {

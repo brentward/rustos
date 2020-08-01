@@ -18,7 +18,11 @@ const_assert_eq!(
     USER_IMG_BASE,
     ((1 << USER_MASK_BITS) - 1) << (64 - USER_MASK_BITS)
 );
-pub const USER_STACK_BASE: usize = core::usize::MAX & PAGE_MASK; //0xffff_ffff_ffff_0000
+pub const USER_STACK_PAGE_COUNT: usize = 4;
+pub const USER_STACK_SIZE: usize = PAGE_SIZE * USER_STACK_PAGE_COUNT;
+pub const USER_STACK_MASK: usize = !(USER_STACK_SIZE - 1);
+pub const USER_STACK_BASE: usize = core::usize::MAX & USER_STACK_MASK; //0xffff_ffff_fffc_0000
+// pub const USER_STACK_BASE: usize = core::usize::MAX & PAGE_MASK; //0xffff_ffff_ffff_0000
 pub const USER_MAX_VM_SIZE: usize = 0x4000_0000;
 const_assert_eq!(USER_IMG_BASE.wrapping_add(USER_MAX_VM_SIZE), 0);
 
