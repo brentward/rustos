@@ -41,3 +41,7 @@ pub const USPI_TIMER_HZ: usize = 10;
 // Match this value with `USPI_FRAME_BUFFER_SIZE` in `uspi.h`
 pub const USPI_FRAME_BUFFER_SIZE: u32 = 1600;
 pub const MTU: u32 = 1500;
+// pub const IP_ADDR: [u8; 4] = [192, 168, 254, 11];
+// pub const SUBNET_MASK: u8 = 24;
+pub const IP_ADDR: [u8; 4] = [127, 0, 0, 1];
+pub const SUBNET_MASK: u8 = 16;

@@ -16,7 +16,7 @@ use smoltcp::time::Instant;
 use smoltcp::wire::{IpAddress, IpCidr};
 
 use crate::mutex::Mutex;
-use crate::param::MTU;
+use crate::param::{MTU, IP_ADDR, SUBNET_MASK};
 use crate::USB;
 
 // We always use owned buffer as internal storage
@@ -140,7 +140,16 @@ pub fn create_interface() -> EthernetInterface<UsbEthernet> {
     let device = UsbEthernet;
     let hw_addr = USB.get_eth_addr();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
-    let private_cidr = IpCidr::new(IpAddress::v4(169, 254, 32, 10), 16);
+    let private_cidr = IpCidr::new(
+        IpAddress::v4(
+            IP_ADDR[0],
+            IP_ADDR[1],
+            IP_ADDR[2],
+            IP_ADDR[3],
+        ),
+        SUBNET_MASK
+    );
+    // let private_cidr = IpCidr::new(IpAddress::v4(169, 254, 32, 10), 16);
     // let private_cidr = IpCidr::new(IpAddress::v4(192, 168, 254, 11), 24);
     let local_cidr = IpCidr::new(IpAddress::v4(127, 0,0, 1), 8);
     EthernetInterfaceBuilder::new(device)
@@ -237,7 +246,7 @@ impl EthernetDriver {
     /// Returns the first open port between the ephemeral port range 49152 ~ 65535.
     /// Note that this function does not mark the returned port.
     pub fn get_ephemeral_port(&mut self) -> Option<u16> {
-        for port_map_index in 768usize..1024 {
+        for port_map_index in 768..1024 {
             let first_unset_bit = (!self.port_map[port_map_index]).trailing_zeros();
             if first_unset_bit < 64 {
                 return Some((port_map_index as u16 * 64) + first_unset_bit as u16)

@@ -150,7 +150,7 @@ impl Process {
     ///
     ///     If the process is currently waiting, the corresponding event
     ///     function is polled to determine if the event being waiting for has
-    ///     occured. If it has, the state is switched to `Ready` and this
+    ///     occurred. If it has, the state is switched to `Ready` and this
     ///     function returns `true`.
     ///
     /// Returns `false` in all other cases.

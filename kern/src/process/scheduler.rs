@@ -231,9 +231,9 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 8;
+        let proc_count: usize = 4;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib") {
+            let process = match Process::load("/fib_rand") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
@@ -334,7 +334,6 @@ impl Scheduler {
                 true
             }
             None => {
-                aarch64::sev();
                 false
             }
         }
