@@ -76,7 +76,7 @@ pub fn write(b: u8) {
               mov $1, x7"
              : "=r"(_ecode)
              : "r"(b), "i"(NR_WRITE)
-             : "x0", "x7"
+             : "x7"
              : "volatile");
     }
 }
@@ -96,7 +96,7 @@ pub fn write_str(msg: &str) {
               mov $1, x7"
              : "=r"(_len), "=r"(_ecode)
              : "r"(msg_ptr), "r"(msg_len), "i"(NR_WRITE_STR)
-             : "x0", "x1", "x7"
+             : "x0", "x7"
              : "volatile");
     }
 
@@ -150,7 +150,7 @@ pub fn rand(min: u32, max: u32) -> u32 {
               mov $1, x7"
              : "=r"(rand), "=r"(_ecode)
              : "r"(min as u64), "r"(max as u64), "i"(NR_RAND)
-             : "x0", "x1", "x7"
+             : "x0", "x7"
              : "volatile");
     }
     rand as u32
@@ -189,33 +189,123 @@ pub fn entropy() -> u32 {
 }
 
 pub fn sock_create() -> SocketDescriptor {
-    // Lab 5 2.D
-    unimplemented!("sock_create")
+    let mut _ecode: u64;
+    let mut sid: u64;
+
+    unsafe {
+        asm!("svc $2
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(sid), "=r"(_ecode)
+             : "i"(NR_SOCK_CREATE)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    SocketDescriptor(sid)
 }
 
 pub fn sock_status(descriptor: SocketDescriptor) -> OsResult<SocketStatus> {
-    // Lab 5 2.D
-    unimplemented!("sock_status")
+    let mut ecode: u64;
+    let mut is_active: bool;
+    let mut is_listening: bool;
+    let mut can_send: bool;
+    let mut can_recv: bool;
+
+    unsafe {
+        asm!("mov x0, $5
+              svc $6
+              mov $0, x0
+              mov $1, x1
+              mov $2, x2
+              mov $3, x3
+              mov $4, x7"
+             : "=r"(is_active), "=r"(is_listening), "=r"(can_send), "=r"(can_recv), "=r"(ecode)
+             : "r"(descriptor.raw()), "i"(NR_SOCK_STATUS)
+             : "x0", "x1", "x2", "x3", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode,  SocketStatus { is_active, is_listening, can_send, can_recv })
 }
 
 pub fn sock_connect(descriptor: SocketDescriptor, addr: IpAddr) -> OsResult<()> {
-    // Lab 5 2.D
-    unimplemented!("sock_connect")
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              mov x1, $2
+              mov x2, $3
+              svc $4
+              mov $0, x7"
+             : "=r"(ecode)
+             : "r"(descriptor.raw()), "r"(addr.ip), "r"(addr.port), "i"(NR_SOCK_CONNECT)
+             : "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, ())
 }
 
 pub fn sock_listen(descriptor: SocketDescriptor, local_port: u16) -> OsResult<()> {
-    // Lab 5 2.D
-    unimplemented!("sock_listen")
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              mov x1, $2
+              svc $3
+              mov $0, x7"
+             : "=r"(ecode)
+             : "r"(descriptor.raw()), "r"(local_port), "i"(NR_SOCK_LISTEN)
+             : "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, ())
 }
 
 pub fn sock_send(descriptor: SocketDescriptor, buf: &[u8]) -> OsResult<usize> {
-    // Lab 5 2.D
-    unimplemented!("sock_send")
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut bytes: usize;
+    let len = buf.len();
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              svc $5
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(bytes), "=r"(ecode)
+             : "r"(descriptor.raw()), "r"(buf_ptr), "r"(len), "i"(NR_SOCK_SEND)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, bytes)
 }
 
 pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize> {
-    // Lab 5 2.D
-    unimplemented!("sock_recv")
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut bytes: usize;
+    let len = buf.len();
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              svc $5
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(bytes), "=r"(ecode)
+             : "r"(descriptor.raw()), "r"(buf_ptr), "r"(len), "i"(NR_SOCK_RECV)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, bytes)
 }
 
 struct Console;

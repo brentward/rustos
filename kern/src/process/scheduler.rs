@@ -231,9 +231,9 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 4;
+        let proc_count: usize = 1;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib_rand") {
+            let process = match Process::load("/echo_1024") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
@@ -389,10 +389,41 @@ impl Scheduler {
     fn release_process_resources(&mut self, tf: &mut TrapFrame) {
         // Lab 5 2.C
         let mut process = self.find_process(tf);
+        // ETHERNET.critical(|ethernet|{
+        //     for handle in &process.sockets {
+        //         let port = ethernet.get_socket(*handle).local_endpoint().port;
+        //         match ethernet.erase_port(port) {
+        //             Some(port) => trace!(
+        //                 "Scheduler::release_process_resources() pid {} released port {}",
+        //                 process.context.tpidr,
+        //                 port
+        //             ),
+        //             None => panic!(
+        //                 "Scheduler::release_process_resources() pid {} failed to release port {}",
+        //                 process.context.tpidr,
+        //                 port
+        //             ),
+        //         };
+        //
+        //     }
+        //     ethernet.release(*handle);
+        //     ethernet.prune();
+        // });
         for handle in &process.sockets {
             let port = ETHERNET.with_socket(*handle, |socket| socket.local_endpoint().port);
             ETHERNET.critical(|ethernet|{
-                let _erase_port_result = ethernet.erase_port(port);
+                match ethernet.erase_port(port) {
+                    Some(port) => info!(
+                        "Scheduler::release_process_resources() pid {} released port {}",
+                        process.context.tpidr,
+                        port
+                    ),
+                    None => info!(
+                        "Scheduler::release_process_resources() pid {} failed to release port {}",
+                        process.context.tpidr,
+                        port
+                    ),
+                };
                 ethernet.release(*handle);
                 ethernet.prune();
             });

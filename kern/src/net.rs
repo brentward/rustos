@@ -16,7 +16,7 @@ use smoltcp::time::Instant;
 use smoltcp::wire::{IpAddress, IpCidr};
 
 use crate::mutex::Mutex;
-use crate::param::{MTU, IP_ADDR, SUBNET_MASK};
+use crate::param::{USPI_FRAME_BUFFER_SIZE, MTU, IP_ADDR, SUBNET_MASK};
 use crate::USB;
 
 // We always use owned buffer as internal storage
@@ -26,7 +26,7 @@ pub type EthernetInterface<T> = smoltcp::iface::EthernetInterface<'static, 'stat
 
 /// 8-byte aligned `u8` slice.
 #[repr(align(8))]
-struct FrameBuf([u8; MTU as usize]);
+struct FrameBuf([u8; USPI_FRAME_BUFFER_SIZE as usize]);
 
 /// A fixed size buffer with length tracking functionality.
 pub struct Frame {
@@ -46,13 +46,13 @@ impl fmt::Debug for Frame {
 impl Frame {
     pub fn new() -> Self {
         Frame {
-            buf: Box::new(FrameBuf([0; MTU as usize])),
+            buf: Box::new(FrameBuf([0; USPI_FRAME_BUFFER_SIZE as usize])),
             len: MTU,
         }
     }
 
     pub fn as_ptr(&self) -> *const u8 {
-        self.buf.0.as_ptr()
+        self.buf.0.as_ptr() as *const u8
     }
 
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
