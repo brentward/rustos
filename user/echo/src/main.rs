@@ -26,7 +26,6 @@ fn main() {
         let mut s = String::new();
         write!(s, "Terminating with error: {:?}\r\n", error);
         print!("{}", s);
-        // print!("Terminating with error: {:?}\r\n", error);
     }
 }
 
@@ -38,16 +37,14 @@ fn main_inner() -> OsResult<!> {
         let mut s = String::new();
         write!(s, "Waiting for {:?}: {:?} to be able to send.\r\n", socket, status);
         print!("{}", s);
-        // print!("Waiting for socket\n\n");
         let _sleep_duration = sleep(Duration::from_secs(1))?;
         status = sock_status(socket)?;
     }
     let message = "Welcome to Echo server hosted on RustOS!\r\n";
-    let _bytes_send = sock_send(socket, message.as_bytes())?;
+    let _bytes_sent = sock_send(socket, message.as_bytes())?;
     loop {
-        let mut buf = Vec::new();
-        // let mut buf = [0u8; 1500];
-        let _bytes_recv = sock_recv(socket, &mut buf)?;
+        let mut buf = [0u8; 1024];
+        let _bytes_recvd = sock_recv(socket, &mut buf)?;
         let in_message = core::str::from_utf8(&buf).map_err(|_| OsError::IoErrorInvalidData)?;
         print!("{}", in_message);
         let _bytes_sent = sock_send(socket, &buf)?;
