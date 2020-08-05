@@ -16,7 +16,7 @@ use smoltcp::time::Instant;
 use smoltcp::wire::{IpAddress, IpCidr};
 
 use crate::mutex::Mutex;
-use crate::param::{USPI_FRAME_BUFFER_SIZE, MTU, IP_ADDR, SUBNET_MASK};
+use crate::param::{MTU, IP_ADDR, SUBNET_MASK};
 use crate::USB;
 
 // We always use owned buffer as internal storage
@@ -26,7 +26,7 @@ pub type EthernetInterface<T> = smoltcp::iface::EthernetInterface<'static, 'stat
 
 /// 8-byte aligned `u8` slice.
 #[repr(align(8))]
-struct FrameBuf([u8; USPI_FRAME_BUFFER_SIZE as usize]);
+struct FrameBuf([u8; MTU as usize]);
 
 /// A fixed size buffer with length tracking functionality.
 pub struct Frame {
@@ -46,13 +46,13 @@ impl fmt::Debug for Frame {
 impl Frame {
     pub fn new() -> Self {
         Frame {
-            buf: Box::new(FrameBuf([0; USPI_FRAME_BUFFER_SIZE as usize])),
+            buf: Box::new(FrameBuf([0; MTU as usize])),
             len: MTU,
         }
     }
 
     pub fn as_ptr(&self) -> *const u8 {
-        self.buf.0.as_ptr() as *const u8
+        self.buf.0.as_ptr()
     }
 
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
@@ -149,8 +149,6 @@ pub fn create_interface() -> EthernetInterface<UsbEthernet> {
         ),
         SUBNET_MASK
     );
-    // let private_cidr = IpCidr::new(IpAddress::v4(169, 254, 32, 10), 16);
-    // let private_cidr = IpCidr::new(IpAddress::v4(192, 168, 254, 11), 24);
     let local_cidr = IpCidr::new(IpAddress::v4(127, 0,0, 1), 8);
     EthernetInterfaceBuilder::new(device)
         .ethernet_addr(hw_addr)
@@ -192,13 +190,10 @@ impl EthernetDriver {
                     trace!("EthernetDriver::poll() no packets processed");
                 }
             }
-
             Err(e) => {
                 match e {
-                    smoltcp::Error::Unrecognized => {
-                        trace!("EthernetDriver::poll() unrecognized packet which is a normal situation")
-                    }
-                    e => trace!("EthernetDriver::poll() error: {:?}", e),
+                    smoltcp::Error::Unrecognized => (),
+                    e => debug!("EthernetDriver::poll() error: {:?}", e),
                 }
             }
         }
@@ -225,8 +220,10 @@ impl EthernetDriver {
         let entry_bit_shift = port as u64 % 64;
         if (self.port_map[port_map_index] & (1 << entry_bit_shift)) >> entry_bit_shift == 0 {
             self.port_map[port_map_index] |= 1 << entry_bit_shift;
+            trace!("EthernetDriver::mark_port(): port {} marked", port);
             Some(port)
         } else {
+            trace!("! EthernetDriver::mark_port(): port {} already marked", port);
             None
         }
     }
@@ -237,8 +234,10 @@ impl EthernetDriver {
         let entry_bit_shift = port as u64 % 64;
         if (self.port_map[port_map_index] & (1 << entry_bit_shift)) >> entry_bit_shift == 1 {
             self.port_map[port_map_index] &= !(1 << entry_bit_shift);
+            trace!("EthernetDriver::erase_port(): port {} freed", port);
             Some(port)
         } else {
+            trace!("! EthernetDriver::erase_port(): port {} already free", port);
             None
         }
     }
@@ -249,9 +248,12 @@ impl EthernetDriver {
         for port_map_index in 768..1024 {
             let first_unset_bit = (!self.port_map[port_map_index]).trailing_zeros();
             if first_unset_bit < 64 {
-                return Some((port_map_index as u16 * 64) + first_unset_bit as u16)
+                let port = (port_map_index as u16 * 64) + first_unset_bit as u16;
+                trace!("EthernetDriver::get_ephemeral_port(): port {} available", port);
+                return Some(port)
             }
         }
+        trace!("! EthernetDriver::get_ephemeral_port(): no ephemeral ports free");
         None
     }
 
@@ -296,7 +298,6 @@ impl GlobalEthernetDriver {
     pub fn poll(&self, timestamp: Instant) {
         let core = aarch64::affinity();
         let lock_count = crate::percore::get_preemptive_counter();
-        trace!("GlobalEthernetDriver::poll() from core_{} w lock_count {}", core, lock_count);
         assert_eq!(core, 0);
         assert!(lock_count > 0);
         self.0

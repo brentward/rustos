@@ -87,7 +87,6 @@ pub fn sys_getpid(tf: &mut TrapFrame) {
 }
 
 pub fn sys_sbrk(size: usize, tf: &mut TrapFrame)  {
-
     SCHEDULER.critical(|scheduler| {
         let mut process = scheduler.find_process(tf);
         let next_heap_ptr = process.heap_ptr.add(VirtualAddr::from(size));
@@ -132,13 +131,13 @@ pub fn sys_entropy(tf: &mut TrapFrame) {
     tf.x[0] = entropy as u64;
     tf.x[7] = OsError::Ok as u64;
 }
+
 /// Creates a socket and saves the socket handle in the current process's
 /// socket list.
 ///
 /// This function does neither take any parameter nor return anything,
 /// except the usual return code that indicates successful syscall execution.
 pub fn sys_sock_create(tf: &mut TrapFrame) {
-    // Lab 5 2.D
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
         let sock_idx = process.sockets.len() + 3;
@@ -165,7 +164,6 @@ pub fn sys_sock_create(tf: &mut TrapFrame) {
 /// This function returns `OsError::InvalidSocket` if a socket that corresponds
 /// to the provided descriptor is not found.
 pub fn sys_sock_status(sock_idx: usize, tf: &mut TrapFrame) {
-    // Lab 5 2.D
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
         match process.sockets.get(sock_idx - 3) {
@@ -237,24 +235,6 @@ pub fn sys_sock_connect(
                         Err(_) => tf.x[7] = OsError::Unknown as u64,
                     }
                 })
-                // match ETHERNET.get_ephemeral_port() {
-                //     Some(port) => {
-                //         match ETHERNET.mark_port(port) {
-                //             Some(_) => {
-                //                 ETHERNET.with_socket(*handle, |socket| {
-                //                     match socket.connect(remote_endpoint, port) {
-                //                         Ok(()) => tf.x[7] = OsError::Ok as u64,
-                //                         Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
-                //                         Err(smoltcp::Error::Unaddressable) => tf.x[7] = OsError::BadAddress as u64,
-                //                         Err(_) => tf.x[7] = OsError::Unknown as u64,
-                //                     }
-                //                 });
-                //             }
-                //             None => tf.x[7] = OsError::NoEntry as u64,
-                //         }
-                //     }
-                //     None => tf.x[7] = OsError::NoEntry as u64,
-                // }
             }
             None => tf.x[7] = OsError::InvalidSocket as u64,
         };
@@ -314,6 +294,7 @@ unsafe fn to_user_slice<'a>(va: usize, len: usize) -> OsResult<&'a [u8]> {
         Err(OsError::BadAddress)
     }
 }
+
 /// Returns a mutable slice from a virtual address and a legnth.
 ///
 /// # Errors
@@ -366,23 +347,6 @@ pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame)
                     None => tf.x[7] = OsError::InvalidSocket as u64,
                 };
             });
-            // let mut process = SCHEDULER.critical(|scheduler|scheduler.find_process(tf));
-            // match process.sockets.get(sock_idx) {
-            //     Some(handle) => {
-            //         ETHERNET.with_socket(*handle, |socket| {
-            //             match socket.send_slice(data) {
-            //                 Ok(bytes) => {
-            //                     tf.x[0] = bytes as u64;
-            //                     tf.x[7] = OsError::Ok as u64;
-            //                 }
-            //                 Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
-            //                 Err(_) => tf.x[7] = OsError::Unknown as u64,
-            //             }
-            //         });
-            //
-            //     }
-            //     None => tf.x[7] = OsError::InvalidSocket as u64,
-            // };
         }
         Err(e) => tf.x[7] = e as u64,
     }

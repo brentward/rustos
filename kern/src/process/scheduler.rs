@@ -67,9 +67,10 @@ impl GlobalScheduler {
             let rtn = self.critical(|scheduler| scheduler.switch_to(tf));
             if let Some(id) = rtn {
                 trace!(
-                    "[core-{}] switch_to {:?}, pc: {:x}, lr: {:x}, x29: {:x}, x28: {:x}, x27: {:x}",
+                    "[core-{}] switch_to {:?}, sp: {:x}, pc: {:x}, lr: {:x}, x29: {:x}, x28: {:x}, x27: {:x}",
                     affinity(),
                     id,
+                    tf.sp,
                     tf.elr,
                     tf.x[30],
                     tf.x[29],
@@ -101,13 +102,10 @@ impl GlobalScheduler {
         self.initialize_local_timer_interrupt();
         let mut tf = TrapFrame::default();
         enable_fiq_interrupt();
-        trace!("SCHEDULER::start() enable_fiq_interrupt() core-{}", core);
         let proc_id = self.switch_to(&mut tf);
         disable_fiq_interrupt();
         let x_regs_ptr = tf.x.as_ptr() as usize;
         let q_regs_ptr = tf.q.as_ptr() as usize;
-        info!("SCHEDULER::start() core-{}/first-process={}", core, proc_id);
-        trace!("SCHEDULER::start() core-{}/tf={:?}", core, tf);
         unsafe {
             asm!(
                 "mrs x0, MPIDR_EL1 // calcluate core stack: store register containing core affinity in x0
@@ -231,14 +229,19 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 1;
+        let proc_count: usize = 4;
         for proc in 0..proc_count {
-            let process = match Process::load("/echo_1024") {
+            let process = match Process::load("/fib_rand") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
             self.add(process);
         }
+        let echo_proc = match Process::load("/echo_1500") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() echo_proc.load(): {:#?}", e),
+        };
+        self.add(echo_proc);
     }
 
     // The following method may be useful for testing Lab 4 Phase 3:
@@ -265,7 +268,7 @@ impl GlobalScheduler {
 /// Poll the ethernet driver and re-register a timer handler using
 /// `Usb::start_kernel_timer`.
 extern "C" fn poll_ethernet(_: TKernelTimerHandle, _: *mut c_void, _: *mut c_void) {
-    trace!("starting poll_ethernet()");
+    trace!("poll_ethernet()");
     ETHERNET.poll(Instant::from_millis(timer::current_time().as_millis() as i64));
     let delay = ETHERNET.poll_delay(
         Instant::from_millis(timer::current_time().as_millis() as i64)
@@ -387,38 +390,17 @@ impl Scheduler {
 
     /// Releases all process resources held by the current process such as sockets.
     fn release_process_resources(&mut self, tf: &mut TrapFrame) {
-        // Lab 5 2.C
         let mut process = self.find_process(tf);
-        // ETHERNET.critical(|ethernet|{
-        //     for handle in &process.sockets {
-        //         let port = ethernet.get_socket(*handle).local_endpoint().port;
-        //         match ethernet.erase_port(port) {
-        //             Some(port) => trace!(
-        //                 "Scheduler::release_process_resources() pid {} released port {}",
-        //                 process.context.tpidr,
-        //                 port
-        //             ),
-        //             None => panic!(
-        //                 "Scheduler::release_process_resources() pid {} failed to release port {}",
-        //                 process.context.tpidr,
-        //                 port
-        //             ),
-        //         };
-        //
-        //     }
-        //     ethernet.release(*handle);
-        //     ethernet.prune();
-        // });
         for handle in &process.sockets {
             let port = ETHERNET.with_socket(*handle, |socket| socket.local_endpoint().port);
             ETHERNET.critical(|ethernet|{
                 match ethernet.erase_port(port) {
-                    Some(port) => info!(
+                    Some(port) => trace!(
                         "Scheduler::release_process_resources() pid {} released port {}",
                         process.context.tpidr,
                         port
                     ),
-                    None => info!(
+                    None => error!(
                         "Scheduler::release_process_resources() pid {} failed to release port {}",
                         process.context.tpidr,
                         port
