@@ -16,7 +16,7 @@ use smoltcp::time::Instant;
 use smoltcp::wire::{IpAddress, IpCidr};
 
 use crate::mutex::Mutex;
-use crate::param::MTU;
+use crate::param::{MTU, IP_ADDR, SUBNET_MASK};
 use crate::USB;
 
 // We always use owned buffer as internal storage
@@ -140,8 +140,15 @@ pub fn create_interface() -> EthernetInterface<UsbEthernet> {
     let device = UsbEthernet;
     let hw_addr = USB.get_eth_addr();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
-    let private_cidr = IpCidr::new(IpAddress::v4(169, 254, 32, 10), 16);
-    // let private_cidr = IpCidr::new(IpAddress::v4(192, 168, 254, 11), 24);
+    let private_cidr = IpCidr::new(
+        IpAddress::v4(
+            IP_ADDR[0],
+            IP_ADDR[1],
+            IP_ADDR[2],
+            IP_ADDR[3],
+        ),
+        SUBNET_MASK
+    );
     let local_cidr = IpCidr::new(IpAddress::v4(127, 0,0, 1), 8);
     EthernetInterfaceBuilder::new(device)
         .ethernet_addr(hw_addr)
@@ -183,13 +190,10 @@ impl EthernetDriver {
                     trace!("EthernetDriver::poll() no packets processed");
                 }
             }
-
             Err(e) => {
                 match e {
-                    smoltcp::Error::Unrecognized => {
-                        trace!("EthernetDriver::poll() unrecognized packet which is a normal situation")
-                    }
-                    e => trace!("EthernetDriver::poll() error: {:?}", e),
+                    smoltcp::Error::Unrecognized => (),
+                    e => debug!("EthernetDriver::poll() error: {:?}", e),
                 }
             }
         }
@@ -216,8 +220,10 @@ impl EthernetDriver {
         let entry_bit_shift = port as u64 % 64;
         if (self.port_map[port_map_index] & (1 << entry_bit_shift)) >> entry_bit_shift == 0 {
             self.port_map[port_map_index] |= 1 << entry_bit_shift;
+            trace!("EthernetDriver::mark_port(): port {} marked", port);
             Some(port)
         } else {
+            trace!("! EthernetDriver::mark_port(): port {} already marked", port);
             None
         }
     }
@@ -228,8 +234,10 @@ impl EthernetDriver {
         let entry_bit_shift = port as u64 % 64;
         if (self.port_map[port_map_index] & (1 << entry_bit_shift)) >> entry_bit_shift == 1 {
             self.port_map[port_map_index] &= !(1 << entry_bit_shift);
+            trace!("EthernetDriver::erase_port(): port {} freed", port);
             Some(port)
         } else {
+            trace!("! EthernetDriver::erase_port(): port {} already free", port);
             None
         }
     }
@@ -237,12 +245,15 @@ impl EthernetDriver {
     /// Returns the first open port between the ephemeral port range 49152 ~ 65535.
     /// Note that this function does not mark the returned port.
     pub fn get_ephemeral_port(&mut self) -> Option<u16> {
-        for port_map_index in 768usize..1024 {
+        for port_map_index in 768..1024 {
             let first_unset_bit = (!self.port_map[port_map_index]).trailing_zeros();
             if first_unset_bit < 64 {
-                return Some((port_map_index as u16 * 64) + first_unset_bit as u16)
+                let port = (port_map_index as u16 * 64) + first_unset_bit as u16;
+                trace!("EthernetDriver::get_ephemeral_port(): port {} available", port);
+                return Some(port)
             }
         }
+        trace!("! EthernetDriver::get_ephemeral_port(): no ephemeral ports free");
         None
     }
 
@@ -287,7 +298,6 @@ impl GlobalEthernetDriver {
     pub fn poll(&self, timestamp: Instant) {
         let core = aarch64::affinity();
         let lock_count = crate::percore::get_preemptive_counter();
-        trace!("GlobalEthernetDriver::poll() from core_{} w lock_count {}", core, lock_count);
         assert_eq!(core, 0);
         assert!(lock_count > 0);
         self.0

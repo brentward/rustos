@@ -23,11 +23,22 @@ impl log::Log for KernelLogger {
 pub unsafe fn init_logger() {
     log::set_logger_racy(&LOGGER)
         .map(|()| {
-            log::set_max_level(if let Some(_) = option_env!("VERBOSE_BUILD") {
-                LevelFilter::Trace
-            } else {
-                LevelFilter::Debug
-            })
+            let mut log_level = match option_env!("LOG_LEVEL") {
+                Some(level) => {
+                    match level {
+                        "ERROR" | "error" | "Error" => LevelFilter::Error,
+                        "WARN" | "warn" | "Warn" => LevelFilter::Warn,
+                        "INFO" | "info" | "Info" => LevelFilter::Info,
+                        "DEBUG" | "debug" | "Debug" => LevelFilter::Debug,
+                        "TRACE" | "trace" | "Trace" => LevelFilter::Trace,
+                        "OFF" | "off" | "Off" => LevelFilter::Off,
+                        _level => LevelFilter::Info,
+                    }
+                }
+                None => LevelFilter::Info,
+            };
+            log::set_max_level(log_level)
         })
         .expect("Failed to initialize the logger");
+
 }

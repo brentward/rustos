@@ -34,7 +34,7 @@ pub struct Process {
     pub heap_ptr: VirtualAddr,
     pub heap_page: VirtualAddr,
     // Lab 5 2.C
-    ///// Socket handles held by the current process
+    /// Socket handles held by the current process
     pub sockets: Vec<SocketHandle>,
 }
 
@@ -150,7 +150,7 @@ impl Process {
     ///
     ///     If the process is currently waiting, the corresponding event
     ///     function is polled to determine if the event being waiting for has
-    ///     occured. If it has, the state is switched to `Ready` and this
+    ///     occurred. If it has, the state is switched to `Ready` and this
     ///     function returns `true`.
     ///
     /// Returns `false` in all other cases.
@@ -161,7 +161,8 @@ impl Process {
                 let mut current_state = mem::replace(&mut self.state, State::Ready);
                 let current_ready =  match current_state {
                     State::Waiting(ref mut event_pol_fn) => event_pol_fn(self),
-                    _ => panic!("unexpected match in current_state"),
+                    State::Ready => true,
+                    _ => false,
                 };
                 if !current_ready {
                     self.state = current_state;
