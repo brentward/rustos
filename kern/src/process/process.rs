@@ -14,7 +14,7 @@ use aarch64;
 use smoltcp::socket::SocketHandle;
 
 use crate::param::*;
-use crate::process::{Stack, State};
+use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::vm::*;
 use crate::FILESYSTEM;
@@ -40,24 +40,21 @@ pub enum FdEntry {
 pub struct Process {
     /// The saved trap frame of a process.
     pub context: Box<TrapFrame>,
-    /// The memory allocation used for the process's stack.
-    pub stack: Stack,
     /// The page table describing the Virtual Memory of the process
     pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
-
+    pub stack_base: VirtualAddr,
+    pub heap_ptr: VirtualAddr,
+    pub heap_page: VirtualAddr,
+    // Lab 5 2.C
+    /// Socket handles held by the current process
+    pub sockets: Vec<SocketHandle>,
     /// The list of open file handles.
     pub file_table: Vec<Option<FdEntry>>,
     /// The last file ID
     pub unused_file_descriptors: Vec<usize>,
-    pub stack_base: VirtualAddr,
-    pub heap_ptr: VirtualAddr,
-    pub next_heap_page: VirtualAddr,
     pub cwd: PathBuf,
-    // Lab 5 2.C
-    ///// Socket handles held by the current process
-    // pub sockets: Vec<SocketHandle>,
 }
 
 impl Process {
@@ -67,22 +64,19 @@ impl Process {
     /// If enough memory could not be allocated to start the process, returns
     /// `Err(OsError)`. Otherwise returns `Ok` of the new `Process`.
     pub fn new() -> OsResult<Process> {
-        let stack = match Stack::new() {
-            Some(stack) => stack,
-            None => return Err(OsError::NoMemory),
-        };
         let vmap = Box::new(UserPageTable::new());
+        let sockets: Vec<SocketHandle> = Vec::new();
         Ok(Process {
             context: Box::new(TrapFrame::default()),
-            stack,
             vmap,
             state: State::Ready,
+            stack_base: Process::get_stack_base(),
+            heap_ptr: VirtualAddr::from(0),
+            heap_page: VirtualAddr::from(0),
+            sockets,
             file_table: vec![Some(FdEntry::Console), Some(FdEntry::Console), Some(FdEntry::Console)],
             unused_file_descriptors: vec![],
             // last_file_descriptor: Some(1),
-            stack_base: Process::get_stack_base(),
-            heap_ptr: Process::get_heap_base(),
-            next_heap_page: Process::get_heap_base().add(VirtualAddr::from(Page::SIZE)),
             cwd: PathBuf::from("/"),
         })
     }
@@ -108,7 +102,6 @@ impl Process {
             aarch64::SPSR_EL1::D |
             aarch64::SPSR_EL1::A |
             aarch64::SPSR_EL1::F;
-
         Ok(p)
     }
 
@@ -120,7 +113,9 @@ impl Process {
         use core::ops::AddAssign;
 
         let mut p = Process::new()?;
-        let _stack_page = p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
+        for page in 0..USER_STACK_PAGE_COUNT {
+            let _stack_page = p.vmap.alloc(Process::get_stack_base() + VirtualAddr::from(page * Page::SIZE), PagePerm::RW);
+        }
         let pn = pn.as_ref();
         let entry = FILESYSTEM.open(pn)?;
 
@@ -134,12 +129,15 @@ impl Process {
         loop {
             let buf = p.vmap.alloc(current_address, PagePerm::RWX);
             let bytes = file.read(buf)?;
+            current_address.add_assign(VirtualAddr::from(Page::SIZE));
             if bytes == 0 {
                 break;
             }
-            current_address.add_assign(VirtualAddr::from(Page::SIZE));
         }
-         Ok(p)
+        let _heap_page = p.vmap.alloc(current_address, PagePerm::RW);
+        p.heap_ptr = current_address;
+        p.heap_page = current_address;
+        Ok(p)
     }
 
     /// Returns the highest `VirtualAddr` that is supported by this system.
@@ -162,7 +160,7 @@ impl Process {
     /// Returns the `VirtualAddr` represents the top of the user process's
     /// stack.
     pub fn get_stack_top() -> VirtualAddr {
-        VirtualAddr::from(USER_STACK_BASE + (Page::SIZE - 16))
+        VirtualAddr::from(USER_STACK_BASE + (USER_STACK_SIZE - 16))
     }
 
     pub fn get_heap_base() -> VirtualAddr {
@@ -179,7 +177,7 @@ impl Process {
     ///
     ///     If the process is currently waiting, the corresponding event
     ///     function is polled to determine if the event being waiting for has
-    ///     occured. If it has, the state is switched to `Ready` and this
+    ///     occurred. If it has, the state is switched to `Ready` and this
     ///     function returns `true`.
     ///
     /// Returns `false` in all other cases.
@@ -190,7 +188,8 @@ impl Process {
                 let mut current_state = mem::replace(&mut self.state, State::Ready);
                 let current_ready =  match current_state {
                     State::Waiting(ref mut event_pol_fn) => event_pol_fn(self),
-                    _ => panic!("unexpected match in current_state"),
+                    State::Ready => true,
+                    _ => false,
                 };
                 if !current_ready {
                     self.state = current_state;

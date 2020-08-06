@@ -29,6 +29,7 @@ pub mod process;
 pub mod shell;
 pub mod traps;
 pub mod vm;
+pub mod rng;
 
 use allocator::Allocator;
 use fs::FileSystem;
@@ -39,6 +40,9 @@ use traps::irq::{Fiq, GlobalIrq};
 use vm::VMManager;
 use console::kprintln;
 use pi;
+use aarch64::affinity;
+
+use core::time::Duration;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
@@ -59,9 +63,7 @@ extern "C" {
 
 unsafe fn kmain() -> ! {
     crate::logger::init_logger();
-    pi::timer::spin_sleep(core::time::Duration::from_millis(250));
-
-
+    pi::timer::spin_sleep(Duration::from_millis(150));
     info!(
         "text beg: {:016x}, end: {:016x}",
         &__text_beg as *const _ as u64, &__text_end as *const _ as u64
@@ -70,20 +72,23 @@ unsafe fn kmain() -> ! {
         "bss  beg: {:016x}, end: {:016x}",
         &__bss_beg as *const _ as u64, &__bss_end as *const _ as u64
     );
-
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();
-    // GLOABAL_IRQ.initialize();
     VMM.initialize();
     SCHEDULER.initialize();
-    VMM.setup();
-
+    aarch64::enable_fiq_interrupt();
+    info!("USB init");
+    USB.initialize();
+    info!("ETHERNET init");
+    ETHERNET.initialize();
+    assert!(USB.is_eth_available());
+    while !USB.is_eth_link_up() {
+        // spin
+    }
+    aarch64::disable_fiq_interrupt();
     init::initialize_app_cores();
+
+    VMM.wait();
     kprintln!("Welcome to BrentOS!");
-
-    SCHEDULER.start();
-
-
-    shell::shell("> ");
-    loop {}
+    SCHEDULER.start()
 }

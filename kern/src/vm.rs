@@ -9,7 +9,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::mutex::Mutex;
 use crate::param::{KERNEL_MASK_BITS, USER_MASK_BITS};
-use crate::percore::{is_mmu_ready, set_mmu_ready};
+use crate::percore::{is_mmu_ready, set_mmu_ready, get_preemptive_counter};
 
 pub struct VMManager {
     kern_pt: Mutex<Option<KernPageTable>>,
@@ -57,7 +57,7 @@ impl VMManager {
 
         // (ref. D7.2.70: Memory Attribute Indirection Register)
         MAIR_EL1.set(
-            (0xFF <<  0) |// AttrIdx=0: normal, IWBWA, OWBWA, NTR
+            (0xff <<  0) |// AttrIdx=0: normal, IWBWA, OWBWA, NTR
             (0x04 <<  8) |// AttrIdx=1: device, nGnRE (must be OSH too)
             (0x44 << 16), // AttrIdx=2: non cacheable
         );
@@ -105,10 +105,17 @@ impl VMManager {
             self.setup();
         }
 
+        let _current_count = self.ready_core_cnt.fetch_add(1, Ordering::AcqRel);
         info!("MMU is ready for core-{}/@sp={:016x}", affinity(), SP.get());
 
-        // Lab 5 1.B
-        // unimplemented!("wait for other cores")
+        while self.ready_core_cnt.load(Ordering::Acquire) < pi::common::NCORES {
+            nop()
+        }
+        if affinity() == 0 {
+            while get_preemptive_counter() != 0 {
+                nop()
+            }
+        }
     }
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.

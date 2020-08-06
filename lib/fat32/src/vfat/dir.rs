@@ -69,7 +69,7 @@ pub struct VFatLfnDirEntry {
 
 impl VFatLfnDirEntry {
     pub fn sequence_number(&self) -> usize {
-        let sequence = self.sequence_number & 0x1F;
+        let sequence = self.sequence_number & 0x1f;
         sequence as usize
     }
 
@@ -78,7 +78,7 @@ impl VFatLfnDirEntry {
     }
 
     fn is_deleted(&self) -> bool {
-        self.sequence_number & 0xE5 != 0
+        self.sequence_number & 0xe5 != 0
     }
 
     fn name_1(&self) -> &[u16; 5] {
@@ -108,11 +108,11 @@ pub struct VFatUnknownDirEntry {
 
 impl VFatUnknownDirEntry {
     fn is_lfn(&self) -> bool {
-        self.attributes == 0x0F
+        self.attributes == 0x0f
     }
 
     fn is_unused(&self) -> bool {
-        self.id == 0xE5
+        self.id == 0xe5
     }
 
     fn is_end(&self) -> bool {
@@ -169,7 +169,7 @@ impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
             name.extend_from_slice(&lfn.name_3()[..]);
         }
         for index in name.len() - 13..name.len() {
-            if name[index] == 0x0000 || name[index] == 0x00FF {
+            if name[index] == 0x0000 || name[index] == 0x00ff {
                 name.resize(index, 0);
                 break
             }

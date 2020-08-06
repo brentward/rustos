@@ -13,13 +13,15 @@ pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const USER_MASK_BITS: usize = 34;
 pub const KERNEL_MASK_BITS: usize = 31;
 
-pub const USER_IMG_BASE: usize = 0xFFFF_FFFF_C000_0000;
+pub const USER_IMG_BASE: usize = 0xffff_ffff_c000_0000;
 const_assert_eq!(
     USER_IMG_BASE,
     ((1 << USER_MASK_BITS) - 1) << (64 - USER_MASK_BITS)
 );
-pub const USER_HEAP_BASE: usize = 0xFFFF_FFFF_C400_0000;
-pub const USER_STACK_BASE: usize = core::usize::MAX & PAGE_MASK; //0xffff_ffff_ffff_0000
+pub const USER_STACK_PAGE_COUNT: usize = 4;
+pub const USER_STACK_SIZE: usize = PAGE_SIZE * USER_STACK_PAGE_COUNT;
+pub const USER_STACK_MASK: usize = !(USER_STACK_SIZE - 1);
+pub const USER_STACK_BASE: usize = core::usize::MAX & USER_STACK_MASK; //0xffff_ffff_fffc_0000
 pub const USER_MAX_VM_SIZE: usize = 0x4000_0000;
 const_assert_eq!(USER_IMG_BASE.wrapping_add(USER_MAX_VM_SIZE), 0);
 
@@ -29,11 +31,16 @@ pub const KERN_STACK_SIZE: usize = PAGE_SIZE;
 
 /// The `tick` time.
 // FIXME: When you're ready, change this to something more reasonable.
-pub const TICK: Duration = Duration::from_secs(2);
+pub const TICK: Duration = Duration::from_millis(10);
+// pub const TICK: Duration = Duration::from_secs(2);
 
 // Match this value with `HZ` in `timer.h`
 pub const USPI_TIMER_HZ: usize = 10;
 
 // Match this value with `USPI_FRAME_BUFFER_SIZE` in `uspi.h`
 pub const USPI_FRAME_BUFFER_SIZE: u32 = 1600;
-pub const MTU: u32 = 1500;
+pub const MTU: u32 = 1514;
+pub const IP_ADDR: [u8; 4] = [192, 168, 254, 11];
+pub const SUBNET_MASK: u8 = 24;
+// pub const IP_ADDR: [u8; 4] = [169, 254, 32, 10];
+// pub const SUBNET_MASK: u8 = 16;

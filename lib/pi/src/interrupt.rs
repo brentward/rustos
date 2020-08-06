@@ -3,7 +3,7 @@ use crate::common::IO_BASE;
 use volatile::prelude::*;
 use volatile::{Volatile, ReadVolatile, Reserved};
 
-const INT_BASE: usize = IO_BASE + 0xB000 + 0x200;
+const INT_BASE: usize = IO_BASE + 0xb000 + 0x200;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Interrupt {
@@ -50,7 +50,7 @@ impl From<usize> for Interrupt {
 struct Registers {
     pending_basic: Reserved<u32>,
     pending: [ReadVolatile<u32>; 2],
-    fiq_control: Reserved<u32>,
+    fiq_control: Volatile<u32>,
     enable: [Volatile<u32>; 2],
     enable_basic: Reserved<u32>,
     disable: [Volatile<u32>; 2],
@@ -73,7 +73,7 @@ impl Controller {
 
     /// Enables the interrupt `int`.
     pub fn enable(&mut self, int: Interrupt) {
-        let index = int as usize;
+        let index = int as u32;
         if index < 32 {
             self.registers.enable[0].or_mask(1 << index);
         } else {
@@ -83,17 +83,17 @@ impl Controller {
 
     /// Disables the interrupt `int`.
     pub fn disable(&mut self, int: Interrupt) {
-        let index = int as usize;
+        let index = int as u32;
         if index < 32 {
-            self.registers.disable[0].or_mask(1 << index);
+            self.registers.disable[0].write(1 << index);
         } else {
-            self.registers.disable[1].or_mask(1 << index - 32);
+            self.registers.disable[1].write(1 << index - 32);
         }
     }
 
     /// Returns `true` if `int` is pending. Otherwise, returns `false`.
     pub fn is_pending(&self, int: Interrupt) -> bool {
-        let index = int as usize;
+        let index = int as u32;
         if index < 32 {
             self.registers.pending[0].has_mask(1 << index)
         } else {
@@ -103,7 +103,8 @@ impl Controller {
 
     /// Enables the interrupt as FIQ interrupt
     pub fn enable_fiq(&mut self, int: Interrupt) {
-        // Lab 5 2.B
-        unimplemented!("enable_fiq")
+        self.disable(int);
+        let index = int as u32;
+        self.registers.fiq_control.write((1 << 7) | (index));
     }
 }

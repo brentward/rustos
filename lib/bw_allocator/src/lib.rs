@@ -1,15 +1,14 @@
-mod linked_list;
-pub mod util;
+#![no_std]
+#![feature(alloc_error_handler)]
+#![feature(optin_builtin_traits)]
 
-mod bin;
+mod allocator;
+use allocator::{bin, mutex::Mutex};
 
 type AllocatorImpl = bin::Allocator;
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::fmt;
-
-use crate::mutex::Mutex;
-// use crate::syscall;
 
 /// `LocalAlloc` is an analogous trait to the standard library's `GlobalAlloc`,
 /// but it takes `&mut self` in `alloc()` and `dealloc()`.
@@ -22,29 +21,17 @@ pub trait LocalAlloc {
 pub struct Allocator(Mutex<Option<AllocatorImpl>>);
 
 impl Allocator {
-    /// Returns an uninitialized `Allocator`.
-    ///
-    /// The allocator must be initialized by calling `initialize()` before the
-    /// first memory allocation. Failure to do will result in panics.
-    pub const fn uninitialized() -> Self {
+    /// Returns an `Allocator`.
+    pub const fn new() -> Self {
         Allocator(Mutex::new(None))
-    }
-
-    /// Initializes the memory allocator.
-    /// The caller should assure that the method is invoked only once during the
-    /// kernel initialization.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the system's memory map could not be retrieved.
-    pub unsafe fn initialize(&self) {
-        let start = crate::sbrk(0).unwrap();
-        *self.0.lock() = Some(AllocatorImpl::new(start as usize));
     }
 }
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if self.0.lock().is_none() {
+            *self.0.lock() = Some(AllocatorImpl::new());
+        }
         self.0
             .lock()
             .as_mut()
@@ -53,6 +40,9 @@ unsafe impl GlobalAlloc for Allocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if self.0.lock().is_none() {
+            *self.0.lock() = Some(AllocatorImpl::new());
+        }
         self.0
             .lock()
             .as_mut()
@@ -69,4 +59,9 @@ impl fmt::Debug for Allocator {
         }
         Ok(())
     }
+}
+
+#[alloc_error_handler]
+pub fn oom(_layout: Layout) -> ! {
+    panic!("OOM");
 }

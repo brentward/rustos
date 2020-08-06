@@ -1,47 +1,27 @@
 use core::alloc::Layout;
 use core::fmt;
-use core::ptr;
-use core::mem;
-
-use crate::allocator::linked_list::LinkedList;
 use crate::allocator::util::*;
-use crate::allocator::LocalAlloc;
-use crate::param::*;
+use crate::allocator::linked_list::LinkedList;
+use crate::LocalAlloc;
+use kernel_api::syscall::sbrk;
 
-/// A simple allocator that allocates based on size classes.
-///   bin 0 (2^3 bytes)    : handles allocations in (0, 2^3]
-///   bin 1 (2^4 bytes)    : handles allocations in (2^3, 2^4]
-///   ...
-///   bin 29 (2^22 bytes): handles allocations in (2^31, 2^32]
-///   
-///   map_to_bin(size) -> k
-///
-
-const KERNEL_VMM_ADDRESS_SIZE: usize= mem::size_of::<usize>() * 8 - KERNEL_MASK_BITS;
-const BIN_COUNT_MAX: usize = KERNEL_VMM_ADDRESS_SIZE - 3;
+const USER_VMM_ADDRESS_SIZE: usize= 30;
+const BIN_COUNT_MAX: usize = USER_VMM_ADDRESS_SIZE - 3;
 
 pub struct Allocator {
-    fragmentation: usize,
-    total_mem: usize,
     current: usize,
-    end: usize,
     bins: [LinkedList; BIN_COUNT_MAX],
 }
 
 impl Allocator {
     /// Creates a new bin allocator that will allocate memory from the region
     /// starting at address `start` and ending at address `end`.
-    pub fn new(start: usize, end: usize) -> Allocator {
-        let current = start;
-        let total_mem = end - current;
+    pub fn new() -> Allocator {
+        let current = sbrk(0).unwrap() as usize;
         let bins = [LinkedList::new(); BIN_COUNT_MAX];
-        let fragmentation = 0;
 
         Allocator {
-            fragmentation,
-            total_mem,
             current,
-            end,
             bins,
         }
     }
@@ -57,12 +37,9 @@ impl Allocator {
                 return index
             }
         }
-        panic!(
-            "layout will cause memory address overflow, size: {}, align: {}",
-            layout.size(),
-            layout.align()
-        );
+        panic!("layout will cause memory address overflow");
     }
+
 }
 
 impl LocalAlloc for Allocator {
@@ -95,12 +72,15 @@ impl LocalAlloc for Allocator {
             }
         }
         let aligned_addr = align_up(self.current, Allocator::bin_size(index));
-        if aligned_addr + Allocator::bin_size(index) > self.end {
-            core::ptr::null_mut()
-        } else {
-            self.fragmentation += aligned_addr - self.current;
-            self.current = aligned_addr + Allocator::bin_size(index);
-            aligned_addr as *mut u8
+
+        let alloc_end = aligned_addr + Allocator::bin_size(index);
+        let request_size = alloc_end - self.current;
+        match sbrk(request_size) {
+            Ok(_ptr) => {
+                self.current = alloc_end;
+                aligned_addr as *mut u8
+            }
+            Err(_e) => core::ptr::null_mut()
         }
     }
 
@@ -126,11 +106,7 @@ impl LocalAlloc for Allocator {
 impl fmt::Debug for Allocator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Allocator {{")?;
-        writeln!(f, "  fragmentation: {}", self.fragmentation)?;
         writeln!(f, "  current: {}", self.current)?;
-        writeln!(f, "  end: {}", self.end)?;
-        writeln!(f, "  unallocated mem: {}", self.end - self.current)?;
-        writeln!(f, "  total mem: {}", self.total_mem)?;
         for i in 0..self.bins.len() {
             writeln!(
                 f,

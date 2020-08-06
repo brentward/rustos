@@ -84,7 +84,7 @@ pub fn memory_map() -> Option<(usize, usize)> {
             Atag::Mem(mem) => (mem.start, mem.size),
             _ => continue,
         };
-        return Some((binary_end as usize, (mem_start + mem_size) as usize))
+        return Some((binary_end, (mem_start + mem_size) as usize))
     }
     None
 }

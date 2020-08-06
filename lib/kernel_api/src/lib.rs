@@ -1,9 +1,6 @@
-// #![feature(optin_builtin_traits)]
 #![feature(asm)]
 #![no_std]
 
-// pub mod allocator;
-// pub mod mutex;
 
 use core::fmt;
 
@@ -83,18 +80,6 @@ impl core::convert::From<OsError> for fmt::Error {
     }
 }
 
-
-pub const NR_SLEEP: usize = 1;
-pub const NR_TIME: usize = 2;
-pub const NR_EXIT: usize = 3;
-pub const NR_WRITE: usize = 4;
-pub const NR_GETPID: usize = 5;
-pub const NR_WRITE_STR: usize = 6;
-pub const NR_SBRK: usize = 7;
-pub const NR_OPEN: usize = 8;
-pub const NR_READ: usize = 9;
-pub const NR_GETDENT: usize = 10;
-
 #[derive(Clone, Copy, Debug)]
 pub struct SocketDescriptor(u64);
 
@@ -137,9 +122,24 @@ impl fmt::Debug for IpAddr {
     }
 }
 
+pub const NR_SLEEP: usize = 1;
+pub const NR_TIME: usize = 2;
+pub const NR_EXIT: usize = 3;
+pub const NR_WRITE: usize = 4;
+pub const NR_GETPID: usize = 5;
+pub const NR_WRITE_STR: usize = 6;
+pub const NR_SBRK: usize = 7;
+pub const NR_RAND: usize = 8;
+pub const NR_RRAND: usize = 9;
+pub const NR_ENTROPY: usize = 10;
+
 pub const NR_SOCK_CREATE: usize = 20;
 pub const NR_SOCK_STATUS: usize = 21;
 pub const NR_SOCK_CONNECT: usize = 22;
 pub const NR_SOCK_LISTEN: usize = 23;
 pub const NR_SOCK_SEND: usize = 24;
 pub const NR_SOCK_RECV: usize = 25;
+
+pub const NR_OPEN: usize = 30;
+pub const NR_READ: usize = 31;
+pub const NR_GETDENT: usize = 32;
