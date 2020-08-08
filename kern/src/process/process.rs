@@ -18,7 +18,8 @@ use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::vm::*;
 use crate::FILESYSTEM;
-use crate::fs::PiVFatHandle;use crate::console::{Console, CONSOLE};
+use crate::fs::PiVFatHandle;
+use crate::console::{Console, CONSOLE};
 
 use kernel_api::{OsError, OsResult};
 
@@ -35,6 +36,16 @@ pub enum FdEntry {
     DirEntries(Box<DirIterator<PiVFatHandle>>),
 }
 
+#[derive(Debug)]
+pub enum IOHandle {
+    StdIn,
+    StdOut,
+    StdErr,
+    File(Box<File<PiVFatHandle>>),
+    Socket(SocketHandle),
+    Unused,
+}
+
 /// A structure that represents the complete state of a process.
 #[derive(Debug)]
 pub struct Process {
@@ -47,13 +58,8 @@ pub struct Process {
     pub stack_base: VirtualAddr,
     pub heap_ptr: VirtualAddr,
     pub heap_page: VirtualAddr,
-    // Lab 5 2.C
     /// Socket handles held by the current process
-    pub sockets: Vec<SocketHandle>,
-    /// The list of open file handles.
-    pub file_table: Vec<Option<FdEntry>>,
-    /// The last file ID
-    pub unused_file_descriptors: Vec<usize>,
+    pub handles: Vec<IOHandle>,
     pub cwd: PathBuf,
 }
 
@@ -73,9 +79,7 @@ impl Process {
             stack_base: Process::get_stack_base(),
             heap_ptr: VirtualAddr::from(0),
             heap_page: VirtualAddr::from(0),
-            sockets,
-            file_table: vec![Some(FdEntry::Console), Some(FdEntry::Console), Some(FdEntry::Console)],
-            unused_file_descriptors: vec![],
+            handles: vec![IOHandle::StdIn, IOHandle::StdOut, IOHandle::StdErr],
             // last_file_descriptor: Some(1),
             cwd: PathBuf::from("/"),
         })
@@ -161,10 +165,6 @@ impl Process {
     /// stack.
     pub fn get_stack_top() -> VirtualAddr {
         VirtualAddr::from(USER_STACK_BASE + (USER_STACK_SIZE - 16))
-    }
-
-    pub fn get_heap_base() -> VirtualAddr {
-        VirtualAddr::from(USER_HEAP_BASE)
     }
 
     /// Returns `true` if this process is ready to be scheduled.

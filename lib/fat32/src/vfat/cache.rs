@@ -73,9 +73,6 @@ impl CachedPartition {
 
         let physical_offset = virt * self.factor();
         let physical_sector = self.partition.start + physical_offset;
-        // let logical_offset = virt - self.partition.start;
-        // let physical_offset = logical_offset * self.factor();
-        // let physical_sector = self.partition.start + physical_offset;
 
         Some(physical_sector)
     }
@@ -85,10 +82,6 @@ impl CachedPartition {
             let physical_sector = match self.virtual_to_physical(sector) {
                 Some(physical_sector) => physical_sector,
                 None => return ioerr!(NotFound, "virtual sector out of range")
-                //     Err(io::Error::new(
-                //     io::ErrorKind::NotFound,
-                //     "Virtual sector out of range"
-                // )),
             };
             let mut data = Vec::new();
             for sector in physical_sector..physical_sector + self.factor() {

@@ -16,7 +16,7 @@ use crate::mutex::Mutex;
 use crate::net::uspi::TKernelTimerHandle;
 use crate::param::*;
 use crate::percore::{get_preemptive_counter, is_mmu_ready, local_irq};
-use crate::process::{Id, Process, State};
+use crate::process::{Id, Process, State, IOHandle};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::{TrapFrame, irq};
 use crate::{VMM, GLOABAL_IRQ, SCHEDULER, ETHERNET, USB};
@@ -229,19 +229,19 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 4;
+        let proc_count: usize = 1;
         for proc in 0..proc_count {
-            let process = match Process::load("/fib_rand") {
+            let process = match Process::load("/open") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };
             self.add(process);
         }
-        let echo_proc = match Process::load("/echo_1500") {
-            Ok(process) => process,
-            Err(e) => panic!("GlobalScheduler::initialize() echo_proc.load(): {:#?}", e),
-        };
-        self.add(echo_proc);
+        // let echo_proc = match Process::load("/echo_1500") {
+        //     Ok(process) => process,
+        //     Err(e) => panic!("GlobalScheduler::initialize() echo_proc.load(): {:#?}", e),
+        // };
+        // self.add(echo_proc);
     }
 
     // The following method may be useful for testing Lab 4 Phase 3:
@@ -391,24 +391,29 @@ impl Scheduler {
     /// Releases all process resources held by the current process such as sockets.
     fn release_process_resources(&mut self, tf: &mut TrapFrame) {
         let mut process = self.find_process(tf);
-        for handle in &process.sockets {
-            let port = ETHERNET.with_socket(*handle, |socket| socket.local_endpoint().port);
-            ETHERNET.critical(|ethernet|{
-                match ethernet.erase_port(port) {
-                    Some(port) => trace!(
-                        "Scheduler::release_process_resources() pid {} released port {}",
-                        process.context.tpidr,
-                        port
-                    ),
-                    None => error!(
-                        "Scheduler::release_process_resources() pid {} failed to release port {}",
-                        process.context.tpidr,
-                        port
-                    ),
-                };
-                ethernet.release(*handle);
-                ethernet.prune();
-            });
+        for io_handle in &process.handles {
+            match io_handle {
+                IOHandle::Socket(handle) => {
+                    let port = ETHERNET.with_socket(*handle, |socket| socket.local_endpoint().port);
+                    ETHERNET.critical(|ethernet|{
+                        match ethernet.erase_port(port) {
+                            Some(port) => info!(
+                                "Scheduler::release_process_resources() pid {} released port {}",
+                                process.context.tpidr,
+                                port
+                            ),
+                            None => error!(
+                                "Scheduler::release_process_resources() pid {} failed to release port {}",
+                                process.context.tpidr,
+                                port
+                            ),
+                        };
+                        ethernet.release(*handle);
+                        ethernet.prune();
+                    });
+                }
+                _ => (),
+            }
         }
     }
 

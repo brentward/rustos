@@ -9,6 +9,12 @@ impl SocketDescriptor {
     }
 }
 
+impl From<u64> for SocketDescriptor {
+    fn from(raw: u64) -> Self {
+        SocketDescriptor(raw)
+    }
+}
+
 #[derive(Debug)]
 pub struct SocketStatus {
     pub is_active: bool,

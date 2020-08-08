@@ -1,5 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::marker::PhantomData;
 use core::fmt;
 
@@ -155,11 +156,35 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
 pub struct DirIterator<HANDLE: VFatHandle> {
     phantom: PhantomData<HANDLE>,
     dir_entries: Vec<VFatDirEntry>,
-    position: usize,
+    // current_lfn: Vec<Box<VFatLfnDirEntry>>,
+    dir_entry_idx: usize,
+    offset: u64,
+    len: u64,
     vfat: HANDLE
 }
 
 impl<HANDLE: VFatHandle> DirIterator<HANDLE> {
+    fn set_offset(&mut self, offset: u64) -> io::Result<u64> {
+        let mut current_offset = 0;
+        for entry_idx in 0..self.dir_entries.len() {
+            let entry = &self.dir_entries[entry_idx];
+            let unknown_dir_entry = unsafe {entry.unknown};
+            if unknown_dir_entry.is_end() {
+                return ioerr!(InvalidInput, "beyond end of dir")
+            } else if unknown_dir_entry.is_lfn() || unknown_dir_entry.is_unused() {
+                continue
+            } else {
+                if offset == current_offset + 1 {
+                    self.dir_entry_idx = entry_idx + 1;
+                    self.offset = offset;
+                    return Ok(offset)
+                }
+                current_offset += 1;
+            }
+        }
+        ioerr!(InvalidInput, "beyond end of dir")
+    }
+
     fn lfn(lfn_vec: &mut Vec<&VFatLfnDirEntry>) -> String {
         lfn_vec.sort_by_key(|lfn| lfn.sequence_number());
         let mut name: Vec<u16>  = Vec::with_capacity(lfn_vec.len() * 13);
@@ -210,12 +235,13 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
     type Item = Entry<HANDLE>;
     fn next(&mut self) -> Option<Self::Item> {
         let mut lfn_vec: Vec<&VFatLfnDirEntry> = Vec::with_capacity(20);
-        for position in self.position..self.dir_entries.len() {
+        for position in self.dir_entry_idx..self.dir_entries.len() {
             let dir_entry = &self.dir_entries[position];
 
             let unknown_dir_entry = unsafe {dir_entry.unknown};
             if unknown_dir_entry.is_end() {
-                self.position = self.dir_entries.len();
+                self.dir_entry_idx = self.dir_entries.len();
+                self.offset = self.len;
                 return None
             }
             if unknown_dir_entry.is_unused() {
@@ -224,7 +250,8 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
             if unknown_dir_entry.is_lfn() {
                 lfn_vec.push(unsafe { &dir_entry.long_filename });
             } else {
-                self.position = position + 1;
+                self.dir_entry_idx = position + 1;
+                self.offset += 1;
 
                 let regular_dir = unsafe { dir_entry.regular };
                 let name = if lfn_vec.len() != 0 {
@@ -273,33 +300,29 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 impl<HANDLE: VFatHandle> io::Seek for  DirIterator<HANDLE> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
 
-        match pos {
-            SeekFrom::Start(offset) => {
-                if offset > self.dir_entries.len() as u64 {
-                    ioerr!(InvalidInput, "beyond end of dir")
+        let offset = match pos {
+            SeekFrom::Start(offset) => offset,
+            SeekFrom::End(end_offset) => {
+                let offset = self.len as i64 + end_offset;
+                if offset < 0 {
+                    return ioerr!(InvalidInput, "beyond beginning of dir")
                 } else {
-                    self.position = offset as usize;
-                    Ok(self.position as u64)
+                    offset as u64
                 }
             }
-            SeekFrom::End(offset) => {
-                if self.dir_entries.len() as i64 + offset < 0 {
-                    ioerr!(InvalidInput, "beyond beginning of dir")
+            SeekFrom::Current(current_offset) => {
+                let offset = self.offset as i64 + current_offset;
+                if offset < 0 {
+                    return ioerr!(InvalidInput, "beyond beginning of dir")
                 } else {
-                    self.position = (self.dir_entries.len() as i64 + offset) as usize;
-                    Ok(self.position as u64)
+                    offset as u64
                 }
             }
-            SeekFrom::Current(offset) => {
-                if self.position as i64 + offset < 0 {
-                    ioerr!(InvalidInput, "beyond beginning of dir")
-                } else if self.position as i64 + offset > self.dir_entries.len() as i64 {
-                    ioerr!(InvalidInput, "beyond end of dir")
-                } else {
-                    self.position = (self.position as i64 + offset) as usize;
-                    Ok(self.position as u64)
-                }
-            }
+        };
+        if offset > self.len {
+            ioerr!(InvalidInput, "beyond end of dir")
+        } else {
+            self.set_offset(offset as u64)
         }
     }
 }
@@ -308,7 +331,7 @@ impl<HANDLE: VFatHandle> fmt::Debug for DirIterator<HANDLE> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("DirIterator")
             .field("len", &self.dir_entries.len())
-            .field("positon", &self.position)
+            .field("positon", &self.dir_entry_idx)
             .finish()
     }
 }
@@ -319,13 +342,31 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
 
     fn entries(&self) -> io::Result<Self::Iter> {
         let mut cluster_chain: Vec<u8> = Vec::new();
+        // let current_lfn: Vec<Box<VFatLfnDirEntry>> = Vec::with_capacity(20);
         self.vfat.lock(
             |vfat| vfat.read_chain(self.first_cluster, &mut cluster_chain)
         )?;
+        let dir_entries: Vec<VFatDirEntry> = unsafe { cluster_chain.cast() };
+        let mut len = 0;
+        for entry_idx in 0..dir_entries.len() {
+            let entry = &dir_entries[entry_idx];
+            let unknown_dir_entry = unsafe {entry.unknown};
+            if unknown_dir_entry.is_end() {
+                break
+            } else if unknown_dir_entry.is_lfn() || unknown_dir_entry.is_unused() {
+                continue
+            } else {
+                len += 1;
+            }
+        }
+
         Ok(DirIterator {
             phantom: PhantomData,
-            dir_entries: unsafe { cluster_chain.cast() },
-            position: 0,
+            dir_entries,
+            // current_lfn,
+            dir_entry_idx: 0,
+            offset: 0,
+            len,
             vfat: self.vfat.clone(),
         })
     }

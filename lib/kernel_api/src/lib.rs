@@ -1,14 +1,15 @@
 #![feature(asm)]
 #![no_std]
 
-
 use core::fmt;
 
 use shim::io;
+use crate::network::*;
 
 #[cfg(feature = "user-space")]
 pub mod syscall;
 pub mod fs;
+pub mod network;
 
 pub type OsResult<T> = core::result::Result<T, OsError>;
 
@@ -24,6 +25,7 @@ pub enum OsError {
     BadAddress = 50,
     FileExists = 60,
     InvalidArgument = 70,
+    NotAFile = 80,
 
     IoError = 101,
     IoErrorEof = 102,
@@ -47,6 +49,7 @@ impl core::convert::From<u64> for OsError {
             50 => OsError::BadAddress,
             60 => OsError::FileExists,
             70 => OsError::InvalidArgument,
+            80 => OsError::NotAFile,
 
             101 => OsError::IoError,
             102 => OsError::IoErrorEof,
@@ -80,47 +83,47 @@ impl core::convert::From<OsError> for fmt::Error {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct SocketDescriptor(u64);
-
-impl SocketDescriptor {
-    pub fn raw(&self) -> u64 {
-        self.0
-    }
-}
-
-#[derive(Debug)]
-pub struct SocketStatus {
-    pub is_active: bool,
-    pub is_listening: bool,
-    pub can_send: bool,
-    pub can_recv: bool,
-}
-
-pub struct IpAddr {
-    pub ip: u32,
-    pub port: u16,
-}
-
-impl IpAddr {
-    pub fn new((ip1, ip2, ip3, ip4): (u8, u8, u8, u8), port: u16) -> Self {
-        IpAddr {
-            ip: u32::from_be_bytes([ip1, ip2, ip3, ip4]),
-            port,
-        }
-    }
-}
-
-impl fmt::Debug for IpAddr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let bytes = self.ip.to_be_bytes();
-        write!(
-            f,
-            "IpAddr({}.{}.{}.{}:{})",
-            bytes[0], bytes[1], bytes[2], bytes[3], self.port
-        )
-    }
-}
+// #[derive(Clone, Copy, Debug)]
+// pub struct SocketDescriptor(u64);
+//
+// impl SocketDescriptor {
+//     pub fn raw(&self) -> u64 {
+//         self.0
+//     }
+// }
+//
+// #[derive(Debug)]
+// pub struct SocketStatus {
+//     pub is_active: bool,
+//     pub is_listening: bool,
+//     pub can_send: bool,
+//     pub can_recv: bool,
+// }
+//
+// pub struct IpAddr {
+//     pub ip: u32,
+//     pub port: u16,
+// }
+//
+// impl IpAddr {
+//     pub fn new((ip1, ip2, ip3, ip4): (u8, u8, u8, u8), port: u16) -> Self {
+//         IpAddr {
+//             ip: u32::from_be_bytes([ip1, ip2, ip3, ip4]),
+//             port,
+//         }
+//     }
+// }
+//
+// impl fmt::Debug for IpAddr {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         let bytes = self.ip.to_be_bytes();
+//         write!(
+//             f,
+//             "IpAddr({}.{}.{}.{}:{})",
+//             bytes[0], bytes[1], bytes[2], bytes[3], self.port
+//         )
+//     }
+// }
 
 pub const NR_SLEEP: usize = 1;
 pub const NR_TIME: usize = 2;
@@ -142,4 +145,5 @@ pub const NR_SOCK_RECV: usize = 25;
 
 pub const NR_OPEN: usize = 30;
 pub const NR_READ: usize = 31;
-pub const NR_GETDENT: usize = 32;
+pub const NR_GETDENTS: usize = 32;
+pub const NR_STAT: usize = 33;

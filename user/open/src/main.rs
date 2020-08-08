@@ -1,54 +1,77 @@
 #![feature(asm)]
 #![no_std]
 #![no_main]
+extern crate alloc;
 
 mod cr0;
 
-
-use kernel_api::println;
-use kernel_api::syscall::{getpid, time, open, read};
-use kernel_api::fs;
+use kernel_api::syscall::{getpid, time, open, read, getdents, sleep, stat};
+use kernel_api::{fs, print, println};
+use bw_allocator::Allocator;
 
 use core::time::Duration;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use shim::io::Write;
+use shim::path::PathBuf;
+use kernel_api::fs::{Metadata, Stat};
+// use core::fmt::Write as FmtWrite;
 
-fn fib(n: u64) -> u64 {
-    match n {
-        0 => 1,
-        1 => 1,
-        n => fib(n - 1) + fib(n - 2),
-    }
-}
+#[global_allocator]
+pub static A: Allocator = Allocator::new();
 
 fn main() {
-    let open_result =  open("/nf.txt");
-    match open_result {    // match open("/") {
-        //     Ok(fd) => {
-        //         // let mut dent_buf = [fs::DirEnt::default(); 32];
-        //         let mut dent_buf = Vec::new();
-        //         for _ in 0..64 {
-        //             dent_buf.push(fs::DirEnt::default());
-        //         }
-        //         match getdent(fd, &mut dent_buf) {
-        //             Ok(entries) => {
-        //                 for index in 0..entries {
-        //                     let name = dent_buf[index].name().unwrap();
-        //                     match dent_buf[index].d_type() {
-        //                         fs::DirType::Dir => println!("{}/", name),
-        //                         fs::DirType::File => println!("{}", name),
-        //                         fs::DirType::None => println!("huh?"),
-        //                     }
-        //                 }
-        //             },
-        //             Err(e) => println!("Error getdent: {:#?}", e),
-        //         }
-        //     }
-        //     Err(e) => println!("{:#?}", e),
-        // }
+    print!("running open\r\n");
+    print!("reading root:\r\n");
 
+    let mut dent_buf = Vec::new();
+    let mut offset = 0u64;
+    let path = PathBuf::from("/");
+
+    loop {
+        dent_buf.clear();
+        for _ in 0..16 {
+            dent_buf.push(fs::DirEnt::default());
+        }
+
+        match getdents("/", &mut dent_buf, offset) {
+            Ok(entries) => {
+                for index in 0u64..entries {
+                    let mut path = path.clone();
+                    let name = dent_buf[index as usize].name().unwrap();
+
+                    path.push(name);
+                    let mut stat_buf = [Stat::default()];
+                    match stat(path, &mut stat_buf) {
+                        Ok(_) => (),
+                        Err(e) =>  println!("Error stat: {:#?}", e),
+                    }
+                    let stat = stat_buf[0];
+
+
+
+                    match dent_buf[index as usize].d_type() {
+                        fs::DirType::Dir => println!("{} {} {}/", stat.metadata(), stat.size(), name),
+                        fs::DirType::File => println!("{} {} {}",  stat.metadata(), stat.size(), name),
+                        fs::DirType::None => println!("huh?"),
+                    }
+                }
+                offset += entries;
+                if entries == 0 {
+                    break
+                }
+            },
+            Err(e) => println!("Error getdent: {:#?}", e),
+        }
+    }
+    print!("/nf.txt:\r\n");
+
+    match open("/nf.txt") {
         Ok(fid) => {
             let mut bytes = 0usize;
             let mut bytes_read = 0usize;
+            let mut file_vec= Vec::new();
             loop {
                 let mut file_buf = [0u8; 256];
                 bytes = match read(fid, &mut file_buf){
@@ -62,6 +85,7 @@ fn main() {
                     break
                 }
                 bytes_read += bytes;
+
                 let _bytes_written = file_vec.write(&file_buf)
                     .expect("failed to write to vector");
 

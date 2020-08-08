@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use core::time::Duration;
 use shim::path::PathBuf;
+use shim::io::{Seek, SeekFrom};
 use core::mem::size_of;
 use core::ops::Add;
 
@@ -8,12 +9,13 @@ use smoltcp::wire::{IpAddress, IpEndpoint};
 
 use crate::console::{kprint, CONSOLE};
 use crate::param::USER_IMG_BASE;
-use crate::process::{State, FdEntry};
+use crate::process::{State, FdEntry, IOHandle};
 use crate::traps::TrapFrame;
 use crate::{ETHERNET, SCHEDULER, FILESYSTEM};
 use crate::vm::{VirtualAddr, Page, PagePerm};
 
 use kernel_api::*;
+use kernel_api::fs::Stat;
 use pi::timer;
 use fat32::traits::{FileSystem, Entry, Dir};
 
@@ -136,233 +138,203 @@ pub fn sys_entropy(tf: &mut TrapFrame) {
 }
 
 pub fn sys_open(va: usize, len: usize, tf: &mut TrapFrame) {
-    use crate::console::kprintln;
-
     let result = unsafe { to_user_slice(va, len) }
         .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
 
-
-    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-        // let path_slice = unsafe { match p.vmap
-        //     .get_slice_at_va(VirtualAddr::from(path_ptr), path_len) {
-        //     Ok(slice) => slice,
-        //     Err(_) => {
-        //         p.context.x[7] = 104;
-        //         return true
-        //     }
-        // }};
-        // let result = unsafe { to_user_slice(va, len) }
-        //     .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
-        // let path = match str::from_utf8(path_slice) {
-        //     Ok(path) => path,
-        //     Err(_e) => {
-        //         p.context.x[7] = 50;
-        //         return true
-        //     }
-        // };
+    SCHEDULER.critical(|scheduler| {
+        let mut process = scheduler.find_process(tf);
         match result {
             Ok(path) => {
-                let path_buf = PathBuf::from(path);
-
-                let entry = match FILESYSTEM.open(path_buf.as_path()) {
+                let entry = match FILESYSTEM.open(path) {
                     Ok(entry) => entry,
-                    Err(_) => {
-                        p.context.x[7] = OsError::NoEntry as u64;
-                        return true
+                    Err(e) => {
+                        tf.x[7] = OsError::from(e) as u64;
+                        return;
                     }
                 };
-                if p.unused_file_descriptors.len() > 0 {
-                    let fd = p.unused_file_descriptors.pop()
-                        .expect("Unexpected p.unused_file_descriptors.pop() failed after len check");
-                    match p.file_table[fd] {
-                        Some(_) => {
-                            p.context.x[7] = OsError::IoErrorInvalidData as u64;
-                            true
-                        }
-                        None => {
-                            match entry.is_file() {
-                                true => {
-                                    let file = entry.into_file()
-                                        .expect("Entry unexpectedly failed to convert to file");
-                                    p.file_table[fd] = Some(FdEntry::File(Box::new(file)));
-                                }
-                                false => {
-                                    let dir = entry.into_dir()
-                                        .expect("Entry unexpectedly failed to convert to dir");
-                                    let dir_entries = dir.entries().unwrap(); //FIXME
-                                    p.file_table[fd] = Some(FdEntry::DirEntries(Box::new(dir_entries)));
-                                }
-                            }
-                            p.context.x[0] = fd as u64;
-                            p.context.x[7] = OsError::Ok as u64;
-                            true
-                        }
+                match entry.is_file() {
+                    true => {
+                        let file = entry.into_file()
+                            .expect("Entry unexpectedly failed to convert to file");
+                        let file_idx = process.handles.len();
+                        process.handles.push(IOHandle::File(Box::new(file)));
+                        tf.x[0] = file_idx as u64;
+                        tf.x[7] = OsError::Ok as u64;
+
+
                     }
-                } else {
-                    let fd = p.file_table.len();
-                    match entry.is_file() {
-                        true => {
-                            let file = entry.into_file()
-                                .expect("Entry unexpectedly failed to convert to file");
-                            p.file_table.push(Some(FdEntry::File(Box::new(file))));
-                        }
-                        false => {
-                            let dir = entry.into_dir()
-                                .expect("Entry unexpectedly failed to convert to dir");
-                            let dir_entries = dir.entries().unwrap(); //FIXME
-                            p.file_table.push(Some(FdEntry::DirEntries(Box::new(dir_entries))));
-                        }
-                    }
-                    p.context.x[0] = fd as u64;
-                    p.context.x[7] = OsError::Ok as u64;
-                    true
+                    false => tf.x[7] = OsError::IoErrorInvalidInput as u64,
                 }
             }
-            Err(e) => {
-                p.context.x[7] = e as u64;
-                true
-            }
+            Err(e) => tf.x[7] = e as u64,
         }
-    })), tf);
+
+    });
 }
 
-pub fn sys_read(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-    use crate::console::kprintln;
+pub fn sys_read(file_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
     use shim::io::Read;
 
-
-    SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-
-
-        // let mut buf_slice = unsafe { match p.vmap
-        //     .get_mut_slice_at_va(VirtualAddr::from(va), len) {
-        //     Ok(slice) => slice,
-        //     Err(_) => {
-        //         p.context.x[7] = 104;
-        //         return true
-        //     }
-        // }};
-
+    SCHEDULER.critical(|scheduler|{
+        let mut process = scheduler.find_process(tf);
         let result = unsafe { to_user_slice_mut(va, len) }
             .map_err(|_| OsError::InvalidArgument);
-
-        match result {
-            Ok(buf_slice) => {
-                match p.file_table.remove(fd) {
-                    Some(entry) => {
-                        match entry {
-                            FdEntry::Console => {
-                                let byte =  CONSOLE.lock().read_byte();
-                                p.file_table.insert(fd, Some(FdEntry::Console));
-                                buf_slice[0] = byte;
-                                p.context.x[0] = 1;
-                                p.context.x[7] = OsError::Ok as u64;
-                                true
-
-                            }
-                            FdEntry::File(mut file) => {
-                                let bytes = match file.read(&mut buf_slice[..]) {
-                                    Ok(bytes) => bytes,
-                                    Err(_) => {
-                                        p.context.x[7] = OsError::IoError as u64;
-                                        return true
-                                    }
-                                };
-                                p.file_table.insert(fd, Some(FdEntry::File(file)));
-                                p.context.x[0] = bytes as u64;
-                                p.context.x[7] = OsError::Ok as u64;
-                                true
-
-                            }
-                            FdEntry::DirEntries(dir_entries) => {
-                                p.file_table.insert(fd, Some(FdEntry::DirEntries(dir_entries)));
-                                p.context.x[7] = 80;
-                                true
-                            }
+        if file_idx < process.handles.len() {
+            match result {
+                Ok(buf_slice) => {
+                    match process.handles.remove(file_idx) {
+                        IOHandle::StdIn => {
+                            let byte = CONSOLE.lock().read_byte();
+                            buf_slice[0] = byte;
+                            process.handles.insert(file_idx, IOHandle::StdIn);
+                            tf.x[0] = 1;
+                            tf.x[7] = OsError::Ok as u64;
+                        }
+                        IOHandle::File(mut file_handle) => {
+                            let bytes = match file_handle.read(&mut buf_slice[..]) {
+                                Ok(bytes) => bytes,
+                                Err(e) => {
+                                    process.handles.insert(file_idx, IOHandle::File(file_handle));
+                                    tf.x[7] = OsError::from(e) as u64;
+                                    return;
+                                }
+                            };
+                            process.handles.insert(file_idx, IOHandle::File(file_handle));
+                            tf.x[0] = bytes as u64;
+                            tf.x[7] = OsError::Ok as u64;
+                        }
+                        io_handle => {
+                            process.handles.insert(file_idx, io_handle);
+                            tf.x[7] = OsError::NotAFile as u64;
                         }
                     }
-                    None => {
-                        p.context.x[7] = 10;
-                        true
-                    }
                 }
+                Err(e) => tf.x[7] = e as u64,
+            }
 
-            }
-            Err(e) => {
-                p.context.x[7] = e as u64;
-                true
-            }
+        } else {
+            tf.x[7] = OsError::NoEntry as u64;
         }
 
-    })), tf);
+    });
 }
 
-// pub fn sys_getdent(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-//     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
-//         let overflow = va.checked_add(len * size_of::<fs::DirEnt>()).is_none();
-//         let result = if va >= USER_IMG_BASE && !overflow {
-//             Ok(va)
-//         } else {
-//             Err(OsError::BadAddress)
-//         };
-//
-//         match &result {
-//             Ok(va) => {
-//                 let mut entries = 0u64;
-//                 let mut dir_entries = match p.file_table.remove(fd) {
-//                     Some(entry) => {
-//                         match entry {
-//                             FdEntry::Console => {
-//                                 p.file_table.insert(fd, Some(FdEntry::Console));
-//                                 p.context.x[7] = OsError::Ok as u64;
-//                                 return true
-//                             }
-//                             FdEntry::File(file) => {
-//                                 p.file_table.insert(fd, Some(FdEntry::File(file)));
-//                                 p.context.x[7] = OsError::Ok as u64;
-//                                 return true
-//                             }
-//                             FdEntry::DirEntries(dir_entries) => dir_entries
-//                         }
-//                     }
-//                     None => {
-//                         p.context.x[7] = 10;
-//                         return true
-//                     }
-//                 };
-//                 for index in 0..len {
-//                     match dir_entries.next() {
-//                         Some(entry) => {
-//                             let dent_va = va.add(size_of::<fs::DirEnt>() * index);
-//                             let mut dent = unsafe { &mut *(dent_va as  *mut fs::DirEnt) };
-//
-//                             dent.set_name(entry.name());
-//                             match entry.is_file() {
-//                                 true => dent.set_d_type(fs::DirType::File),
-//                                 false => dent.set_d_type(fs::DirType::Dir),
-//                             }
-//                             entries += 1;
-//
-//                         }
-//                         None => {
-//                             break
-//                         }
-//                     }
-//                 }
-//                 p.file_table.insert(fd, Some(FdEntry::DirEntries(dir_entries)));
-//                 p.context.x[0] = entries;
-//                 p.context.x[7] = OsError::Ok as u64;
-//
-//                 true
-//             }
-//             Err(e) => {
-//                 tf.x[7] = *e as u64;
-//                 true
-//             },
-//         }
-//     }
-//     )), tf);
-// }
+pub fn sys_getdents(
+    path_va: usize,
+    path_len: usize,
+    buf_va: usize,
+    buf_len: usize,
+    offset: u64,
+    tf: &mut TrapFrame
+) {
+    let overflow = buf_va.checked_add(buf_len * size_of::<fs::DirEnt>()).is_none();
+    let buf_result = if buf_va >= USER_IMG_BASE && !overflow {
+        Ok(buf_va)
+    } else {
+        Err(OsError::BadAddress)
+    };
+    let path_result = unsafe { to_user_slice(path_va, path_len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+
+    let path = match path_result {
+        Ok(path) => path,
+        Err(e) => {
+            tf.x[7] = e as u64;
+            return;
+        }
+    };
+    match &buf_result {
+        Ok(va) => {
+            let mut entries = 0u64;
+            let entry = match FILESYSTEM.open(path) {
+                Ok(entry) => entry,
+                Err(e) => {
+                    tf.x[7] = OsError::from(e) as u64;
+                    return;
+                }
+            };
+            if entry.is_dir() {
+                let dir = entry.into_dir()
+                    .expect("Entry unexpectedly failed to convert to dir");
+                let mut dir_entries = dir.entries().unwrap();
+                if offset != 0 {
+                    dir_entries.seek(SeekFrom::Start(offset));
+                }
+
+                for index in 0..buf_len {
+                    match dir_entries.next() {
+                        Some(entry) => {
+                            let dent_va = va.add(size_of::<fs::DirEnt>() * index);
+                            let mut dent = unsafe { &mut *(dent_va as  *mut fs::DirEnt) };
+
+                            dent.set_name(entry.name());
+                            match entry.is_file() {
+                                true => dent.set_d_type(fs::DirType::File),
+                                false => dent.set_d_type(fs::DirType::Dir),
+                            }
+                            entries += 1;
+
+                        }
+                        None => {
+                            break
+                        }
+                    }
+                }
+                tf.x[0] = entries;
+                tf.x[7] = OsError::Ok as u64;
+            } else {
+                let dent_va = va.add(0);
+
+                let mut dent = unsafe { &mut *(dent_va as  *mut fs::DirEnt) };
+                dent.set_name(entry.name());
+                dent.set_d_type(fs::DirType::File);
+                tf.x[0] = 1;
+                tf.x[7] = OsError::Ok as u64;
+
+            }
+        }
+        Err(e) => tf.x[7] = *e as u64,
+    }
+}
+
+pub fn sys_stat(path_va: usize, path_len: usize, buf_va: usize, tf: &mut TrapFrame) {
+    let overflow = buf_va.checked_add(size_of::<Stat>()).is_none();
+    let buf_result = if buf_va >= USER_IMG_BASE && !overflow {
+        Ok(buf_va)
+    } else {
+        Err(OsError::BadAddress)
+    };
+    let path_result = unsafe { to_user_slice(path_va, path_len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+
+    let path = match path_result {
+        Ok(path) => path,
+        Err(e) => {
+            tf.x[7] = e as u64;
+            return;
+        }
+    };
+    match &buf_result {
+        Ok(va) => {
+            let entry = match FILESYSTEM.open(path) {
+                Ok(entry) => entry,
+                Err(e) => {
+                    tf.x[7] = OsError::from(e) as u64;
+                    return;
+                }
+            };
+            let stat_vs = va.add(0);
+
+            let mut stat = unsafe { &mut *(stat_vs as  *mut Stat) };
+
+            stat.set_metadata_from_raw(entry.metadata().raw());
+            stat.set_size(entry.size() as u64);
+
+            tf.x[7] = OsError::Ok as u64;
+        }
+        Err(e) => tf.x[7] = *e as u64,
+    }
+}
 
 /// Creates a socket and saves the socket handle in the current process's
 /// socket list.
@@ -372,9 +344,10 @@ pub fn sys_read(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
 pub fn sys_sock_create(tf: &mut TrapFrame) {
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
-        let sock_idx = process.sockets.len() + 3;
-        let mut handle = ETHERNET.add_socket();
-        process.sockets.push(handle);
+        let sock_idx = process.handles.len();
+        let mut socket_handle = ETHERNET.add_socket();
+        let io_handle = IOHandle::Socket(socket_handle);
+        process.handles.push(io_handle);
         tf.x[0] = sock_idx as u64;
         tf.x[7] = OsError::Ok as u64;
     });
@@ -398,20 +371,23 @@ pub fn sys_sock_create(tf: &mut TrapFrame) {
 pub fn sys_sock_status(sock_idx: usize, tf: &mut TrapFrame) {
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
-        match process.sockets.get(sock_idx - 3) {
-            Some(handle) => {
-                let (is_active, is_listening, can_send, can_recv) = ETHERNET.with_socket(*handle, |socket| {
-                    (socket.is_active(),  socket.is_listening(), socket.can_send(), socket.can_recv())
-                });
-                tf.x[0] = is_active as u64;
-                tf.x[1] = is_listening as u64;
-                tf.x[2] = can_send as u64;
-                tf.x[3] = can_recv as u64;
-                tf.x[7] = OsError::Ok as u64;
+        match process.handles.get(sock_idx) {
+            Some(io_handle) => {
+                match io_handle {
+                    IOHandle::Socket(handle) => {
+                        let (is_active, is_listening, can_send, can_recv) = ETHERNET.with_socket(*handle, |socket| {
+                            (socket.is_active(),  socket.is_listening(), socket.can_send(), socket.can_recv())
+                        });
+                        tf.x[0] = is_active as u64;
+                        tf.x[1] = is_listening as u64;
+                        tf.x[2] = can_send as u64;
+                        tf.x[3] = can_recv as u64;
+                        tf.x[7] = OsError::Ok as u64;
+                    }
+                    _ => tf.x[7] = OsError::InvalidSocket as u64,
+                }
             }
-            None => {
-                tf.x[7] = OsError::InvalidSocket as u64;
-            }
+            None => tf.x[7] = OsError::InvalidSocket as u64,
         };
     });
 }
@@ -442,31 +418,36 @@ pub fn sys_sock_connect(
 ) {
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
-        match process.sockets.get(sock_idx - 3) {
-            Some(handle) => {
-                let port: u16;
-                match ETHERNET.get_ephemeral_port() {
-                    Some(p) => port = p,
-                    None => tf.x[7] = {
-                        OsError::NoEntry as u64;
-                        return;
+        match process.handles.get(sock_idx) {
+            Some(io_handle) => {
+                match io_handle {
+                    IOHandle::Socket(handle) => {
+                        let port: u16;
+                        match ETHERNET.get_ephemeral_port() {
+                            Some(p) => port = p,
+                            None => tf.x[7] = {
+                                OsError::NoEntry as u64;
+                                return;
+                            }
+                        };
+                        match ETHERNET.mark_port(port) {
+                            Some(_) => (),
+                            None => tf.x[7] = {
+                                OsError::NoEntry as u64;
+                                return;
+                            }
+                        };
+                        ETHERNET.with_socket(*handle, |socket| {
+                            match socket.connect(remote_endpoint, port) {
+                                Ok(()) => tf.x[7] = OsError::Ok as u64,
+                                Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
+                                Err(smoltcp::Error::Unaddressable) => tf.x[7] = OsError::BadAddress as u64,
+                                Err(_) => tf.x[7] = OsError::Unknown as u64,
+                            }
+                        })
                     }
-                };
-                match ETHERNET.mark_port(port) {
-                    Some(_) => (),
-                    None => tf.x[7] = {
-                        OsError::NoEntry as u64;
-                        return;
-                    }
-                };
-                ETHERNET.with_socket(*handle, |socket| {
-                    match socket.connect(remote_endpoint, port) {
-                        Ok(()) => tf.x[7] = OsError::Ok as u64,
-                        Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
-                        Err(smoltcp::Error::Unaddressable) => tf.x[7] = OsError::BadAddress as u64,
-                        Err(_) => tf.x[7] = OsError::Unknown as u64,
-                    }
-                })
+                    _ => tf.x[7] = OsError::InvalidSocket as u64,
+                }
             }
             None => tf.x[7] = OsError::InvalidSocket as u64,
         };
@@ -490,23 +471,29 @@ pub fn sys_sock_connect(
 pub fn sys_sock_listen(sock_idx: usize, local_port: u16, tf: &mut TrapFrame) {
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
-        match process.sockets.get(sock_idx - 3) {
-            Some(handle) => {
-                match ETHERNET.mark_port(local_port) {
-                    Some(_) => (),
-                    None => {
-                        tf.x[7] = OsError::NoEntry as u64;
-                        return
+        match process.handles.get(sock_idx ) {
+            Some(io_handle) => {
+                match io_handle {
+                    IOHandle::Socket(handle) => {
+                        match ETHERNET.mark_port(local_port) {
+                            Some(_) => (),
+                            None => {
+                                tf.x[7] = OsError::NoEntry as u64;
+                                return
+                            }
+                        };
+                        ETHERNET.with_socket(*handle, |socket| {
+                            match socket.listen(local_port) {
+                                Ok(()) => tf.x[7] = OsError::Ok as u64,
+                                Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
+                                Err(smoltcp::Error::Unaddressable) => tf.x[7] = OsError::BadAddress as u64,
+                                Err(_) => tf.x[7] = OsError::Unknown as u64,
+                            }
+                        });
+
                     }
-                };
-                ETHERNET.with_socket(*handle, |socket| {
-                    match socket.listen(local_port) {
-                        Ok(()) => tf.x[7] = OsError::Ok as u64,
-                        Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
-                        Err(smoltcp::Error::Unaddressable) => tf.x[7] = OsError::BadAddress as u64,
-                        Err(_) => tf.x[7] = OsError::Unknown as u64,
-                    }
-                });
+                    _ => tf.x[7] = OsError::InvalidSocket as u64,
+                }
             }
             None => tf.x[7] = OsError::InvalidSocket as u64,
         };
@@ -562,19 +549,23 @@ pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame)
         Ok(data) => {
             SCHEDULER.critical(|scheduler|{
                 let mut process = scheduler.find_process(tf);
-                match process.sockets.get(sock_idx - 3) {
-                    Some(handle) => {
-                        ETHERNET.with_socket(*handle, |socket| {
-                            match socket.send_slice(data) {
-                                Ok(bytes) => {
-                                    tf.x[0] = bytes as u64;
-                                    tf.x[7] = OsError::Ok as u64;
-                                }
-                                Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
-                                Err(_) => tf.x[7] = OsError::Unknown as u64,
+                match process.handles.get(sock_idx) {
+                    Some(io_handle) => {
+                        match io_handle {
+                            IOHandle::Socket(handle) => {
+                                ETHERNET.with_socket(*handle, |socket| {
+                                    match socket.send_slice(data) {
+                                        Ok(bytes) => {
+                                            tf.x[0] = bytes as u64;
+                                            tf.x[7] = OsError::Ok as u64;
+                                        }
+                                        Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
+                                        Err(_) => tf.x[7] = OsError::Unknown as u64,
+                                    }
+                                });
                             }
-                        });
-
+                            _ => tf.x[7] = OsError::InvalidSocket as u64,
+                        }
                     }
                     None => tf.x[7] = OsError::InvalidSocket as u64,
                 };
@@ -605,19 +596,23 @@ pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame)
         Ok(data) => {
             SCHEDULER.critical(|scheduler|{
                 let mut process = scheduler.find_process(tf);
-                match process.sockets.get(sock_idx - 3) {
-                    Some(handle) => {
-                        ETHERNET.with_socket(*handle, |socket| {
-                            match socket.recv_slice(data) {
-                                Ok(bytes) => {
-                                    tf.x[0] = bytes as u64;
-                                    tf.x[7] = OsError::Ok as u64;
-                                }
-                                Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
-                                Err(_) => tf.x[7] = OsError::Unknown as u64,
+                match process.handles.get(sock_idx) {
+                    Some(io_handle) => {
+                        match io_handle {
+                            IOHandle::Socket(handle) => {
+                                ETHERNET.with_socket(*handle, |socket| {
+                                    match socket.recv_slice(data) {
+                                        Ok(bytes) => {
+                                            tf.x[0] = bytes as u64;
+                                            tf.x[7] = OsError::Ok as u64;
+                                        }
+                                        Err(smoltcp::Error::Illegal) => tf.x[7] = OsError::IllegalSocketOperation as u64,
+                                        Err(_) => tf.x[7] = OsError::Unknown as u64,
+                                    }
+                                });
                             }
-                        });
-
+                            _ => tf.x[7] = OsError::InvalidSocket as u64,
+                        }
                     }
                     None => tf.x[7] = OsError::InvalidSocket as u64,
                 };
@@ -698,7 +693,8 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         25 => sys_sock_recv(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
         30 => sys_open(tf.x[0] as usize, tf.x[1] as usize, tf),
         31 => sys_read(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
-        // 32 => sys_getdent(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
+        32 => sys_getdents(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf.x[3] as usize, tf.x[4], tf),
+        33 => sys_stat(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
         _ => tf.x[7] = OsError::Unknown as u64,
     }
 }

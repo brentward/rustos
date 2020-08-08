@@ -164,6 +164,10 @@ impl Metadata {
         ((self.attributes.0 & 0x20) >> 5) != 0
     }
 
+    pub fn raw(&self) -> (u8, [u16; 5]) {
+        (self.attributes.0, [self.creation_timestamp.date.0, self.creation_timestamp.time.0, self.accessed_date.0, self.modification_timestamp.date.0, self.modification_timestamp.time.0])
+    }
+
 }
 
 impl MetadataTrait for Metadata {
