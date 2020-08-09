@@ -1,19 +1,19 @@
 use crate::*;
 
-#[derive(Clone, Copy, Debug)]
-pub struct SocketDescriptor(u64);
-
-impl SocketDescriptor {
-    pub fn raw(&self) -> u64 {
-        self.0
-    }
-}
-
-impl From<u64> for SocketDescriptor {
-    fn from(raw: u64) -> Self {
-        SocketDescriptor(raw)
-    }
-}
+// #[derive(Clone, Copy, Debug)]
+// pub struct SocketDescriptor(u64);
+//
+// impl SocketDescriptor {
+//     pub fn raw(&self) -> u64 {
+//         self.0
+//     }
+// }
+//
+// impl From<u64> for SocketDescriptor {
+//     fn from(raw: u64) -> Self {
+//         SocketDescriptor(raw)
+//     }
+// }
 
 #[derive(Debug)]
 pub struct SocketStatus {

@@ -2,6 +2,53 @@ use core::str;
 
 use crate::*;
 
+pub enum Handle {
+    StdIn,
+    StdOut,
+    StdErr,
+    File(HandleDescriptor),
+    Socket(HandleDescriptor),
+}
+
+impl Handle {
+    pub fn raw(&self) -> u64{
+        match self {
+            Handle::StdIn => 0,
+            Handle::StdOut => 1,
+            Handle::StdErr => 2,
+            Handle::File(hd) => hd.raw(),
+            Handle::Socket(hd) => hd.raw(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct HandleDescriptor(u64);
+
+impl HandleDescriptor {
+    pub fn raw(&self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for HandleDescriptor {
+    fn from(raw: u64) -> Self {
+        HandleDescriptor(raw)
+    }
+}
+
+impl From<Handle> for HandleDescriptor {
+    fn from(handle: Handle) -> Self {
+        match handle {
+            Handle::StdIn => HandleDescriptor::from(0),
+            Handle::StdOut => HandleDescriptor::from(1),
+            Handle::StdErr => HandleDescriptor::from(2),
+            Handle::File(hd) => hd,
+            Handle::Socket(hd) => hd,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct DirEnt {

@@ -88,8 +88,6 @@ unsafe fn kmain() -> ! {
     }
     aarch64::disable_fiq_interrupt();
     init::initialize_app_cores();
-
     VMM.wait();
-    kprintln!("Welcome to BrentOS!");
     SCHEDULER.start()
 }

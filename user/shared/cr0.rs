@@ -2,8 +2,29 @@ use core::mem::zeroed;
 use core::panic::PanicInfo;
 use core::ptr::write_volatile;
 
+use kernel_api::println;
+use kernel_api::fs::Handle;
+
+pub static STD_IN: Handle = Handle::StdIn;
+pub static STD_OUT: Handle = Handle::StdOut;
+pub static STD_ERR: Handle = Handle::StdErr;
+
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    println!("Panic");
+    match info.location() {
+        Some(location) => {
+            println!("FILE: {}", location.file());
+            println!("LINE: {}", location.line());
+            println!("COL: {}", location.column());
+        }
+        None => println!("Panic location cannot be determined"),
+    }
+    println!("");
+    match info.message() {
+        Some(message) => println!("{}", message),
+        None => println!("Panic message cannot be determined"),
+    }
     loop {}
 }
 

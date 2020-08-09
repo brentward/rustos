@@ -1,15 +1,16 @@
 use alloc::boxed::Box;
 use core::time::Duration;
-use shim::path::PathBuf;
+use shim::path::{Path, PathBuf};
 use shim::io::{Seek, SeekFrom};
 use core::mem::size_of;
 use core::ops::Add;
+use core::str;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
 use crate::console::{kprint, CONSOLE};
 use crate::param::USER_IMG_BASE;
-use crate::process::{State, FdEntry, IOHandle};
+use crate::process::{State, IOHandle};
 use crate::traps::TrapFrame;
 use crate::{ETHERNET, SCHEDULER, FILESYSTEM};
 use crate::vm::{VirtualAddr, Page, PagePerm};
@@ -70,14 +71,85 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 /// This system call takes one parameter: a u8 character to print.
 ///
 /// It only returns the usual status value.
-pub fn sys_write(b: u8, tf: &mut TrapFrame) {
-    if b.is_ascii() {
-        let ch = b as char;
-        kprint!("{}", ch);
+// pub fn sys_write(b: u8, tf: &mut TrapFrame) {
+//     if b.is_ascii() {
+//         let ch = b as char;
+//         kprint!("{}", ch);
+//         tf.x[7] = OsError::Ok as u64;
+//     } else {
+//         tf.x[7] = OsError::IoErrorInvalidInput as u64;
+//     }
+// }
+
+pub fn sys_write(handle_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    if len == 0 {
+        tf.x[0] = 0;
         tf.x[7] = OsError::Ok as u64;
-    } else {
-        tf.x[7] = OsError::IoErrorInvalidInput as u64;
+        return
     }
+    let result = unsafe { to_user_slice(va, len) }
+        .map_err(|_| OsError::BadAddress);
+
+    let buf = match result {
+        Ok(buf) => buf,
+        Err(e) => {
+            tf.x[7] = e as u64;
+            return
+        }
+    };
+
+    SCHEDULER.critical(|scheduler|{
+        let mut process = scheduler.find_process(tf);
+        match process.handles.get_mut(handle_idx) {
+            Some(handle) => {
+                match handle {
+                    IOHandle::Console => {
+                        // use core::fmt::Write;
+                        //
+                        let buf_str = match str::from_utf8(buf) {
+                            Ok(str) => str,
+                            Err(e) => {
+                                tf.x[7] = OsError::from(e) as u64;
+                                return
+                            }
+                        };
+                        kprint!("{}", buf_str);
+                        tf.x[0] = buf_str.len() as u64;
+                        tf.x[7] = OsError::Ok as u64;
+
+                        // match CONSOLE.lock().write_str(buf_str){
+                        //     Ok(()) => {
+                        //         tf.x[0] = buf_str.len() as u64;
+                        //         tf.x[7] = OsError::Ok as u64;
+                        //     }
+                        //     Err(e) => {
+                        //         tf.x[0] = 0;
+                        //         tf.x[7] = OsError::from(e) as u64;
+                        //     }
+                        // }
+                    }
+                    IOHandle::File(file_handle) => {
+                        use shim::io::Write;
+
+                        let bytes = match file_handle.write(&buf) {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                tf.x[7] = OsError::from(e) as u64;
+                                return
+                            }
+                        };
+                        tf.x[0] = bytes as u64;
+                        tf.x[7] = OsError::Ok as u64;
+                    }
+                    _io_handle => {
+                        tf.x[7] = OsError::NotAFile as u64;
+                    }
+                }
+            }
+            None => tf.x[7] = OsError::NoEntry as u64,
+        }
+    });
+
 }
 
 /// Returns the current process's ID.
@@ -138,35 +210,40 @@ pub fn sys_entropy(tf: &mut TrapFrame) {
 }
 
 pub fn sys_open(va: usize, len: usize, tf: &mut TrapFrame) {
-    let result = unsafe { to_user_slice(va, len) }
-        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+    let path_result = unsafe { to_user_slice(va, len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
+
+    let path: &Path = match path_result {
+        Ok(path) => path.as_ref(),
+        Err(e) => {
+            tf.x[7] = e as u64;
+            return
+        }
+    };
 
     SCHEDULER.critical(|scheduler| {
         let mut process = scheduler.find_process(tf);
-        match result {
-            Ok(path) => {
-                let entry = match FILESYSTEM.open(path) {
-                    Ok(entry) => entry,
-                    Err(e) => {
-                        tf.x[7] = OsError::from(e) as u64;
-                        return;
-                    }
-                };
-                match entry.is_file() {
-                    true => {
-                        let file = entry.into_file()
-                            .expect("Entry unexpectedly failed to convert to file");
-                        let file_idx = process.handles.len();
-                        process.handles.push(IOHandle::File(Box::new(file)));
-                        tf.x[0] = file_idx as u64;
-                        tf.x[7] = OsError::Ok as u64;
-
-
-                    }
-                    false => tf.x[7] = OsError::IoErrorInvalidInput as u64,
-                }
+        let mut working_path = process.cwd.clone();
+        working_path.push(path);
+        let entry = match FILESYSTEM.open(working_path) {
+            Ok(entry) => entry,
+            Err(e) => {
+                tf.x[7] = OsError::from(e) as u64;
+                return
             }
-            Err(e) => tf.x[7] = e as u64,
+        };
+        match entry.is_file() {
+            true => {
+                let file = entry.into_file()
+                    .expect("Entry unexpectedly failed to convert to file");
+                let file_idx = process.handles.len();
+                process.handles.push(IOHandle::File(Box::new(file)));
+                tf.x[0] = file_idx as u64;
+                tf.x[7] = OsError::Ok as u64;
+
+
+            }
+            false => tf.x[7] = OsError::IoErrorInvalidInput as u64,
         }
 
     });
@@ -175,48 +252,77 @@ pub fn sys_open(va: usize, len: usize, tf: &mut TrapFrame) {
 pub fn sys_read(file_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
     use shim::io::Read;
 
+    if len == 0 {
+        tf.x[0] = 0;
+        tf.x[7] = OsError::Ok as u64;
+        return
+    }
+
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
         let result = unsafe { to_user_slice_mut(va, len) }
-            .map_err(|_| OsError::InvalidArgument);
-        if file_idx < process.handles.len() {
-            match result {
-                Ok(buf_slice) => {
-                    match process.handles.remove(file_idx) {
-                        IOHandle::StdIn => {
-                            let byte = CONSOLE.lock().read_byte();
-                            buf_slice[0] = byte;
-                            process.handles.insert(file_idx, IOHandle::StdIn);
-                            tf.x[0] = 1;
-                            tf.x[7] = OsError::Ok as u64;
-                        }
-                        IOHandle::File(mut file_handle) => {
-                            let bytes = match file_handle.read(&mut buf_slice[..]) {
-                                Ok(bytes) => bytes,
-                                Err(e) => {
-                                    process.handles.insert(file_idx, IOHandle::File(file_handle));
-                                    tf.x[7] = OsError::from(e) as u64;
-                                    return;
-                                }
-                            };
-                            process.handles.insert(file_idx, IOHandle::File(file_handle));
-                            tf.x[0] = bytes as u64;
-                            tf.x[7] = OsError::Ok as u64;
-                        }
-                        io_handle => {
-                            process.handles.insert(file_idx, io_handle);
-                            tf.x[7] = OsError::NotAFile as u64;
+            .map_err(|_| OsError::BadAddress);
+        match result {
+            Ok(buf) => {
+                match process.handles.get_mut(file_idx) {
+                    Some(handle) => {
+                        match handle {
+                            IOHandle::Console => {
+                                let byte = CONSOLE.lock().read_byte();
+                                buf[0] = byte;
+                                tf.x[0] = 1;
+                                tf.x[7] = OsError::Ok as u64;
+                            }
+                            IOHandle::File(file_handle) => {
+                                match file_handle.read(buf) {
+                                    Ok(bytes) => {
+                                        tf.x[0] = bytes as u64;
+                                        tf.x[7] = OsError::Ok as u64;
+                                    },
+                                    Err(e) => {
+                                        tf.x[7] = OsError::from(e) as u64;
+                                    }
+                                };
+                            }
+                            _io_handle => tf.x[7] = OsError::NotAFile as u64,
                         }
                     }
+                    None => tf.x[7] = OsError::NoEntry as u64,
                 }
-                Err(e) => tf.x[7] = e as u64,
             }
-
-        } else {
-            tf.x[7] = OsError::NoEntry as u64;
+            Err(e) => tf.x[7] = e as u64,
         }
-
     });
+}
+pub fn sys_chdir(va: usize, len: usize, tf: &mut TrapFrame) {
+    let path_result = unsafe { to_user_slice(va, len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
+
+    let path: &Path = match path_result {
+        Ok(path) => path.as_ref(),
+        Err(e) => {
+            tf.x[7] = e as u64;
+            return
+        }
+    };
+    SCHEDULER.critical(|scheduler|{
+        let mut process = scheduler.find_process(tf);
+        let mut working_path = process.cwd.clone();
+        working_path.push(path);
+        match FILESYSTEM.open(&working_path) {
+            Ok(entry) => {
+                if entry.is_dir() {
+                    process.cwd = working_path;
+                    tf.x[7] = OsError::Ok as u64;
+                } else {
+                    tf.x[7] = OsError::NotADir as u64;
+                }
+            }
+            Err(e) => tf.x[7] = OsError::from(e) as u64,
+        };
+    });
+
+
 }
 
 pub fn sys_getdents(
@@ -227,6 +333,12 @@ pub fn sys_getdents(
     offset: u64,
     tf: &mut TrapFrame
 ) {
+    if buf_len == 0 {
+        tf.x[0] = 0;
+        tf.x[7] = OsError::Ok as u64;
+        return
+    }
+
     let overflow = buf_va.checked_add(buf_len * size_of::<fs::DirEnt>()).is_none();
     let buf_result = if buf_va >= USER_IMG_BASE && !overflow {
         Ok(buf_va)
@@ -234,23 +346,30 @@ pub fn sys_getdents(
         Err(OsError::BadAddress)
     };
     let path_result = unsafe { to_user_slice(path_va, path_len) }
-        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
 
-    let path = match path_result {
-        Ok(path) => path,
+    let path: &Path = match path_result {
+        Ok(path) => path.as_ref(),
         Err(e) => {
             tf.x[7] = e as u64;
-            return;
+            return
         }
     };
     match &buf_result {
         Ok(va) => {
             let mut entries = 0u64;
-            let entry = match FILESYSTEM.open(path) {
+            let working_path = SCHEDULER.critical(|scheduler|{
+                let mut process = scheduler.find_process(tf);
+                let mut working_path = process.cwd.clone();
+                working_path.push(path);
+                working_path
+            });
+
+            let entry = match FILESYSTEM.open(working_path) {
                 Ok(entry) => entry,
                 Err(e) => {
                     tf.x[7] = OsError::from(e) as u64;
-                    return;
+                    return
                 }
             };
             if entry.is_dir() {
@@ -273,7 +392,6 @@ pub fn sys_getdents(
                                 false => dent.set_d_type(fs::DirType::Dir),
                             }
                             entries += 1;
-
                         }
                         None => {
                             break
@@ -283,14 +401,12 @@ pub fn sys_getdents(
                 tf.x[0] = entries;
                 tf.x[7] = OsError::Ok as u64;
             } else {
-                let dent_va = va.add(0);
-
+                let dent_va = *va;
                 let mut dent = unsafe { &mut *(dent_va as  *mut fs::DirEnt) };
                 dent.set_name(entry.name());
                 dent.set_d_type(fs::DirType::File);
                 tf.x[0] = 1;
                 tf.x[7] = OsError::Ok as u64;
-
             }
         }
         Err(e) => tf.x[7] = *e as u64,
@@ -305,27 +421,27 @@ pub fn sys_stat(path_va: usize, path_len: usize, buf_va: usize, tf: &mut TrapFra
         Err(OsError::BadAddress)
     };
     let path_result = unsafe { to_user_slice(path_va, path_len) }
-        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
 
-    let path = match path_result {
-        Ok(path) => path,
+    let path: &Path = match path_result {
+        Ok(path) => path.as_ref(),
         Err(e) => {
             tf.x[7] = e as u64;
-            return;
+            return
         }
     };
+
     match &buf_result {
         Ok(va) => {
             let entry = match FILESYSTEM.open(path) {
                 Ok(entry) => entry,
                 Err(e) => {
                     tf.x[7] = OsError::from(e) as u64;
-                    return;
+                    return
                 }
             };
-            let stat_vs = va.add(0);
-
-            let mut stat = unsafe { &mut *(stat_vs as  *mut Stat) };
+            let stat_vs = *va;
+            let mut stat = unsafe { &mut *(stat_vs as *mut Stat) };
 
             stat.set_metadata_from_raw(entry.metadata().raw());
             stat.set_size(entry.size() as u64);
@@ -425,16 +541,16 @@ pub fn sys_sock_connect(
                         let port: u16;
                         match ETHERNET.get_ephemeral_port() {
                             Some(p) => port = p,
-                            None => tf.x[7] = {
-                                OsError::NoEntry as u64;
-                                return;
+                            None => {
+                                tf.x[7] = OsError::NoEntry as u64;
+                                return
                             }
                         };
                         match ETHERNET.mark_port(port) {
                             Some(_) => (),
-                            None => tf.x[7] = {
-                                OsError::NoEntry as u64;
-                                return;
+                            None => {
+                                tf.x[7] = OsError::NoEntry as u64;
+                                return
                             }
                         };
                         ETHERNET.with_socket(*handle, |socket| {
@@ -545,6 +661,11 @@ unsafe fn to_user_slice_mut<'a>(va: usize, len: usize) -> OsResult<&'a mut [u8]>
 /// - `OsError::IllegalSocketOperation`: `send_slice()` returned `smoltcp::Error::Illegal`.
 /// - `OsError::Unknown`: All the other errors from smoltcp.
 pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    if len == 0 {
+        tf.x[0] = 0;
+        tf.x[7] = OsError::Ok as u64;
+        return
+    }
     match unsafe { to_user_slice(va, len) } {
         Ok(data) => {
             SCHEDULER.critical(|scheduler|{
@@ -592,6 +713,11 @@ pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame)
 /// - `OsError::IllegalSocketOperation`: `recv_slice()` returned `smoltcp::Error::Illegal`.
 /// - `OsError::Unknown`: All the other errors from smoltcp.
 pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    if len == 0 {
+        tf.x[0] = 0;
+        tf.x[7] = OsError::Ok as u64;
+        return
+    }
     match unsafe { to_user_slice_mut(va, len) } {
         Ok(data) => {
             SCHEDULER.critical(|scheduler|{
@@ -635,16 +761,47 @@ pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame)
 ///
 /// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
 /// - `OsError::InvalidArgument`: The provided buffer is not UTF-8 encoded.
-pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
+pub fn sys_write_str(handle_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    if len == 0 {
+        tf.x[0] = 0;
+        tf.x[7] = OsError::Ok as u64;
+        return
+    }
+
     let result = unsafe { to_user_slice(va, len) }
-        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
 
     match result {
-        Ok(msg) => {
-            kprint!("{}", msg);
+        Ok(str) => {
+            SCHEDULER.critical(|scheduler| {
+                let mut process = scheduler.find_process(tf);
+                match process.handles.get_mut(handle_idx) {
+                    Some(handle) => {
+                        match handle {
+                            IOHandle::Console => {
+                                kprint!("{}", str);
 
-            tf.x[0] = msg.len() as u64;
-            tf.x[7] = OsError::Ok as u64;
+                                tf.x[0] = str.len() as u64;
+                                tf.x[7] = OsError::Ok as u64;
+                            }
+                            IOHandle::File(file_handle) => {
+                                use shim::io::Write;
+
+                                match file_handle.write(str.as_bytes()) {
+                                    Ok(bytes) => {
+                                        tf.x[0] = bytes as u64;
+                                        tf.x[7] = OsError::Ok as u64;
+                                    }
+                                    Err(e) => tf.x[7] = OsError::from(e) as u64,
+                                };
+                            }
+                            _ => tf.x[7] = OsError::IoError as u64
+                        }
+                    }
+                    None => tf.x[7] = OsError::NoEntry as u64,
+                }
+            });
+
         }
         Err(e) => {
             tf.x[7] = e as u64;
@@ -678,9 +835,9 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         1 => sys_sleep(tf.x[0] as u32, tf),
         2 => sys_time(tf),
         3 => sys_exit(tf),
-        4 => sys_write(tf.x[0] as u8, tf),
+        4 => sys_write(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
         5 => sys_getpid(tf),
-        6 => sys_write_str(tf.x[0] as usize, tf.x[1] as usize, tf),
+        6 => sys_write_str(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf),
         7 => sys_sbrk(tf.x[0] as usize, tf),
         8 => sys_rand(tf.x[0] as u32, tf.x[1] as u32, tf),
         9 => sys_rrand(tf),

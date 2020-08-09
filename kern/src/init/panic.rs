@@ -2,7 +2,7 @@ use core::panic::PanicInfo;
 use crate::console::kprintln;
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
     kprintln!("");
     kprintln!(r#"                             __"#);
     kprintln!(r#"                   _ ,___,-'",-=-."#);
@@ -33,7 +33,8 @@ fn panic(_info: &PanicInfo) -> ! {
     kprintln!("│             !!!  D'oh  !!!             │");
     kprintln!("└────────────────────────────────────────┘");
     kprintln!("");
-    match _info.location() {
+    kprintln!("Kernel Panic");
+    match info.location() {
         Some(location) => {
             kprintln!("FILE: {}", location.file());
             kprintln!("LINE: {}", location.line());
@@ -42,7 +43,7 @@ fn panic(_info: &PanicInfo) -> ! {
         None => kprintln!("Panic location cannot be determined"),
     }
     kprintln!("");
-    match _info.message() {
+    match info.message() {
         Some(message) => kprintln!("{}", message),
         None => kprintln!("Panic message cannot be determined"),
     }

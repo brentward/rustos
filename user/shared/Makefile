@@ -5,7 +5,6 @@ TARGET := target/aarch64-unknown-none/release/$(BIN)
 OBJCPY := cargo objcopy -- --strip-all -O binary
 
 .PHONY: all build qemu objdump nm clean
-
 all: build
 
 build:

@@ -231,7 +231,7 @@ impl GlobalScheduler {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
         let proc_count: usize = 1;
         for proc in 0..proc_count {
-            let process = match Process::load("/open") {
+            let process = match Process::load("/bwsh") {
                 Ok(process) => process,
                 Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
             };

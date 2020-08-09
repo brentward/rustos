@@ -26,21 +26,9 @@ use kernel_api::{OsError, OsResult};
 /// Type alias for the type of a process ID.
 pub type Id = u64;
 
-/// Type alias for the type of a File Descriptor
-pub type Fd = u64;
-
-#[derive(Debug)]
-pub enum FdEntry {
-    Console,
-    File(Box<File<PiVFatHandle>>),
-    DirEntries(Box<DirIterator<PiVFatHandle>>),
-}
-
 #[derive(Debug)]
 pub enum IOHandle {
-    StdIn,
-    StdOut,
-    StdErr,
+    Console,
     File(Box<File<PiVFatHandle>>),
     Socket(SocketHandle),
     Unused,
@@ -70,17 +58,15 @@ impl Process {
     /// If enough memory could not be allocated to start the process, returns
     /// `Err(OsError)`. Otherwise returns `Ok` of the new `Process`.
     pub fn new() -> OsResult<Process> {
-        let vmap = Box::new(UserPageTable::new());
-        let sockets: Vec<SocketHandle> = Vec::new();
+        // let vmap = Box::new(UserPageTable::new());
         Ok(Process {
             context: Box::new(TrapFrame::default()),
-            vmap,
+            vmap: Box::new(UserPageTable::new()),
             state: State::Ready,
             stack_base: Process::get_stack_base(),
             heap_ptr: VirtualAddr::from(0),
             heap_page: VirtualAddr::from(0),
-            handles: vec![IOHandle::StdIn, IOHandle::StdOut, IOHandle::StdErr],
-            // last_file_descriptor: Some(1),
+            handles: vec![IOHandle::Console, IOHandle::Console, IOHandle::Console],
             cwd: PathBuf::from("/"),
         })
     }

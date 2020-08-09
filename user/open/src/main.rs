@@ -1,4 +1,5 @@
 #![feature(asm)]
+#![feature(panic_info_message)]
 #![no_std]
 #![no_main]
 extern crate alloc;
@@ -66,15 +67,16 @@ fn main() {
         }
     }
     print!("/nf.txt:\r\n");
+    sleep(Duration::from_secs(5));
 
     match open("/nf.txt") {
-        Ok(fid) => {
+        Ok(handle) => {
             let mut bytes = 0usize;
             let mut bytes_read = 0usize;
             let mut file_vec= Vec::new();
             loop {
                 let mut file_buf = [0u8; 256];
-                bytes = match read(fid, &mut file_buf){
+                bytes = match read(&handle, &mut file_buf){
                     Ok(bytes) => bytes,
                     Err(e) => {
                         println!("{:?}", e);

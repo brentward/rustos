@@ -4,6 +4,8 @@ use core::time::Duration;
 use shim::path::Path;
 
 use crate::*;
+use crate::fs::{Handle, HandleDescriptor};
+use crate::network::{SocketStatus, IpAddr};
 
 macro_rules! err_or {
     ($ecode:expr, $rtn:expr) => {{
@@ -65,43 +67,49 @@ pub fn exit() -> ! {
     loop { }
 }
 
-pub fn write(b: u8) {
-    if !b.is_ascii() {
-        panic!("{} is not valid ascii", b)
-    }
-    let mut _ecode: u64;
-
-    unsafe {
-        asm!("mov x0, $1
-              svc $2
-              mov $1, x7"
-             : "=r"(_ecode)
-             : "r"(b), "i"(NR_WRITE)
-             : "x7"
-             : "volatile");
-    }
-}
-
-// pub fn write_str(msg: &str) -> OsResult<usize> {
-pub fn write_str(msg: &str) {
-    let msg_ptr = msg.as_ptr() as u64;
-    let msg_len = msg.len() as u64;
-    let mut _ecode: u64;
-    let mut _len: u64;
+pub fn write(handle: &Handle, buf: &[u8]) -> OsResult<usize> {
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut bytes: usize;
+    let len = buf.len();
 
     unsafe {
         asm!("mov x0, $2
               mov x1, $3
-              svc $4
+              mov x2, $4
+              svc $5
               mov $0, x0
               mov $1, x7"
-             : "=r"(_len), "=r"(_ecode)
-             : "r"(msg_ptr), "r"(msg_len), "i"(NR_WRITE_STR)
+             : "=r"(bytes), "=r"(ecode)
+             : "r"(handle.raw()), "r"(buf_ptr), "r"(len), "i"(NR_WRITE)
              : "x0", "x7"
              : "volatile");
     }
 
-    // err_or!(ecode, len as usize)
+    err_or!(ecode, bytes)
+}
+
+pub fn write_str(handle: &Handle, msg: &str) -> OsResult<usize> {
+// pub fn write_str(handle: &Handle, msg: &str) {
+    let msg_ptr = msg.as_ptr() as u64;
+    let msg_len = msg.len() as u64;
+    let mut ecode: u64;
+    let mut len: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              svc $5
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(len), "=r"(ecode)
+             : "r"(handle.raw()), "r"(msg_ptr), "r"(msg_len), "i"(NR_WRITE_STR)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, len as usize)
 }
 
 pub fn getpid() -> u64 {
@@ -189,7 +197,7 @@ pub fn entropy() -> u32 {
     entropy as u32
 }
 
-pub fn sock_create() -> SocketDescriptor {
+pub fn sock_create() -> Handle {
     let mut _ecode: u64;
     let mut sid: u64;
 
@@ -202,11 +210,14 @@ pub fn sock_create() -> SocketDescriptor {
              : "x0", "x7"
              : "volatile");
     }
-
-    SocketDescriptor::from(sid)
+    Handle::Socket(HandleDescriptor::from(sid))
 }
 
-pub fn sock_status(descriptor: SocketDescriptor) -> OsResult<SocketStatus> {
+pub fn sock_status(handle: &Handle) -> OsResult<SocketStatus> {
+    match handle {
+        Handle::Socket(_) => (),
+        _ => return Err(OsError::InvalidSocket),
+    };
     let mut ecode: u64;
     let mut is_active: bool;
     let mut is_listening: bool;
@@ -222,7 +233,7 @@ pub fn sock_status(descriptor: SocketDescriptor) -> OsResult<SocketStatus> {
               mov $3, x3
               mov $4, x7"
              : "=r"(is_active), "=r"(is_listening), "=r"(can_send), "=r"(can_recv), "=r"(ecode)
-             : "r"(descriptor.raw()), "i"(NR_SOCK_STATUS)
+             : "r"(handle.raw()), "i"(NR_SOCK_STATUS)
              : "x0", "x1", "x2", "x3", "x7"
              : "volatile");
     }
@@ -230,7 +241,12 @@ pub fn sock_status(descriptor: SocketDescriptor) -> OsResult<SocketStatus> {
     err_or!(ecode,  SocketStatus { is_active, is_listening, can_send, can_recv })
 }
 
-pub fn sock_connect(descriptor: SocketDescriptor, addr: IpAddr) -> OsResult<()> {
+pub fn sock_connect(handle: &Handle, addr: IpAddr) -> OsResult<()> {
+    match handle {
+        Handle::Socket(_) => (),
+        _ => return Err(OsError::InvalidSocket),
+    };
+
     let mut ecode: u64;
 
     unsafe {
@@ -240,7 +256,7 @@ pub fn sock_connect(descriptor: SocketDescriptor, addr: IpAddr) -> OsResult<()> 
               svc $4
               mov $0, x7"
              : "=r"(ecode)
-             : "r"(descriptor.raw()), "r"(addr.ip), "r"(addr.port), "i"(NR_SOCK_CONNECT)
+             : "r"(handle.raw()), "r"(addr.ip), "r"(addr.port), "i"(NR_SOCK_CONNECT)
              : "x7"
              : "volatile");
     }
@@ -248,7 +264,12 @@ pub fn sock_connect(descriptor: SocketDescriptor, addr: IpAddr) -> OsResult<()> 
     err_or!(ecode, ())
 }
 
-pub fn sock_listen(descriptor: SocketDescriptor, local_port: u16) -> OsResult<()> {
+pub fn sock_listen(handle: &Handle, local_port: u16) -> OsResult<()> {
+    match handle {
+        Handle::Socket(_) => (),
+        _ => return Err(OsError::InvalidSocket),
+    };
+
     let mut ecode: u64;
 
     unsafe {
@@ -257,7 +278,7 @@ pub fn sock_listen(descriptor: SocketDescriptor, local_port: u16) -> OsResult<()
               svc $3
               mov $0, x7"
              : "=r"(ecode)
-             : "r"(descriptor.raw()), "r"(local_port), "i"(NR_SOCK_LISTEN)
+             : "r"(handle.raw()), "r"(local_port), "i"(NR_SOCK_LISTEN)
              : "x7"
              : "volatile");
     }
@@ -265,7 +286,12 @@ pub fn sock_listen(descriptor: SocketDescriptor, local_port: u16) -> OsResult<()
     err_or!(ecode, ())
 }
 
-pub fn sock_send(descriptor: SocketDescriptor, buf: &[u8]) -> OsResult<usize> {
+pub fn sock_send(handle: &Handle, buf: &[u8]) -> OsResult<usize> {
+    match handle {
+        Handle::Socket(_) => (),
+        _ => return Err(OsError::InvalidSocket),
+    };
+
     let buf_ptr = buf.as_ptr() as u64;
     let mut ecode: u64;
     let mut bytes: usize;
@@ -279,7 +305,7 @@ pub fn sock_send(descriptor: SocketDescriptor, buf: &[u8]) -> OsResult<usize> {
               mov $0, x0
               mov $1, x7"
              : "=r"(bytes), "=r"(ecode)
-             : "r"(descriptor.raw()), "r"(buf_ptr), "r"(len), "i"(NR_SOCK_SEND)
+             : "r"(handle.raw()), "r"(buf_ptr), "r"(len), "i"(NR_SOCK_SEND)
              : "x0", "x7"
              : "volatile");
     }
@@ -287,7 +313,12 @@ pub fn sock_send(descriptor: SocketDescriptor, buf: &[u8]) -> OsResult<usize> {
     err_or!(ecode, bytes)
 }
 
-pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize> {
+pub fn sock_recv(handle: &Handle, buf: &mut [u8]) -> OsResult<usize> {
+    match handle {
+        Handle::Socket(_) => (),
+        _ => return Err(OsError::InvalidSocket),
+    };
+
     let buf_ptr = buf.as_ptr() as u64;
     let mut ecode: u64;
     let mut bytes: usize;
@@ -301,7 +332,7 @@ pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize
               mov $0, x0
               mov $1, x7"
              : "=r"(bytes), "=r"(ecode)
-             : "r"(descriptor.raw()), "r"(buf_ptr), "r"(len), "i"(NR_SOCK_RECV)
+             : "r"(handle.raw()), "r"(buf_ptr), "r"(len), "i"(NR_SOCK_RECV)
              : "x0", "x7"
              : "volatile");
     }
@@ -309,7 +340,7 @@ pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize
     err_or!(ecode, bytes)
 }
 
-pub fn open<P: AsRef<Path>>(path: P) -> OsResult<u64> {
+pub fn open<P: AsRef<Path>>(path: P) -> OsResult<Handle> {
     let path: &Path = path.as_ref();
     let path_str = match path.to_str() {
         Some(str) => str,
@@ -318,7 +349,7 @@ pub fn open<P: AsRef<Path>>(path: P) -> OsResult<u64> {
     let path_ptr = path_str.as_ptr() as u64;
     let path_len = path_str.len();
     let mut ecode: u64;
-    let mut fid: u64;
+    let mut handle_idx: u64;
 
     unsafe {
         asm!("mov x0, $2
@@ -326,17 +357,17 @@ pub fn open<P: AsRef<Path>>(path: P) -> OsResult<u64> {
               svc $4
               mov $0, x0
               mov $1, x7"
-             : "=r"(fid), "=r"(ecode)
+             : "=r"(handle_idx), "=r"(ecode)
              : "r"(path_ptr), "r"(path_len), "i"(NR_OPEN)
              : "x0", "x7"
              : "volatile");
     }
 
-    err_or!(ecode, fid)
+    err_or!(ecode, Handle::File(HandleDescriptor::from(handle_idx)))
 
 }
 
-pub fn read(fd: u64, buf: &mut [u8]) -> OsResult<usize> {
+pub fn read(handle: &Handle, buf: &mut [u8]) -> OsResult<usize> {
     let buf_ptr = buf.as_ptr() as u64;
     let mut ecode: u64;
     let mut bytes: usize;
@@ -350,7 +381,7 @@ pub fn read(fd: u64, buf: &mut [u8]) -> OsResult<usize> {
               mov $0, x0
               mov $1, x7"
              : "=r"(bytes), "=r"(ecode)
-             : "r"(fd), "r"(buf_ptr), "r"(count), "i"(NR_READ)
+             : "r"(handle.raw()), "r"(buf_ptr), "r"(count), "i"(NR_READ)
              : "x0", "x7"
              : "volatile");
     }
@@ -419,7 +450,7 @@ struct Console;
 
 impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        write_str(s);
+        write_str(&Handle::StdOut, s)?;
         Ok(())
     }
 }

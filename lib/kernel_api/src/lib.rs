@@ -2,9 +2,8 @@
 #![no_std]
 
 use core::fmt;
-
+use core::str;
 use shim::io;
-use crate::network::*;
 
 #[cfg(feature = "user-space")]
 pub mod syscall;
@@ -17,6 +16,8 @@ pub type OsResult<T> = core::result::Result<T, OsError>;
 pub enum OsError {
     Unknown = 0,
     Ok = 1,
+    Utf8Error = 2,
+    FmtError = 3,
 
     NoEntry = 10,
     NoMemory = 20,
@@ -26,6 +27,7 @@ pub enum OsError {
     FileExists = 60,
     InvalidArgument = 70,
     NotAFile = 80,
+    NotADir = 90,
 
     IoError = 101,
     IoErrorEof = 102,
@@ -35,12 +37,15 @@ pub enum OsError {
 
     InvalidSocket = 200,
     IllegalSocketOperation = 201,
+
 }
 
 impl core::convert::From<u64> for OsError {
     fn from(e: u64) -> Self {
         match e {
             1 => OsError::Ok,
+            2 => OsError::Utf8Error,
+            3 => OsError::FmtError,
 
             10 => OsError::NoEntry,
             20 => OsError::NoMemory,
@@ -50,6 +55,7 @@ impl core::convert::From<u64> for OsError {
             60 => OsError::FileExists,
             70 => OsError::InvalidArgument,
             80 => OsError::NotAFile,
+            90 => OsError::NotADir,
 
             101 => OsError::IoError,
             102 => OsError::IoErrorEof,
@@ -77,9 +83,21 @@ impl core::convert::From<io::Error> for OsError {
     }
 }
 
+impl core::convert::From<fmt::Error> for OsError {
+    fn from(_e: fmt::Error) -> Self {
+        OsError::FmtError
+    }
+}
+
 impl core::convert::From<OsError> for fmt::Error {
     fn from(_e: OsError) -> Self {
         fmt::Error
+    }
+}
+
+impl core::convert::From<str::Utf8Error> for OsError {
+    fn from(_e: str::Utf8Error) -> Self {
+        OsError::Utf8Error
     }
 }
 
