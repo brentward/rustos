@@ -1,8 +1,10 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::vec;
+use alloc::string::String;
 use shim::io;
 use shim::path::{Path, PathBuf};
+use core::str::from_utf8;
 use core::mem;
 use core::ops::Add;
 
@@ -22,6 +24,7 @@ use crate::fs::PiVFatHandle;
 use crate::console::{Console, CONSOLE};
 
 use kernel_api::{OsError, OsResult};
+// use kernel_api::args::{CArgs, args_len};
 
 /// Type alias for the type of a process ID.
 pub type Id = u64;
@@ -49,6 +52,7 @@ pub struct Process {
     /// Socket handles held by the current process
     pub handles: Vec<IOHandle>,
     pub cwd: PathBuf,
+    pub args: Vec<String>,
 }
 
 impl Process {
@@ -62,12 +66,14 @@ impl Process {
         Ok(Process {
             context: Box::new(TrapFrame::default()),
             vmap: Box::new(UserPageTable::new()),
-            state: State::Ready,
+            // state: State::Starting,
+            state: State::Waiting(Box::new(move |_|false)),
             stack_base: Process::get_stack_base(),
             heap_ptr: VirtualAddr::from(0),
             heap_page: VirtualAddr::from(0),
             handles: vec![IOHandle::Console, IOHandle::Console, IOHandle::Console],
             cwd: PathBuf::from("/"),
+            args: Vec::new()
         })
     }
 
@@ -80,7 +86,7 @@ impl Process {
     /// `spsr` - `F`, `A`, `D` bit should be set.
     ///
     /// Returns Os Error if do_load fails.
-    pub fn load<P: AsRef<Path>>(pn: P) -> OsResult<Process> {
+    pub fn load<P: AsRef<Path>>(pn: P, cwd: P) -> OsResult<Process> {
         use crate::VMM;
 
         let mut p = Process::do_load(pn)?;
@@ -92,7 +98,25 @@ impl Process {
             aarch64::SPSR_EL1::D |
             aarch64::SPSR_EL1::A |
             aarch64::SPSR_EL1::F;
+        p.cwd = cwd.as_ref().to_path_buf();
+        // for arg in args {
+        //     // info!("arg in args: {}", arg);
+        //     p.args.push(arg);
+        //     // let mut arg_v = Vec::new();
+        //     // use io::Write;
+        //     // let _bytes = arg_v.write(arg.as_bytes()).unwrap();
+        //     // let arg_str = from_utf8(arg_v.as_slice()).unwrap();
+        //     // p.args.push(String::from(arg_str));
+        // }
         Ok(p)
+    }
+
+    pub fn start(&mut self) {
+        match self.state {
+            // State::Starting => self.state = State::Ready,
+            State::Waiting(_) => self.state = State::Waiting(Box::new(move |_|true)),
+            _ => (),
+        };
     }
 
     /// Creates a process and open a file with given path.
@@ -102,10 +126,6 @@ impl Process {
         use io::{Write, Read};
         use core::ops::AddAssign;
 
-        let mut p = Process::new()?;
-        for page in 0..USER_STACK_PAGE_COUNT {
-            let _stack_page = p.vmap.alloc(Process::get_stack_base() + VirtualAddr::from(page * Page::SIZE), PagePerm::RW);
-        }
         let pn = pn.as_ref();
         let entry = FILESYSTEM.open(pn)?;
 
@@ -113,6 +133,11 @@ impl Process {
             Some(file) => file,
             None => return Err(OsError::IoErrorInvalidData)
         };
+
+        let mut p = Process::new()?;
+        for page in 0..USER_STACK_PAGE_COUNT {
+            let _stack_page = p.vmap.alloc(Process::get_stack_base() + VirtualAddr::from(page * Page::SIZE), PagePerm::RW);
+        }
 
         let mut current_address = Process::get_image_base();
 
@@ -124,6 +149,18 @@ impl Process {
                 break;
             }
         }
+        // let args_len = args.len();
+        // let mut args_written = 0;
+        // p.context.x[0] = current_address.as_u64();
+        // // info!("about to start loop for writing args");
+        // for _page in 0..=args_len/Page::SIZE {
+        //     let mut args_buf = p.vmap.alloc(current_address, PagePerm::RW);
+        //     current_address.add_assign(VirtualAddr::from(Page::SIZE));
+        //     let bytes = args_buf.write(&args.as_bytes()[args_written..])?;
+        //     // info!("args_buf.write() wrote {} bytes", bytes);
+        //     args_written += bytes;
+        //     current_address.add_assign(VirtualAddr::from(Page::SIZE));
+        // }
         let _heap_page = p.vmap.alloc(current_address, PagePerm::RW);
         p.heap_ptr = current_address;
         p.heap_page = current_address;
@@ -169,6 +206,7 @@ impl Process {
     /// Returns `false` in all other cases.
     pub fn is_ready(&mut self) -> bool {
         match self.state {
+            State::Starting => false,
             State::Ready => true,
             State::Waiting(_) => {
                 let mut current_state = mem::replace(&mut self.state, State::Ready);

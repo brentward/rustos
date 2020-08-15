@@ -1,11 +1,15 @@
 use core::fmt;
 use core::fmt::Write;
 use core::time::Duration;
-use shim::path::Path;
+use shim::path::{Path, PathBuf};
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::*;
-use crate::fs::{Handle, HandleDescriptor};
+use crate::fs::{Handle, HandleDescriptor, ProcessDescriptor};
 use crate::network::{SocketStatus, IpAddr};
+// use crate::args::CArgs;
+// use crate::cstr::CString;
 
 macro_rules! err_or {
     ($ecode:expr, $rtn:expr) => {{
@@ -112,7 +116,7 @@ pub fn write_str(handle: &Handle, msg: &str) -> OsResult<usize> {
     err_or!(ecode, len as usize)
 }
 
-pub fn getpid() -> u64 {
+pub fn getpid() -> ProcessDescriptor {
     let mut _ecode: u64;
     let mut pid: u64;
 
@@ -126,7 +130,7 @@ pub fn getpid() -> u64 {
              : "volatile");
     }
 
-    pid
+    ProcessDescriptor::from(pid)
 }
 
 pub fn sbrk(size: usize) -> OsResult<*mut u8> {
@@ -145,6 +149,118 @@ pub fn sbrk(size: usize) -> OsResult<*mut u8> {
     }
     let ptr = ptr as *mut u8;
     err_or!(ecode, ptr)
+}
+
+pub fn brk(ptr: usize) -> OsResult<()> {
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              svc $2
+              mov $0, x7"
+             : "=r"(ecode)
+             : "r"(ptr as u64), "i"(NR_BRK)
+             : "x7"
+             : "volatile");
+    }
+    err_or!(ecode, ())
+}
+
+fn args_count() -> usize {
+    let mut _ecode: u64;
+    let mut count: u64;
+
+    unsafe {
+        asm!("svc $2
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(count), "=r"(_ecode)
+             : "i"(NR_ARGS_COUNT)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    count as usize
+}
+
+fn read_arg(idx: usize, buf: &mut [u8], offset: usize) -> OsResult<usize> {
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut bytes: usize;
+    let len = buf.len();
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              mov x3, $5
+              svc $6
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(bytes), "=r"(ecode)
+             : "r"(idx as u64), "r"(buf_ptr), "r"(len), "r"(offset as u64) "i"(NR_READ_ARG)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, bytes)
+}
+
+fn push_arg(pid: ProcessDescriptor, arg: &str) -> OsResult<()> {
+    // println!("push_arg() pid: {}, arg: {}", pid, arg);
+    let arg_ptr = arg.as_ptr() as u64;
+    let arg_len = arg.len() as u64;
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              mov x1, $2
+              mov x2, $3
+              svc $4
+              mov $0, x7"
+             : "=r"(ecode)
+             : "r"(pid.raw()), "r"(arg_ptr), "r"(arg_len), "i"(NR_PUSH_ARG)
+             : "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, ())
+
+}
+
+pub fn args() -> Vec<String> {
+    let mut args_v = Vec::new();
+    let args_count = args_count();
+    // println!("args() arg_count: {}", args_count);
+    for idx in 0..args_count {
+        // println!("creating arg: {}", idx);
+        let mut arg_v = Vec::new();
+        let mut buf = [0; 64];
+        let mut bytes_total = 0;
+        let mut bytes_read = 0;
+        loop {
+            bytes_read = read_arg(idx, &mut buf, bytes_total).unwrap();
+            // println!("arg: {}, read: {}", idx, bytes_read);
+            if bytes_read == 0 {
+                break
+            }
+            bytes_total += bytes_read;
+
+            use crate::io::Write;
+
+            let _bytes_written = arg_v.write(&buf)
+                .unwrap();
+        }
+        // println!("arg: {}, total: {}", idx, bytes_total);
+        while arg_v.len() > bytes_total {
+            // println!("pop on arg {}", idx);
+            arg_v.pop();
+        }
+        let arg = String::from_utf8(arg_v).unwrap();
+        // println!("arg: {} is {}", idx, arg);
+        args_v.push(arg);
+    }
+    args_v
 }
 
 pub fn rand(min: u32, max: u32) -> u32 {
@@ -364,7 +480,6 @@ pub fn open<P: AsRef<Path>>(path: P) -> OsResult<Handle> {
     }
 
     err_or!(ecode, Handle::File(HandleDescriptor::from(handle_idx)))
-
 }
 
 pub fn read(handle: &Handle, buf: &mut [u8]) -> OsResult<usize> {
@@ -389,7 +504,7 @@ pub fn read(handle: &Handle, buf: &mut [u8]) -> OsResult<usize> {
     err_or!(ecode, bytes)
 }
 
-pub fn getdents<P: AsRef<Path>>(path: P, buf: &mut [fs::DirEnt], offset: u64) -> OsResult<u64> {
+fn k_getdents<P: AsRef<Path>>(path: P, buf: &mut [fs::DirEnt], offset: u64) -> OsResult<u64> {
     let path: &Path = path.as_ref();
     let path_str = match path.to_str() {
         Some(str) => str,
@@ -420,7 +535,34 @@ pub fn getdents<P: AsRef<Path>>(path: P, buf: &mut [fs::DirEnt], offset: u64) ->
     err_or!(ecode, entries)
 }
 
-pub fn stat<P: AsRef<Path>>(path: P, buf: &mut [fs::Stat]) -> OsResult<()> {
+pub fn getdents<P: AsRef<Path>>(path: P) ->Vec<fs::DirEnt> {
+
+    let mut dent_buf = [fs::DirEnt::default(); 16];
+    let mut dents_v = Vec::<fs::DirEnt>::new();
+    let mut dents_total = 0u64;
+
+    loop {
+        // let path: Path = path.as_ref().clone();
+        let dents = match k_getdents(&path, &mut dent_buf, dents_total) {
+            Ok(dents) => dents,
+            Err(e) => {
+                println!("getdetns() error: {:?}", e);
+                return dents_v
+            }
+        };
+        for dent in dent_buf[0..dents as usize].iter() {
+            dents_v.push(*dent);
+        }
+        dents_total += dents;
+        if dents == 0 {
+            break
+        }
+    }
+    dents_v
+
+}
+
+fn k_stat<P: AsRef<Path>>(path: P, buf: &mut [fs::Stat]) -> OsResult<()> {
     let path: &Path = path.as_ref();
     let path_str = match path.to_str() {
         Some(str) => str,
@@ -445,6 +587,160 @@ pub fn stat<P: AsRef<Path>>(path: P, buf: &mut [fs::Stat]) -> OsResult<()> {
 
     err_or!(ecode, ())
 }
+
+pub fn stat<P: AsRef<Path>>(path: P) -> OsResult<fs::Stat> {
+    let mut stat_buf = [fs::Stat::default()];
+    k_stat(path, &mut stat_buf)?;
+    Ok(stat_buf[0])
+}
+
+pub fn chdir<P: AsRef<Path>>(path: P) -> OsResult<()> {
+    let path: &Path = path.as_ref();
+    let path_str = match path.to_str() {
+        Some(str) => str,
+        None => return Err(OsError::InvalidArgument),
+    };
+    let path_ptr = path_str.as_ptr() as u64;
+    let path_len = path_str.len();
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              mov x1, $2
+              svc $3
+              mov $1, x7"
+             : "=r"(ecode)
+             : "r"(path_ptr), "r"(path_len), "i"(NR_CHDIR)
+             : "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, ())
+}
+
+fn k_getcwd(buf: &mut [u8], offset: usize) -> OsResult<usize> {
+    let buf_ptr = buf.as_ptr() as u64;
+    let mut ecode: u64;
+    let mut bytes: usize;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              mov x2, $4
+              svc $5
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(bytes), "=r"(ecode)
+             : "r"(buf_ptr), "r"(buf.len()), "r"(offset) "i"(NR_GETCWD)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, bytes)
+}
+
+pub fn getcwd() -> PathBuf {
+    use shim::io::Write;
+
+    let mut cwd_bytes = 0;
+    let mut cwd_v = Vec::<u8>::new();
+    loop {
+        let mut cwd_buf = [0u8; 512];
+        let bytes = match k_getcwd(&mut cwd_buf, cwd_bytes) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                println!("getcwd() error: {:?}", e);
+                return PathBuf::from("")
+            },
+        };
+        if bytes == 0 {
+            break
+        }
+        cwd_bytes += bytes;
+        match cwd_v.write(&cwd_buf[..bytes]) {
+            Ok(_) => (),
+            Err(e) => {
+                println!("getcwd() error: {:?}", e);
+                return PathBuf::from("")
+            }
+        };
+    }
+    PathBuf::from(String::from_utf8(cwd_v).unwrap())
+
+}
+
+fn load_p<P: AsRef<Path>>(path: P) -> OsResult<ProcessDescriptor> {
+    // println!("load_p() path: {:?}", path.as_ref());
+    let path: &Path = path.as_ref();
+    let path_str = match path.to_str() {
+        Some(str) => str,
+        None => return Err(OsError::InvalidArgument),
+    };
+    let path_ptr = path_str.as_ptr() as u64;
+    let path_len = path_str.len();
+    let mut pid: u64;
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $2
+              mov x1, $3
+              svc $4
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(pid), "=r"(ecode)
+             : "r"(path_ptr), "r"(path_len), "i"(NR_LOAD_P)
+             : "x0", "x7"
+             : "volatile");
+    }
+
+    err_or!(ecode, ProcessDescriptor::from(pid))
+}
+
+fn start_p(pid: ProcessDescriptor) -> OsResult<()> {
+    // println!("start_p() pid: {}", pid);
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              svc $2
+              mov $0, x7"
+             : "=r"(ecode)
+             : "r"(pid.raw()), "i"(NR_START_P)
+             : "x7"
+             : "volatile");
+    }
+    err_or!(ecode, ())
+}
+
+pub fn wait(pid: ProcessDescriptor) -> OsResult<()> {
+    // println!("wait() pid: {}", pid);
+    let mut ecode: u64;
+
+    unsafe {
+        asm!("mov x0, $1
+              svc $2
+              mov $0, x7"
+             : "=r"(ecode)
+             : "r"(pid.raw()), "i"(NR_WAIT)
+             : "x7"
+             : "volatile");
+    }
+    err_or!(ecode, ())
+}
+
+
+pub fn execve<P: AsRef<Path>>(path: P, args: &Vec<String>) -> OsResult<ProcessDescriptor> {
+    let pid = load_p(path)?;
+    for arg in args {
+        // println!("execev() arg: {}", arg);
+        push_arg(pid, arg.as_str())?;
+    }
+    // println!("execev() starting  pid: {}", pid);
+    start_p(pid)?;
+    // println!("execev() returning pid: {}", pid);
+    Ok(pid)
+}
+
 
 struct Console;
 

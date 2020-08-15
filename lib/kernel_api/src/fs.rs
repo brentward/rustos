@@ -1,4 +1,5 @@
 use core::str;
+use alloc::string::{String, ToString};
 
 use crate::*;
 
@@ -19,6 +20,34 @@ impl Handle {
             Handle::File(hd) => hd.raw(),
             Handle::Socket(hd) => hd.raw(),
         }
+    }
+}
+
+impl fmt::Display for Handle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.raw())
+    }
+}
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct ProcessDescriptor(u64);
+
+impl ProcessDescriptor {
+    pub fn raw(&self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for ProcessDescriptor {
+    fn from(raw: u64) -> Self {
+        ProcessDescriptor(raw)
+    }
+}
+
+impl fmt::Display for ProcessDescriptor {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -49,12 +78,20 @@ impl From<Handle> for HandleDescriptor {
     }
 }
 
+impl fmt::Display for HandleDescriptor {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct DirEnt {
     d_type: DirType,
     name: [u8; 512],
     name_len: u64,
+
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -78,8 +115,8 @@ impl DirEnt {
         }
     }
 
-    pub fn name(&self) -> Result<&str, str::Utf8Error> {
-        str::from_utf8(&self.name[..self.name_len as usize])
+    pub fn name(&self) -> &str {
+        unsafe { str::from_utf8_unchecked(&self.name[..self.name_len as usize]) }
     }
 
     pub fn set_name(&mut self, name: &str) -> Result<(), ()> {
@@ -111,6 +148,18 @@ impl Default for DirEnt {
             d_type: DirType::None,
             name: [0; 512],
             name_len: 0,
+        }
+    }
+}
+
+impl fmt::Display for DirEnt {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.d_type {
+            DirType::Dir => {
+                let mut name = String::new();
+                write!(f, "{}/", self.name())
+            }
+            _ => write!(f, "{}", self.name()),
         }
     }
 }
@@ -317,6 +366,30 @@ impl Metadata {
 impl Stat {
     pub fn size(&self) -> u64 {
         self.size
+    }
+
+    pub fn size_string(&self, human_readable: bool) -> String {
+        let mut result = String::new();
+        use fmt::Write;
+        if human_readable {
+            match self.size() {
+                size@ 0..=1023 => {
+                    write!(result, "{} B", size.to_string());
+                }
+                size@ 1024..=1_048_575 => {
+                    write!(result, "{} KiB", (size / 1024).to_string());
+                }
+                size@ 1_048_576..=1_073_741_823 => {
+                    write!(result, "{} MiB", (size / 1_048_576).to_string());
+                }
+                size => {
+                    write!(result, "{} GiB", (size / 1_073_741_824).to_string());
+                }
+            }
+        } else {
+            write!(result, "{}", self.size().to_string());
+        }
+        result
     }
 
     pub fn metadata(&self) -> Metadata {

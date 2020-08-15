@@ -9,7 +9,7 @@ use shim::io::{self, Write};
 use shim::ioerr;
 use shim::newioerr;
 use shim::path;
-use shim::path::{Path, Component};
+use shim::path::{Path, PathBuf, Component};
 
 use crate::mbr::MasterBootRecord;
 use crate::traits::{BlockDevice, FileSystem};
@@ -185,13 +185,21 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
             metadata: Metadata::default(),
             size: 0,
         });
+        let mut normalized_path = PathBuf::new();
         for component in path.components() {
             match component {
                 Component::ParentDir => {
-                    dir = dir.into_dir()
-                        .ok_or(newioerr!(InvalidInput, "path parent is not dir"))?
-                        .find("..")?;
-                },
+                    normalized_path.pop();
+                }
+                Component::CurDir => (),
+                Component::Prefix(_) => (),
+                component => normalized_path.push(component),
+            }
+        }
+
+
+        for component in normalized_path.components() {
+            match component {
                 Component::Normal(name) => {
                     dir = dir.into_dir()
                         .ok_or(newioerr!(NotFound, "path not found"))?

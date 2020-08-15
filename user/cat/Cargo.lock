@@ -12,6 +12,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cat"
+version = "0.1.0"
+dependencies = [
+ "aarch64 0.1.0",
+ "bw_allocator 0.1.0",
+ "kernel_api 0.1.0",
+ "shim 0.1.0",
+]
+
+[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -28,16 +38,6 @@ dependencies = [
 name = "kernel_api"
 version = "0.1.0"
 dependencies = [
- "shim 0.1.0",
-]
-
-[[package]]
-name = "open"
-version = "0.1.0"
-dependencies = [
- "aarch64 0.1.0",
- "bw_allocator 0.1.0",
- "kernel_api 0.1.0",
  "shim 0.1.0",
 ]
 

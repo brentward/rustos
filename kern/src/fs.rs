@@ -16,22 +16,6 @@ use fat32::vfat::{Dir, Entry, File, VFat, VFatHandle};
 use self::sd::Sd;
 use crate::mutex::Mutex;
 
-// /// A handle, identifying an Inode in a filesystem.
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
-// pub struct InodeHandle(usize);
-//
-// impl From<usize> for InodeHandle {
-//     fn from(inode: usize) -> Self {
-//         InodeHandle(inode)
-//     }
-// }
-//
-// impl fmt::Display for InodeHandle {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "#{}", self.0)
-//     }
-// }
-//
 #[derive(Clone)]
 pub struct PiVFatHandle(Rc<Mutex<VFat<Self>>>);
 
@@ -81,24 +65,6 @@ impl FileSystem {
         let vfat = VFat::<PiVFatHandle>::from(block_device).expect("VFat::from() on SD card block device failed");
         *self.0.lock() = Some(vfat);
     }
-    //
-    // pub fn open_inode(&self, inode: InodeHandle) -> io::Result<Entry<PiVFatHandle>> {
-    //     use fat32::traits::FileSystem;
-    //
-    //     match self.inodes.lock().get(inode.0) {
-    //         Some(path) => self.open(path),
-    //         None => ioerr!(NotFound, "inode was not in inode table"),
-    //     }
-    // }
-    //
-    // pub fn get_inode<P: AsRef<Path>>(self, path: P) -> Option<usize> {
-    //     let path_buf = path.as_ref().to_path_buf();
-    //     if !self.inodes.lock().contains(path_buf) {
-    //         None
-    //     } else {
-    //         self.inodes.lock().iter().position(|&p| p == path_buf)
-    //     }
-    // }
 }
 
 impl<'a> fat32::traits::FileSystem for &'a FileSystem {
@@ -111,18 +77,6 @@ impl<'a> fat32::traits::FileSystem for &'a FileSystem {
             Some(ref handle) => handle.clone(),
             None => return ioerr!(NotConnected, "file system uninitialized"),
         };
-        // let path_buf = path.as_ref().to_path_buf();
-        //
-        // let result = handle.open(&path_buf);
-        // match result {
-        //     Err(_) => {
-        //         if !self.inodes.lock().contains(&path_buf) {
-        //             self.inodes.lock().push(path_buf);
-        //         }
-        //     }
-        //     _ => (),
-        // };
-        // result
         handle.open(path)
     }
 

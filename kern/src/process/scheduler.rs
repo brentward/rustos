@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
+use alloc::string::String;
 
 use core::ffi::c_void;
 use core::fmt;
@@ -79,7 +80,7 @@ impl GlobalScheduler {
                 );
                 return id;
             }
-            aarch64::wfe();
+            aarch64::wfi();
         }
     }
 
@@ -229,14 +230,24 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        let proc_count: usize = 1;
-        for proc in 0..proc_count {
-            let process = match Process::load("/bwsh") {
-                Ok(process) => process,
-                Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
-            };
-            self.add(process);
-        }
+
+        let mut process = match Process::load("/foo/bar/../../bwsh", "/") {
+            Ok(process) => process,
+            Err(e) => panic!("GlobalScheduler::initialize() error: {:#?}", e),
+        };
+        process.start();
+        self.add(process);
+
+        // let proc_count: usize = 1;
+        // for proc in 0..proc_count {
+        //     let mut process = match Process::load("/fib_rand") {
+        //         Ok(process) => process,
+        //         Err(e) => panic!("GlobalScheduler::initialize() process_{}::load(): {:#?}", proc, e),
+        //     };
+        //     process.start();
+        //     self.add(process);
+        // }
+
         // let echo_proc = match Process::load("/echo_1500") {
         //     Ok(process) => process,
         //     Err(e) => panic!("GlobalScheduler::initialize() echo_proc.load(): {:#?}", e),
@@ -333,7 +344,7 @@ impl Scheduler {
                 running_process.state = new_state;
                 running_process.context = Box::new(*tf);
                 self.processes.push_back(running_process);
-                aarch64::sev();
+                // aarch64::sev();
                 true
             }
             None => {
@@ -381,7 +392,18 @@ impl Scheduler {
             let dead_process = self.processes.pop_back()
                 .expect("Scheduler::kill(): Unexpected empty Schedule.process");
             let dead_process_id = dead_process.context.tpidr.clone();
-            drop(dead_process_id);
+            trace!("Scheduler::kill() looking for processes waiting for pid: {} to finish", dead_process_id);
+            drop(dead_process);
+            for process in self.processes.iter_mut() {
+                match process.state {
+                    State::WaitFor(pid) if pid == dead_process_id => {
+                        trace!("Scheduler::kill() setting process_{} to Ready state", process.context.tpidr);
+                        process.state = State::Ready;
+                    },
+                    _ => (),
+                }
+            }
+
             Some(dead_process_id)
         } else {
             None
@@ -397,7 +419,7 @@ impl Scheduler {
                     let port = ETHERNET.with_socket(*handle, |socket| socket.local_endpoint().port);
                     ETHERNET.critical(|ethernet|{
                         match ethernet.erase_port(port) {
-                            Some(port) => info!(
+                            Some(port) => trace!(
                                 "Scheduler::release_process_resources() pid {} released port {}",
                                 process.context.tpidr,
                                 port
@@ -427,6 +449,20 @@ impl Scheduler {
         }
         panic!("Invalid TrapFrame");
     }
+
+    /// Finds a process corresponding with tpidr sent as pid.
+    /// Panics if the search fails.
+    pub fn find_process_by_pid(&mut self, pid: u64) -> Option<&mut Process> {
+        let mut response = None;
+        for i in 0..self.processes.len() {
+            if self.processes[i].context.tpidr == pid {
+                response =  Some(&mut self.processes[i]);
+                break
+            }
+        }
+        response
+    }
+
 }
 
 impl fmt::Debug for Scheduler {
