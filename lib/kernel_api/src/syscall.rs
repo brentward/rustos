@@ -712,20 +712,28 @@ fn start_p(pid: ProcessDescriptor) -> OsResult<()> {
     err_or!(ecode, ())
 }
 
-pub fn wait(pid: ProcessDescriptor) -> OsResult<()> {
-    // println!("wait() pid: {}", pid);
+fn pid_is_alive(pid: ProcessDescriptor) -> bool {
+    let mut pid_is_alive: bool;
     let mut ecode: u64;
 
     unsafe {
-        asm!("mov x0, $1
-              svc $2
-              mov $0, x7"
-             : "=r"(ecode)
-             : "r"(pid.raw()), "i"(NR_WAIT)
-             : "x7"
+        asm!("mov x0, $2
+              svc $3
+              mov $0, x0
+              mov $1, x7"
+             : "=r"(pid_is_alive), "=r"(ecode)
+             : "r"(pid.raw()), "i"(NR_PID_IS_ALIVE)
+             : "x0", "x7"
              : "volatile");
     }
-    err_or!(ecode, ())
+    pid_is_alive
+}
+
+pub fn wait(pid: ProcessDescriptor) {
+    // println!("wait() pid: {}", pid);
+    while pid_is_alive(pid) {
+        unsafe { asm!("nop" :::: "volatile") };
+    }
 }
 
 

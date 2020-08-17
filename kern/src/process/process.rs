@@ -206,7 +206,7 @@ impl Process {
     /// Returns `false` in all other cases.
     pub fn is_ready(&mut self) -> bool {
         match self.state {
-            State::Starting => false,
+            // State::WaitFor(_) => false,
             State::Ready => true,
             State::Waiting(_) => {
                 let mut current_state = mem::replace(&mut self.state, State::Ready);

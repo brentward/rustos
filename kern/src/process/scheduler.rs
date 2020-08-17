@@ -49,6 +49,17 @@ impl GlobalScheduler {
         self.critical(move |scheduler| scheduler.add(process))
     }
 
+    /// Checks if process identified by process ID as pid: Id is still alive.
+    /// Returns true if the process is still alive and false if it has been killed.
+    pub fn pid_is_alive(&self, pid: Id) -> bool {
+        self.critical(move |scheduler|{
+            match scheduler.find_process_by_pid(pid) {
+                Some(_) => true,
+                None => false,
+            }
+        })
+    }
+
     /// Performs a context switch using `tf` by setting the state of the current
     /// process to `new_state`, saving `tf` into the current process, and
     /// restoring the next process's trap frame into `tf`. For more details, see
@@ -394,15 +405,15 @@ impl Scheduler {
             let dead_process_id = dead_process.context.tpidr.clone();
             trace!("Scheduler::kill() looking for processes waiting for pid: {} to finish", dead_process_id);
             drop(dead_process);
-            for process in self.processes.iter_mut() {
-                match process.state {
-                    State::WaitFor(pid) if pid == dead_process_id => {
-                        trace!("Scheduler::kill() setting process_{} to Ready state", process.context.tpidr);
-                        process.state = State::Ready;
-                    },
-                    _ => (),
-                }
-            }
+            // for process in self.processes.iter_mut() {
+            //     match process.state {
+            //         State::WaitFor(pid) if pid == dead_process_id => {
+            //             trace!("Scheduler::kill() setting process_{} to Ready state", process.context.tpidr);
+            //             process.state = State::Waiting(Box::new(move |_|true));
+            //         },
+            //         _ => (),
+            //     }
+            // }
 
             Some(dead_process_id)
         } else {

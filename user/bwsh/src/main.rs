@@ -53,37 +53,37 @@ impl<'a> Command<'a> {
     /// arguments than `buf` can hold, returns `Error::TooManyArgs`.
     fn parse(s: &'a str) -> Result<Command<'a>, Error> {
         let mut args = Vec::new();
-        let mut arg_start = 0;
-        let mut in_quote = false;
-        for (index, ch) in s.char_indices() {
-            match ch {
-                Command::SEPARATOR => {
-                    if !in_quote {
-                        if arg_start < index {
-                            args.push(s[arg_start..index]
-                                .trim_matches('"'));
-                        }
-                        arg_start = index + 1;
-                    }
-                },
-                Command::QUOTE => {
-                    in_quote = !in_quote;
-                    if arg_start < index {
-                        args.push(s[arg_start..index]
-                            .trim_matches('"'));
-                    }
-                    arg_start = index + 1;
-                }
-                _ => (),
-            }
-        }
-        if arg_start < s.len() {
-            args.push(s[arg_start..]
-                .trim_matches('"'));
-        }
-        // for arg in s.split(' ').filter(|a| !a.is_empty()) {
-        //     args.push(arg).map_err(|_| Error::TooManyArgs)?;
+        // let mut arg_start = 0;
+        // let mut in_quote = false;
+        // for (index, ch) in s.char_indices() {
+        //     match ch {
+        //         Command::SEPARATOR => {
+        //             if !in_quote {
+        //                 if arg_start < index {
+        //                     args.push(s[arg_start..index]
+        //                         .trim_matches('"'));
+        //                 }
+        //                 arg_start = index + 1;
+        //             }
+        //         },
+        //         Command::QUOTE => {
+        //             in_quote = !in_quote;
+        //             if arg_start < index {
+        //                 args.push(s[arg_start..index]
+        //                     .trim_matches('"'));
+        //             }
+        //             arg_start = index + 1;
+        //         }
+        //         _ => (),
+        //     }
         // }
+        // if arg_start < s.len() {
+        //     args.push(s[arg_start..]
+        //         .trim_matches('"'));
+        // }
+        for arg in s.split(' ').filter(|a| !a.is_empty()) {
+            args.push(arg);
+        }
 
         if args.is_empty() {
             return Err(Error::Empty);
@@ -323,15 +323,18 @@ impl Executable for BinFile {
         //     args.push(String::from(arg));
         // }
         // let args: Vec<String> = cmd.args.iter().map(|arg|String::from(*arg)).collect();
+        // println!("path: {}, args.len(): {}", cmd.path(), &cmd.args().len());
         match execve(cmd.path(), &cmd.args()) {
             Ok(pid) => {
-                match wait(pid) {
-                    Ok(_) => Ok(StdOut { result }),
-                    Err(e) => {
-                        writeln!(result, "bwsh: error calling wait(): {:?}", e);
-                        Err(StdError { result, code: 1 })
-                    }
-                }
+                wait(pid);
+                Ok(StdOut { result })
+                // match wait(pid) {
+                //     Ok(_) => Ok(StdOut { result }),
+                //     Err(e) => {
+                //         writeln!(result, "bwsh: error calling wait(): {:?}", e);
+                //         Err(StdError { result, code: 1 })
+                //     }
+                // }
             }
             Err(e) => {
                 writeln!(result, "bwsh: error starting {}: {:?}", cmd.path(), e);

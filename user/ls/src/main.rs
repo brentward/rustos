@@ -70,12 +70,9 @@ fn ls() -> OsResult<()> {
     let dents = getdents(path);
     let length = dents.iter()
         .fold(0, |acc, dent| acc.max(dent.to_string().chars().count())) + 2;
-    let cols = match screen_width / length {
-        0 => 1,
-        cols => cols,
-    };
+    let cols = screen_width / length;
     let mut cur_col = 0;
-    for dent in dents {
+    for (idx, dent) in dents.iter().enumerate() {
         let stat = stat(dent.name())?;
         if show_hidden || !stat.metadata().hidden() {
             if long {
@@ -87,18 +84,18 @@ fn ls() -> OsResult<()> {
                     dent.to_string()
                 )?;
             } else {
-                if cur_col == cols {
-                    writeln!(result, "")?;
-                    cur_col = 0;
-                } else {
-                    cur_col += 1;
-                }
                 write!(
                     result,
                     "{:<width$}",
                     dent.to_string(),
                     width = length
                 )?;
+                if cur_col == cols || idx + 1 == dents.len() {
+                    writeln!(result, "")?;
+                    cur_col = 0;
+                } else {
+                    cur_col += 1;
+                }
 
                 // if (result.chars().count() % 120) + length <= 120 {
                 //     write!(
@@ -120,6 +117,6 @@ fn ls() -> OsResult<()> {
             }
         }
     }
-    println!("{}", result);
+    print!("{}", result);
     Ok(())
 }

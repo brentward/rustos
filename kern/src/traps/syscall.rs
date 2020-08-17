@@ -33,6 +33,7 @@ use fat32::traits::{FileSystem, Entry, Dir};
 /// parameter: the approximate true elapsed time from when `sleep` was called to
 /// when `sleep` returned.
 pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
+    trace!("sys_sleep()");
     let start_time = timer::current_time();
     let end_time = start_time + Duration::from_millis(ms as u64);
     SCHEDULER.switch(State::Waiting(Box::new(move |p| {
@@ -56,6 +57,7 @@ pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
 ///  - current time as seconds
 ///  - fractional part of the current time, in nanoseconds.
 pub fn sys_time(tf: &mut TrapFrame) {
+    trace!("sys_time()");
     let current_time = timer::current_time();
     let seconds = current_time.as_secs();
     let nanoseconds = (current_time - Duration::from_secs(seconds)).as_nanos() as u64;
@@ -68,6 +70,7 @@ pub fn sys_time(tf: &mut TrapFrame) {
 ///
 /// This system call does not take paramer and does not return any value.
 pub fn sys_exit(tf: &mut TrapFrame) {
+    trace!("sys_exit()");
     let _pid_option = SCHEDULER.kill(tf);
 }
 
@@ -87,6 +90,7 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 // }
 
 pub fn sys_write(handle_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_write()");
     if len == 0 {
         tf.x[0] = 0;
         tf.x[7] = OsError::Ok as u64;
@@ -164,11 +168,13 @@ pub fn sys_write(handle_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
 /// In addition to the usual status value, this system call returns a
 /// parameter: the current process's ID.
 pub fn sys_getpid(tf: &mut TrapFrame) {
+    trace!("sys_getpid()");
     tf.x[0] = tf.tpidr;
     tf.x[7] = OsError::Ok as u64;
 }
 
 pub fn sys_sbrk(size: usize, tf: &mut TrapFrame)  {
+    trace!("sys_sbrk()");
     SCHEDULER.critical(|scheduler| {
         let mut process = scheduler.find_process(tf);
         let next_heap_ptr = process.heap_ptr.add(VirtualAddr::from(size));
@@ -188,6 +194,7 @@ pub fn sys_sbrk(size: usize, tf: &mut TrapFrame)  {
 }
 
 pub fn sys_brk(va: usize, tf: &mut TrapFrame)  {
+    trace!("sys_brk()");
     SCHEDULER.critical(|scheduler| {
         let next_heap_ptr = VirtualAddr::from(va);
         let mut process = scheduler.find_process(tf);
@@ -211,6 +218,7 @@ pub fn sys_brk(va: usize, tf: &mut TrapFrame)  {
 
 
 pub fn sys_rand(min: u32, max: u32, tf: &mut TrapFrame) {
+    trace!("sys_rand()");
     let rand = {
         let mut rng = crate::rng::RNG.lock();
         rng.rand(min, max)
@@ -220,6 +228,7 @@ pub fn sys_rand(min: u32, max: u32, tf: &mut TrapFrame) {
 }
 
 pub fn sys_rrand(tf: &mut TrapFrame) {
+    trace!("sys_rrand()");
     let rrand = {
         let mut rng = crate::rng::RNG.lock();
         rng.r_rand()
@@ -229,6 +238,7 @@ pub fn sys_rrand(tf: &mut TrapFrame) {
 }
 
 pub fn sys_entropy(tf: &mut TrapFrame) {
+    trace!("sys_entropy()");
     let entropy = {
         let mut rng = crate::rng::RNG.lock();
         rng.entropy()
@@ -238,6 +248,7 @@ pub fn sys_entropy(tf: &mut TrapFrame) {
 }
 
 pub fn sys_open(va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_open()");
     let path_result = unsafe { to_user_slice(va, len) }
         .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
 
@@ -298,6 +309,7 @@ pub fn sys_open(va: usize, len: usize, tf: &mut TrapFrame) {
 }
 
 pub fn sys_read(file_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_read()");
     use shim::io::Read;
 
     if len == 0 {
@@ -343,6 +355,7 @@ pub fn sys_read(file_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
     });
 }
 pub fn sys_chdir(va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_chdir()");
     let path_result = unsafe { to_user_slice(va, len) }
         .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
 
@@ -391,6 +404,7 @@ pub fn sys_chdir(va: usize, len: usize, tf: &mut TrapFrame) {
 }
 
 pub fn sys_getcwd(va: usize, len: usize, offset: usize, tf: &mut TrapFrame) {
+    trace!("sys_getcwd()");
     let mut buf = match unsafe { to_user_slice_mut(va, len) }
         .map_err(|_| OsError::BadAddress) {
         Ok(buf) => buf,
@@ -550,6 +564,7 @@ pub fn sys_getdents(
 }
 
 pub fn sys_stat(path_va: usize, path_len: usize, buf_va: usize, tf: &mut TrapFrame) {
+    trace!("sys_stat()");
     let overflow = buf_va.checked_add(size_of::<Stat>()).is_none();
     let buf_result = if buf_va >= USER_IMG_BASE && !overflow {
         Ok(buf_va)
@@ -614,6 +629,7 @@ pub fn sys_stat(path_va: usize, path_len: usize, buf_va: usize, tf: &mut TrapFra
 /// This function does neither take any parameter nor return anything,
 /// except the usual return code that indicates successful syscall execution.
 pub fn sys_sock_create(tf: &mut TrapFrame) {
+    trace!("sys_sock_create()");
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
         let sock_idx = process.handles.len();
@@ -641,6 +657,7 @@ pub fn sys_sock_create(tf: &mut TrapFrame) {
 /// This function returns `OsError::InvalidSocket` if a socket that corresponds
 /// to the provided descriptor is not found.
 pub fn sys_sock_status(sock_idx: usize, tf: &mut TrapFrame) {
+    trace!("sys_sock_status()");
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
         match process.handles.get(sock_idx) {
@@ -688,6 +705,7 @@ pub fn sys_sock_connect(
     remote_endpoint: impl Into<IpEndpoint>,
     tf: &mut TrapFrame,
 ) {
+    trace!("sys_sock_connect()");
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
         match process.handles.get(sock_idx) {
@@ -741,6 +759,7 @@ pub fn sys_sock_connect(
 /// - `OsError::BadAddress`: `listen()` returned `smoltcp::Error::Unaddressable`.
 /// - `OsError::Unknown`: All the other errors from calling `listen()`.
 pub fn sys_sock_listen(sock_idx: usize, local_port: u16, tf: &mut TrapFrame) {
+    trace!("sys_sock_listen()");
     SCHEDULER.critical(|scheduler|{
         let mut process = scheduler.find_process(tf);
         match process.handles.get(sock_idx ) {
@@ -800,18 +819,19 @@ unsafe fn to_user_slice_mut<'a>(va: usize, len: usize) -> OsResult<&'a mut [u8]>
     }
 }
 
-fn normalize_path(path: PathBuf) -> PathBuf {
-    let mut normalized_path = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::ParentDir => {
-                normalized_path.pop();
-            },
-            component=> normalized_path.push(component),
-        }
-    }
-    normalized_path
-}
+// fn normalize_path(path: PathBuf) -> PathBuf {
+//     let mut normalized_path = PathBuf::new();
+//     for component in path.components() {
+//         match component {
+//             Component::ParentDir => {
+//                 normalized_path.pop();
+//             },
+//             component=> normalized_path.push(component),
+//         }
+//     }
+//     normalized_path
+// }
+//
 
 /// Sends data with a connected socket.
 ///
@@ -830,6 +850,7 @@ fn normalize_path(path: PathBuf) -> PathBuf {
 /// - `OsError::IllegalSocketOperation`: `send_slice()` returned `smoltcp::Error::Illegal`.
 /// - `OsError::Unknown`: All the other errors from smoltcp.
 pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_sock_send()");
     if len == 0 {
         tf.x[0] = 0;
         tf.x[7] = OsError::Ok as u64;
@@ -882,6 +903,7 @@ pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame)
 /// - `OsError::IllegalSocketOperation`: `recv_slice()` returned `smoltcp::Error::Illegal`.
 /// - `OsError::Unknown`: All the other errors from smoltcp.
 pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_sock_recv()");
     if len == 0 {
         tf.x[0] = 0;
         tf.x[7] = OsError::Ok as u64;
@@ -931,6 +953,7 @@ pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame)
 /// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
 /// - `OsError::InvalidArgument`: The provided buffer is not UTF-8 encoded.
 pub fn sys_write_str(handle_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_write_str()");
     if len == 0 {
         tf.x[0] = 0;
         tf.x[7] = OsError::Ok as u64;
@@ -978,7 +1001,8 @@ pub fn sys_write_str(handle_idx: usize, va: usize, len: usize, tf: &mut TrapFram
     }
 }
 
-fn sys_load_p(va: usize, len: usize, tf: &mut TrapFrame) {
+pub fn sys_load_p(va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_load_p()");
     let path_result = unsafe { to_user_slice(va, len) }
         .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
 
@@ -1029,7 +1053,7 @@ fn sys_load_p(va: usize, len: usize, tf: &mut TrapFrame) {
     }
 }
 
-fn sys_start_p(pid: u64, tf: &mut TrapFrame) {
+pub fn sys_start_p(pid: u64, tf: &mut TrapFrame) {
     trace!("sys_start_p() starting pid: {}", pid);
     // let state = State::Waiting(Box::new(move |p|{
     //     SCHEDULER.critical(|scheduler_internal|{
@@ -1083,21 +1107,37 @@ fn sys_start_p(pid: u64, tf: &mut TrapFrame) {
     // tf.x[7] = OsError::Ok as u64;
 }
 
-fn sys_wait(pid: u64, tf: &mut TrapFrame) {
+// fn sys_wait(pid: u64, tf: &mut TrapFrame) {
+//     info!("sys_wait() tf.tpid: {}, pid: {}", tf.tpidr, pid);
+//     SCHEDULER.switch(State::WaitFor(pid), tf);
+//     // tf.x[7] = OsError::Ok as u64;
+//     // SCHEDULER.wait_for(pid, tf);
+//     tf.x[7] = OsError::Ok as u64;
+// }
+
+pub fn sys_pid_is_alive(pid: u64, tf: &mut TrapFrame) {
     trace!("sys_wait() tf.tpid: {}, pid: {}", tf.tpidr, pid);
-    SCHEDULER.switch(State::WaitFor(pid), tf);
+    let alive = SCHEDULER.pid_is_alive(pid);
+    // SCHEDULER.switch(State::WaitFor(pid), tf);
+    // tf.x[7] = OsError::Ok as u64;
+    // SCHEDULER.wait_for(pid, tf);
+    tf.x[0] = alive as u64;
     tf.x[7] = OsError::Ok as u64;
 }
 
-fn sys_args_count(tf: &mut TrapFrame) {
+
+pub fn sys_args_count(tf: &mut TrapFrame) {
+    trace!("sys_args_count()");
     SCHEDULER.critical(|scheduler| {
         let mut process = scheduler.find_process(tf);
+        trace!("sys_args_count(): {}", process.args.len());
         tf.x[0] = process.args.len() as u64;
         tf.x[7] = OsError::Ok as u64;
     });
 }
 
-fn sys_read_arg(idx: usize, buf_va: usize, buf_len: usize, offset: usize, tf: &mut TrapFrame) {
+pub fn sys_read_arg(idx: usize, buf_va: usize, buf_len: usize, offset: usize, tf: &mut TrapFrame) {
+    trace!("sys_read_arg()");
     let mut buf = match unsafe { to_user_slice_mut(buf_va, buf_len) }
         .map_err(|_| OsError::BadAddress) {
         Ok(buf) => buf,
@@ -1130,12 +1170,13 @@ fn sys_read_arg(idx: usize, buf_va: usize, buf_len: usize, offset: usize, tf: &m
     });
 }
 
-fn sys_push_arg(pid: u64, va: usize, len: usize, tf: &mut TrapFrame) {
+pub fn sys_push_arg(pid: u64, va: usize, len: usize, tf: &mut TrapFrame) {
+    trace!("sys_push_arg()");
     let result = unsafe { to_user_slice(va, len) }
         .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::Utf8Error));
     let arg = match result {
         Ok(arg) => {
-            info!("sys_push_arg() pid: {}, arg: {}", pid, arg);
+            trace!("sys_push_arg() pid: {}, arg: {}", pid, arg);
             arg
         },
         Err(e) => {
@@ -1193,7 +1234,7 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         15 => sys_read_arg(tf.x[0] as usize, tf.x[1] as usize, tf.x[2] as usize, tf.x[3] as usize, tf),
         16 => sys_push_arg(tf.x[0], tf.x[1] as usize, tf.x[2] as usize, tf),
         17 => sys_load_p(tf.x[0] as usize, tf.x[1] as usize, tf),
-        18 => sys_wait(tf.x[0], tf),
+        18 => sys_pid_is_alive(tf.x[0], tf),
         20 => sys_sock_create(tf),
         21 => sys_sock_status(tf.x[0] as usize, tf),
         22 => sys_sock_connect(tf.x[0] as usize, IpAddr::from(tf.x[1], tf.x[2]), tf),

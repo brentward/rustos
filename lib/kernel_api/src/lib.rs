@@ -218,7 +218,7 @@ pub const NR_ARGS_COUNT: usize = 14;
 pub const NR_READ_ARG: usize = 15;
 pub const NR_PUSH_ARG: usize = 16;
 pub const NR_LOAD_P: usize = 17;
-pub const NR_WAIT: usize = 18;
+pub const NR_PID_IS_ALIVE: usize = 18;
 
 pub const NR_SOCK_CREATE: usize = 20;
 pub const NR_SOCK_STATUS: usize = 21;
